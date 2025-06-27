@@ -101,7 +101,9 @@ fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> R
                 return Err(formatear_error(inicio + indice - 1, &error));
             }
         } else if let Err(error) = procesar_declaracion(linea, entorno) {
-            return Err(formatear_error(inicio + indice - 1, &error));
+            if let Err(_) = procesar_expresion(linea, inicio + indice - 1, entorno) {
+                return Err(formatear_error(inicio + indice - 1, &error));
+            }
         }
     }
     Ok(())
@@ -535,6 +537,19 @@ fn aplicar_incremento(expresion: &str, entorno: &mut Entorno) -> Result<(), Stri
         }
     }
     Err("Incremento inválido".to_string())
+}
+
+fn procesar_expresion(linea: &str, linea_num: usize, entorno: &mut Entorno) -> Result<(), String> {
+    let texto = linea.trim();
+    if texto.contains('.') && texto.contains('(') && texto.ends_with(')') {
+        let _ = valor_desde_expresion(texto, linea_num, entorno)?;
+        return Ok(());
+    }
+    if texto.ends_with("++") || texto.ends_with("--") {
+        aplicar_incremento(texto, entorno)
+    } else {
+        Err("Expresión no soportada".to_string())
+    }
 }
 
 fn procesar_objeto(lineas: &[String], inicio: usize) -> Result<(DefObjeto, usize), String> {

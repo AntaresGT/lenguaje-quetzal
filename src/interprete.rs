@@ -43,6 +43,11 @@ fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> R
             continue;
         }
 
+        if linea.starts_with("si") {
+            indice = procesar_condicional(lineas, indice - 1, entorno, inicio)?;
+            continue;
+        }
+
         if linea.starts_with("objeto") {
             let (objeto, fin) = procesar_objeto(lineas, indice - 1)?;
             entorno.definir_objeto(objeto);
@@ -235,27 +240,6 @@ fn parsear_literal(texto: &str) -> Result<Valor, String> {
     }
 }
 
-fn convertir_json(valor: &serde_json::Value) -> Valor {
-    use serde_json::Value;
-    match valor {
-        Value::Null => Valor::Vacio,
-        Value::Bool(b) => Valor::Bool(*b),
-        Value::Number(num) => {
-            if let Some(i) = num.as_i64() {
-                Valor::Entero(i)
-            } else if let Some(f) = num.as_f64() {
-                Valor::Numero(f)
-            } else {
-                Valor::Numero(num.as_f64().unwrap())
-            }
-        }
-        Value::String(s) => Valor::Cadena(s.clone()),
-        Value::Array(arr) => Valor::Lista(arr.iter().map(convertir_json).collect()),
-        Value::Object(obj) => {
-            Valor::Objeto(obj.iter().map(|(k, v)| (k.clone(), convertir_json(v))).collect())
-        }
-    }
-}
 
 fn parsear_jsn(texto: &str) -> Result<Valor, String> {
     fn saltar(bl: &[u8], i: &mut usize) {
@@ -569,6 +553,43 @@ fn extraer_bloque(lineas: &[String], inicio: usize) -> Result<(Vec<String>, usiz
         i += 1;
     }
     Err("Bloque sin cerrar".to_string())
+}
+
+fn procesar_condicional(lineas: &[String], inicio: usize, entorno: &mut Entorno, base: usize) -> Result<usize, String> {
+    let mut i = inicio;
+    let mut ejecutado = false;
+    loop {
+        let linea = lineas[i].trim();
+        let palabra = if linea.starts_with("sino si") {
+            "sino si"
+        } else if linea.starts_with("sino") {
+            "sino"
+        } else {
+            "si"
+        };
+
+        let condicion = if palabra == "sino" {
+            "verdadero"
+        } else {
+            let ini = linea.find('(').ok_or_else(|| formatear_error(base + i, "Condicional inválido"))?;
+            let fin = linea.rfind(')').ok_or_else(|| formatear_error(base + i, "Condicional inválido"))?;
+            &linea[ini + 1..fin]
+        };
+
+        let (bloque, fin_bloque) = extraer_bloque(lineas, i)?;
+        if !ejecutado && evaluar_bool(condicion, entorno)? {
+            procesar_lineas(&bloque, entorno, base + i + 1)?;
+            ejecutado = true;
+        }
+        i = fin_bloque + 1;
+        if i >= lineas.len() { break; }
+        let siguiente = lineas[i].trim();
+        if siguiente.starts_with("sino si") || siguiente.starts_with("sino") {
+            continue;
+        }
+        break;
+    }
+    Ok(i)
 }
 
 fn procesar_bucle_para(linea: &str, bloque: &[String], entorno: &mut Entorno, linea_num: usize) -> Result<(), String> {

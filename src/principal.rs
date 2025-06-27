@@ -2,6 +2,7 @@ mod interprete;
 mod valores;
 mod entorno;
 mod consola;
+mod objetos;
 
 use std::env;
 use std::fs;

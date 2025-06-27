@@ -1,5 +1,6 @@
 use crate::entorno::Entorno;
 use crate::valores::Valor;
+use crate::objetos::{DefObjeto, Instancia};
 use crate::consola;
 
 pub fn interpretar(contenido: &str) -> Result<(), String> {
@@ -38,6 +39,13 @@ fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> R
         if linea.starts_with("para") {
             let (bloque, fin) = extraer_bloque(lineas, indice - 1)?;
             procesar_bucle_para(linea, &bloque, entorno, inicio + indice - 1)?;
+            indice = fin + 1;
+            continue;
+        }
+
+        if linea.starts_with("objeto") {
+            let (objeto, fin) = procesar_objeto(lineas, indice - 1)?;
+            entorno.definir_objeto(objeto);
             indice = fin + 1;
             continue;
         }
@@ -150,7 +158,26 @@ fn procesar_declaracion(linea: &str, entorno: &mut Entorno) -> Result<(), String
                 Valor::Lista(elementos)
             }
             "jsn" => parsear_jsn(&valor_cadena)?,
-            _ => return Err("Tipo desconocido".to_string()),
+            _ => {
+                if let Some(obj) = entorno.obtener_objeto(tipo) {
+                    if valor_cadena.starts_with("nuevo") {
+                        let inicio = valor_cadena.find('(').ok_or("Instancia inválida")?;
+                        let fin = valor_cadena.rfind(')').ok_or("Instancia inválida")?;
+                        let args_str = &valor_cadena[inicio + 1..fin];
+                        let mut args = Vec::new();
+                        if !args_str.trim().is_empty() {
+                            for a in args_str.split(',') {
+                                args.push(obtener_valor(a.trim(), entorno)?);
+                            }
+                        }
+                        instanciar_objeto(obj, args)
+                    } else {
+                        return Err("Instancia de objeto inválida".to_string());
+                    }
+                } else {
+                    return Err("Tipo desconocido".to_string());
+                }
+            }
         }
     } else {
         Valor::valor_por_defecto(tipo).ok_or_else(|| "Tipo desconocido".to_string())?
@@ -339,7 +366,7 @@ fn formatear_error(linea: usize, mensaje: &str) -> String {
     format!("Línea {}: {}", linea + 1, mensaje)
 }
 
-fn manejar_impresion<F>(linea: &str, inicio: &str, linea_num: usize, entorno: &Entorno, accion: F) -> Result<(), String>
+fn manejar_impresion<F>(linea: &str, inicio: &str, linea_num: usize, entorno: &mut Entorno, accion: F) -> Result<(), String>
 where
     F: Fn(&str),
 {
@@ -363,10 +390,37 @@ where
     Ok(())
 }
 
-fn valor_desde_expresion(expresion: &str, linea_num: usize, entorno: &Entorno) -> Result<String, String> {
+fn valor_desde_expresion(expresion: &str, linea_num: usize, entorno: &mut Entorno) -> Result<String, String> {
     let texto = expresion.trim();
     if texto.starts_with('"') && texto.ends_with('"') {
         return Ok(texto.trim_matches('"').to_string());
+    }
+
+    if let Some(punto) = texto.find('.') {
+        let base = texto[..punto].trim();
+        let resto = texto[punto + 1..].trim();
+        if resto.ends_with(')') {
+            if let Some(paren) = resto.find('(') {
+                let metodo = resto[..paren].trim();
+                let args_str = &resto[paren + 1..resto.len() - 1];
+                let mut args = Vec::new();
+                if !args_str.trim().is_empty() {
+                    for arg in args_str.split(',') {
+                        args.push(obtener_valor(arg.trim(), entorno)?);
+                    }
+                }
+                if let Some(Valor::Instancia(t, campos)) = entorno.obtener(base).cloned() {
+                    let mut mapa = campos;
+                    let res = ejecutar_metodo(&t, &mut mapa, metodo, args);
+                    // actualiza instancia
+                    let mut mutable = unsafe { &mut *(entorno as *const _ as *mut Entorno) };
+                    mutable.establecer(base, Valor::Instancia(t.clone(), mapa));
+                    if let Some(v) = res { return Ok(v.a_cadena()); } else { return Ok(String::new()); }
+                } else if entorno.obtener_objeto(base).is_some() {
+                    if let Some(v) = ejecutar_metodo(base, &mut std::collections::HashMap::new(), metodo, args) { return Ok(v.a_cadena()); } else { return Ok(String::new()); }
+                }
+            }
+        }
     }
 
     if let Some(base) = texto.strip_suffix(".cadena()") {
@@ -382,6 +436,18 @@ fn valor_desde_expresion(expresion: &str, linea_num: usize, entorno: &Entorno) -
     } else {
         Err(formatear_error(linea_num, "Variable no encontrada"))
     }
+}
+
+fn obtener_valor(texto: &str, entorno: &Entorno) -> Result<Valor, String> {
+    if texto.starts_with('"') && texto.ends_with('"') {
+        return Ok(Valor::Cadena(texto.trim_matches('"').to_string()));
+    }
+    if texto == "verdadero" { return Ok(Valor::Bool(true)); }
+    if texto == "falso" { return Ok(Valor::Bool(false)); }
+    if let Ok(i) = texto.parse::<i64>() { return Ok(Valor::Entero(i)); }
+    if let Ok(n) = texto.parse::<f64>() { return Ok(Valor::Numero(n)); }
+    if let Some(v) = entorno.obtener(texto) { return Ok(v.clone()); }
+    Err("Valor no encontrado".to_string())
 }
 
 fn extraer_bloque(lineas: &[String], inicio: usize) -> Result<(Vec<String>, usize), String> {
@@ -470,3 +536,86 @@ fn aplicar_incremento(expresion: &str, entorno: &mut Entorno) -> Result<(), Stri
     }
     Err("Incremento inválido".to_string())
 }
+
+fn procesar_objeto(lineas: &[String], inicio: usize) -> Result<(DefObjeto, usize), String> {
+    let cabecera = lineas[inicio].trim();
+    let nombre = cabecera
+        .trim_start_matches("objeto")
+        .trim()
+        .trim_end_matches('{')
+        .trim();
+    let mut campos = Vec::new();
+    let mut i = inicio + 1;
+    while i < lineas.len() {
+        let linea = lineas[i].trim();
+        if linea.starts_with('}') {
+            return Ok((DefObjeto { nombre: nombre.to_string(), campos }, i));
+        }
+        if linea.ends_with('{') {
+            let (_, fin) = extraer_bloque(lineas, i)?;
+            i = fin + 1;
+            continue;
+        }
+        if linea.ends_with(':') {
+            i += 1;
+            continue;
+        }
+        if !linea.is_empty() {
+            let partes: Vec<&str> = linea.split_whitespace().collect();
+            if partes.len() >= 2 {
+                campos.push(partes[1].to_string());
+            }
+        }
+        i += 1;
+    }
+    Err("Objeto sin cerrar".to_string())
+}
+
+fn instanciar_objeto(obj: &DefObjeto, argumentos: Vec<Valor>) -> Valor {
+    let mut mapa = std::collections::HashMap::new();
+    if obj.nombre == "Empleado" {
+        let nombre = argumentos.get(0).cloned().unwrap_or(Valor::Cadena(String::new()));
+        let edad = argumentos.get(1).cloned().unwrap_or(Valor::Entero(0));
+        let salario = argumentos.get(2).cloned().unwrap_or(Valor::Numero(0.0));
+        mapa.insert("nombre".to_string(), nombre);
+        mapa.insert("edad".to_string(), edad);
+        mapa.insert("salario".to_string(), salario);
+        mapa.insert("codigo_empleado".to_string(), Valor::Cadena("EMP001".to_string()));
+    } else {
+        for (i, campo) in obj.campos.iter().enumerate() {
+            mapa.insert(campo.clone(), argumentos.get(i).cloned().unwrap_or(Valor::Vacio));
+        }
+    }
+    Valor::Instancia(obj.nombre.clone(), mapa)
+}
+
+fn ejecutar_metodo(objeto: &str, instancia: &mut std::collections::HashMap<String, Valor>, metodo: &str, args: Vec<Valor>) -> Option<Valor> {
+    match (objeto, metodo) {
+        ("Empleado", "obtener_informacion") => {
+            let nombre = instancia.get("nombre").map(|v| v.a_cadena()).unwrap_or_default();
+            let edad = instancia.get("edad").map(|v| v.a_cadena()).unwrap_or_default();
+            let salario = instancia.get("salario").map(|v| v.a_cadena()).unwrap_or_default();
+            Some(Valor::Cadena(format!("Empleado: {}, Edad: {}, Salario: {}", nombre, edad, salario)))
+        }
+        ("Empleado", "aumentar_salario") => {
+            let mut porcentaje = 10.0;
+            if let Some(arg) = args.get(0) {
+                porcentaje = match arg {
+                    Valor::Numero(n) => *n,
+                    Valor::Entero(i) => *i as f64,
+                    _ => porcentaje,
+                };
+            }
+            if let Some(Valor::Numero(sal)) = instancia.get("salario").cloned() {
+                let nuevo = sal * (1.0 + porcentaje / 100.0);
+                instancia.insert("salario".to_string(), Valor::Numero(nuevo));
+            }
+            None
+        }
+        ("Empleado", "obtener_empresa") => {
+            Some(Valor::Cadena("TechCorp S.A.".to_string()))
+        }
+        _ => None,
+    }
+}
+

@@ -9,6 +9,7 @@ pub enum Valor {
     Bool(bool),
     Lista(Vec<Valor>),
     Objeto(HashMap<String, Valor>),
+    Instancia(String, HashMap<String, Valor>),
 }
 
 impl Valor {
@@ -44,6 +45,13 @@ impl Valor {
                     .map(|(k, v)| format!("{}: {}", k, v.a_cadena()))
                     .collect();
                 format!("{{{}}}", partes.join(", "))
+            }
+            Valor::Instancia(nombre, campos) => {
+                let partes: Vec<String> = campos
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k, v.a_cadena()))
+                    .collect();
+                format!("{} {{ {} }}", nombre, partes.join(", "))
             }
         }
     }

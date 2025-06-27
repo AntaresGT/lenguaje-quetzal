@@ -132,19 +132,49 @@ fn procesar_declaracion(linea: &str, entorno: &mut Entorno) -> Result<(), String
         indice += 1;
         let valor_cadena = tokens[indice..].join(" ");
         match tipo {
-            "entero" => Valor::Entero(valor_cadena.parse().map_err(|_| "Valor entero inválido")?),
-            "número" => Valor::Numero(valor_cadena.parse().map_err(|_| "Valor numérico inválido")?),
+            "entero" => {
+                if let Ok(v) = valor_cadena.parse::<i64>() {
+                    Valor::Entero(v)
+                } else {
+                    if let Valor::Entero(i) = evaluar_expresion_valor(&valor_cadena, entorno)? {
+                        Valor::Entero(i)
+                    } else {
+                        return Err("Valor entero inválido".to_string());
+                    }
+                }
+            }
+            "número" => {
+                if let Ok(v) = valor_cadena.parse::<f64>() {
+                    Valor::Numero(v)
+                } else {
+                    if let Valor::Numero(n) = evaluar_expresion_valor(&valor_cadena, entorno)? {
+                        Valor::Numero(n)
+                    } else {
+                        return Err("Valor numérico inválido".to_string());
+                    }
+                }
+            }
             "cadena" => {
                 if valor_cadena.starts_with('"') && valor_cadena.ends_with('"') {
                     Valor::Cadena(valor_cadena.trim_matches('"').to_string())
                 } else {
-                    return Err("La cadena debe ir entre comillas".to_string());
+                    if let Valor::Cadena(c) = evaluar_expresion_valor(&valor_cadena, entorno)? {
+                        Valor::Cadena(c)
+                    } else {
+                        return Err("Valor de cadena inválido".to_string());
+                    }
                 }
             }
             "bool" => match valor_cadena.as_str() {
                 "verdadero" => Valor::Bool(true),
                 "falso" => Valor::Bool(false),
-                _ => return Err("Valor bool inválido".to_string()),
+                _ => {
+                    if let Valor::Bool(b) = evaluar_expresion_valor(&valor_cadena, entorno)? {
+                        Valor::Bool(b)
+                    } else {
+                        return Err("Valor bool inválido".to_string());
+                    }
+                }
             },
             "lista" => {
                 if !valor_cadena.starts_with('[') || !valor_cadena.ends_with(']') {
@@ -450,6 +480,76 @@ fn obtener_valor(texto: &str, entorno: &Entorno) -> Result<Valor, String> {
     if let Ok(n) = texto.parse::<f64>() { return Ok(Valor::Numero(n)); }
     if let Some(v) = entorno.obtener(texto) { return Ok(v.clone()); }
     Err("Valor no encontrado".to_string())
+}
+
+fn evaluar_comparacion(condicion: &str, entorno: &Entorno) -> Result<bool, String> {
+    let tokens: Vec<&str> = condicion.split_whitespace().collect();
+    if tokens.len() != 3 {
+        if let Some(Valor::Bool(b)) = entorno.obtener(condicion) {
+            return Ok(*b);
+        }
+        return Err("Condición inválida".to_string());
+    }
+    let izq = obtener_valor(tokens[0], entorno)?;
+    let der = obtener_valor(tokens[2], entorno)?;
+    match (izq, der, tokens[1]) {
+        (Valor::Entero(a), Valor::Entero(b), "<") => Ok(a < b),
+        (Valor::Entero(a), Valor::Entero(b), "<=") => Ok(a <= b),
+        (Valor::Entero(a), Valor::Entero(b), ">") => Ok(a > b),
+        (Valor::Entero(a), Valor::Entero(b), ">=") => Ok(a >= b),
+        (Valor::Entero(a), Valor::Entero(b), "==") => Ok(a == b),
+        (Valor::Entero(a), Valor::Entero(b), "!=") => Ok(a != b),
+        (Valor::Numero(a), Valor::Numero(b), "<") => Ok(a < b),
+        (Valor::Numero(a), Valor::Numero(b), "<=") => Ok(a <= b),
+        (Valor::Numero(a), Valor::Numero(b), ">") => Ok(a > b),
+        (Valor::Numero(a), Valor::Numero(b), ">=") => Ok(a >= b),
+        (Valor::Numero(a), Valor::Numero(b), "==") => Ok(a == b),
+        (Valor::Numero(a), Valor::Numero(b), "!=") => Ok(a != b),
+        _ => Err("Condición inválida".to_string()),
+    }
+}
+
+fn evaluar_bool(expr: &str, entorno: &Entorno) -> Result<bool, String> {
+    if let Some(pos) = expr.find(" y ") {
+        let izquierda = &expr[..pos];
+        let derecha = &expr[pos + 3..];
+        return Ok(evaluar_bool(izquierda, entorno)? && evaluar_bool(derecha, entorno)?);
+    }
+    if let Some(pos) = expr.find(" o ") {
+        let izquierda = &expr[..pos];
+        let derecha = &expr[pos + 3..];
+        return Ok(evaluar_bool(izquierda, entorno)? || evaluar_bool(derecha, entorno)?);
+    }
+    evaluar_comparacion(expr, entorno)
+}
+
+fn evaluar_expresion_valor(expr: &str, entorno: &mut Entorno) -> Result<Valor, String> {
+    let texto = expr.trim();
+    if texto.contains('?') {
+        let q = texto.find('?').ok_or("Expresión ternaria inválida")?;
+        let rest = &texto[q + 1..];
+        let c_pos = rest.find(':').ok_or("Expresión ternaria inválida")? + q + 1;
+        let condicion = texto[..q].trim();
+        let verdadero = &texto[q + 1..c_pos].trim();
+        let falso = &texto[c_pos + 1..].trim();
+        if evaluar_bool(condicion, entorno)? {
+            return evaluar_expresion_valor(verdadero, entorno);
+        } else {
+            return evaluar_expresion_valor(falso, entorno);
+        }
+    }
+    if texto == "verdadero" { return Ok(Valor::Bool(true)); }
+    if texto == "falso" { return Ok(Valor::Bool(false)); }
+    if let Ok(l) = parsear_literal(texto) {
+        return Ok(l);
+    }
+    if let Ok(v) = obtener_valor(texto, entorno) {
+        return Ok(v);
+    }
+    if let Ok(cadena) = valor_desde_expresion(texto, 0, entorno) {
+        return Ok(Valor::Cadena(cadena));
+    }
+    Err("Expresión inválida".to_string())
 }
 
 fn extraer_bloque(lineas: &[String], inicio: usize) -> Result<(Vec<String>, usize), String> {

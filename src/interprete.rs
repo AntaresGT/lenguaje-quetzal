@@ -180,24 +180,34 @@ where
         let partes: Vec<&str> = expresion.split('+').collect();
         let mut acumulado = String::new();
         for parte in partes {
-            let p = parte.trim();
-            if p.starts_with('"') && p.ends_with('"') {
-                acumulado.push_str(p.trim_matches('"'));
-            } else if let Some(valor) = entorno.obtener(p) {
-                acumulado.push_str(&valor.a_cadena());
-            } else {
-                return Err(formatear_error(linea_num, "Variable no encontrada"));
-            }
+            acumulado.push_str(&valor_desde_expresion(parte, linea_num, entorno)?);
         }
         acumulado
-    } else if expresion.starts_with('"') && expresion.ends_with('"') {
-        expresion.trim_matches('"').to_string()
-    } else if let Some(valor) = entorno.obtener(expresion) {
-        valor.a_cadena()
     } else {
-        return Err(formatear_error(linea_num, "Variable no encontrada"));
+        valor_desde_expresion(expresion, linea_num, entorno)?
     };
 
     accion(&resultado);
     Ok(())
+}
+
+fn valor_desde_expresion(expresion: &str, linea_num: usize, entorno: &Entorno) -> Result<String, String> {
+    let texto = expresion.trim();
+    if texto.starts_with('"') && texto.ends_with('"') {
+        return Ok(texto.trim_matches('"').to_string());
+    }
+
+    if let Some(base) = texto.strip_suffix(".cadena()") {
+        if let Some(valor) = entorno.obtener(base.trim()) {
+            return Ok(valor.a_cadena());
+        } else {
+            return Err(formatear_error(linea_num, "Variable no encontrada"));
+        }
+    }
+
+    if let Some(valor) = entorno.obtener(texto) {
+        Ok(valor.a_cadena())
+    } else {
+        Err(formatear_error(linea_num, "Variable no encontrada"))
+    }
 }

@@ -75,7 +75,7 @@ fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> R
             continue;
         }
 
-        if let Err(error) = procesar_declaracion(linea, &mut entorno) {
+        if let Err(error) = procesar_declaracion(linea, entorno) {
             return Err(formatear_error(inicio + indice - 1, &error));
         }
     }

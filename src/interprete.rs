@@ -1,5 +1,6 @@
 use crate::entorno::Entorno;
 use crate::valores::Valor;
+use crate::consola;
 
 pub fn interpretar(contenido: &str) -> Result<(), String> {
     let mut entorno = Entorno::nuevo();
@@ -27,19 +28,36 @@ pub fn interpretar(contenido: &str) -> Result<(), String> {
             continue;
         }
 
+        if linea.starts_with("imprimir_error") {
+            manejar_impresion(linea, "imprimir_error", indice, &entorno, consola::imprimir_error)?;
+            continue;
+        }
+        if linea.starts_with("imprimir_advertencia") {
+            manejar_impresion(linea, "imprimir_advertencia", indice, &entorno, consola::imprimir_advertencia)?;
+            continue;
+        }
+        if linea.starts_with("imprimir_informacion") {
+            manejar_impresion(linea, "imprimir_informacion", indice, &entorno, consola::imprimir_informacion)?;
+            continue;
+        }
+        if linea.starts_with("imprimir_depurar") {
+            manejar_impresion(linea, "imprimir_depurar", indice, &entorno, consola::imprimir_depurar)?;
+            continue;
+        }
+        if linea.starts_with("imprimir_exito") {
+            manejar_impresion(linea, "imprimir_exito", indice, &entorno, consola::imprimir_exito)?;
+            continue;
+        }
+        if linea.starts_with("imprimir_alerta") {
+            manejar_impresion(linea, "imprimir_alerta", indice, &entorno, consola::imprimir_alerta)?;
+            continue;
+        }
+        if linea.starts_with("imprimir_confirmacion") {
+            manejar_impresion(linea, "imprimir_confirmacion", indice, &entorno, consola::imprimir_confirmacion)?;
+            continue;
+        }
         if linea.starts_with("imprimir") {
-            let mut expresion = linea.trim_start_matches("imprimir").trim();
-            if expresion.starts_with('(') && expresion.ends_with(')') {
-                expresion = expresion[1..expresion.len() - 1].trim();
-            }
-
-            if expresion.starts_with('"') && expresion.ends_with('"') {
-                println!("{}", expresion.trim_matches('"'));
-            } else if let Some(valor) = entorno.obtener(expresion) {
-                println!("{:?}", valor);
-            } else {
-                return Err(formatear_error(indice, "Variable no encontrada"));
-            }
+            manejar_impresion(linea, "imprimir", indice, &entorno, |t| println!("{}", t))?;
             continue;
         }
 
@@ -147,4 +165,23 @@ fn convertir_json(valor: &serde_json::Value) -> Valor {
 
 fn formatear_error(linea: usize, mensaje: &str) -> String {
     format!("Línea {}: {}", linea + 1, mensaje)
+}
+
+fn manejar_impresion<F>(linea: &str, inicio: &str, linea_num: usize, entorno: &Entorno, accion: F) -> Result<(), String>
+where
+    F: Fn(&str),
+{
+    let mut expresion = linea.trim_start_matches(inicio).trim();
+    if expresion.starts_with('(') && expresion.ends_with(')') {
+        expresion = expresion[1..expresion.len() - 1].trim();
+    }
+
+    if expresion.starts_with('"') && expresion.ends_with('"') {
+        accion(expresion.trim_matches('"'));
+    } else if let Some(valor) = entorno.obtener(expresion) {
+        accion(&format!("{:?}", valor));
+    } else {
+        return Err(formatear_error(linea_num, "Variable no encontrada"));
+    }
+    Ok(())
 }

@@ -1,6 +1,6 @@
 use crate::entorno::Entorno;
 use crate::valores::Valor;
-use crate::objetos::{DefObjeto, Instancia};
+use crate::objetos::DefObjeto;
 use crate::consola;
 
 pub fn interpretar(contenido: &str) -> Result<(), String> {
@@ -51,35 +51,35 @@ fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> R
         }
 
         if linea.starts_with("imprimir_error") {
-            manejar_impresion(linea, "imprimir_error", inicio + indice - 1, &entorno, consola::imprimir_error)?;
+            manejar_impresion(linea, "imprimir_error", inicio + indice - 1, entorno, consola::imprimir_error)?;
             continue;
         }
         if linea.starts_with("imprimir_advertencia") {
-            manejar_impresion(linea, "imprimir_advertencia", inicio + indice - 1, &entorno, consola::imprimir_advertencia)?;
+            manejar_impresion(linea, "imprimir_advertencia", inicio + indice - 1, entorno, consola::imprimir_advertencia)?;
             continue;
         }
         if linea.starts_with("imprimir_informacion") {
-            manejar_impresion(linea, "imprimir_informacion", inicio + indice - 1, &entorno, consola::imprimir_informacion)?;
+            manejar_impresion(linea, "imprimir_informacion", inicio + indice - 1, entorno, consola::imprimir_informacion)?;
             continue;
         }
         if linea.starts_with("imprimir_depurar") {
-            manejar_impresion(linea, "imprimir_depurar", inicio + indice - 1, &entorno, consola::imprimir_depurar)?;
+            manejar_impresion(linea, "imprimir_depurar", inicio + indice - 1, entorno, consola::imprimir_depurar)?;
             continue;
         }
         if linea.starts_with("imprimir_exito") {
-            manejar_impresion(linea, "imprimir_exito", inicio + indice - 1, &entorno, consola::imprimir_exito)?;
+            manejar_impresion(linea, "imprimir_exito", inicio + indice - 1, entorno, consola::imprimir_exito)?;
             continue;
         }
         if linea.starts_with("imprimir_alerta") {
-            manejar_impresion(linea, "imprimir_alerta", inicio + indice - 1, &entorno, consola::imprimir_alerta)?;
+            manejar_impresion(linea, "imprimir_alerta", inicio + indice - 1, entorno, consola::imprimir_alerta)?;
             continue;
         }
         if linea.starts_with("imprimir_confirmacion") {
-            manejar_impresion(linea, "imprimir_confirmacion", inicio + indice - 1, &entorno, consola::imprimir_confirmacion)?;
+            manejar_impresion(linea, "imprimir_confirmacion", inicio + indice - 1, entorno, consola::imprimir_confirmacion)?;
             continue;
         }
         if linea.starts_with("imprimir") {
-            manejar_impresion(linea, "imprimir", inicio + indice - 1, &entorno, |t| println!("{}", t))?;
+            manejar_impresion(linea, "imprimir", inicio + indice - 1, entorno, |t| println!("{}", t))?;
             continue;
         }
 

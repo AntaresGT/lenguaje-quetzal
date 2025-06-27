@@ -38,8 +38,41 @@ fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> R
 
         if linea.starts_with("para") {
             let (bloque, fin) = extraer_bloque(lineas, indice - 1)?;
-            procesar_bucle_para(linea, &bloque, entorno, inicio + indice - 1)?;
+            if linea.contains(';') {
+                procesar_bucle_para(linea, &bloque, entorno, inicio + indice - 1)?;
+            } else {
+                procesar_bucle_foreach(linea, &bloque, entorno, inicio + indice - 1)?;
+            }
             indice = fin + 1;
+            continue;
+        }
+
+        if linea.starts_with("mientras") {
+            let (bloque, fin) = extraer_bloque(lineas, indice - 1)?;
+            procesar_bucle_mientras(linea, &bloque, entorno, inicio + indice - 1)?;
+            indice = fin + 1;
+            continue;
+        }
+
+        if linea.starts_with("hacer") {
+            let (bloque, fin) = extraer_bloque(lineas, indice - 1)?;
+            let mut sig = lineas[fin].trim().trim_start_matches('}').trim();
+            let mut nuevo_indice = fin;
+            if sig.is_empty() {
+                nuevo_indice += 1;
+                if nuevo_indice >= lineas.len() {
+                    return Err(formatear_error(inicio + fin, "Bucle do-while inválido"));
+                }
+                sig = lineas[nuevo_indice].trim();
+            }
+            if !sig.starts_with("mientras") {
+                return Err(formatear_error(inicio + nuevo_indice, "Bucle do-while inválido"));
+            }
+            let ini = sig.find('(').ok_or_else(|| formatear_error(inicio + nuevo_indice, "Bucle do-while inválido"))?;
+            let fin_paren = sig.rfind(')').ok_or_else(|| formatear_error(inicio + nuevo_indice, "Bucle do-while inválido"))?;
+            let condicion = &sig[ini + 1..fin_paren];
+            procesar_bucle_hacer(&bloque, condicion, entorno, inicio + indice - 1)?;
+            indice = nuevo_indice + 1;
             continue;
         }
 
@@ -434,6 +467,20 @@ fn valor_desde_expresion(expresion: &str, linea_num: usize, entorno: &mut Entorn
                     if let Some(v) = res { return Ok(v.a_cadena()); } else { return Ok(String::new()); }
                 } else if entorno.obtener_objeto(base).is_some() {
                     if let Some(v) = ejecutar_metodo(base, &mut std::collections::HashMap::new(), metodo, args) { return Ok(v.a_cadena()); } else { return Ok(String::new()); }
+                } else {
+                    let es_var = entorno.obtener(base).is_some();
+                    let mut val = obtener_valor(base, entorno)?;
+                    if let Some(ret) = aplicar_metodo_valor(&mut val, metodo, args)? {
+                        if es_var {
+                            let mut m = unsafe { &mut *(entorno as *const _ as *mut Entorno) };
+                            m.establecer(base, val);
+                        }
+                        return Ok(ret.a_cadena());
+                    } else if es_var {
+                        let mut m = unsafe { &mut *(entorno as *const _ as *mut Entorno) };
+                        m.establecer(base, val);
+                        return Ok(String::new());
+                    }
                 }
             }
         }
@@ -609,6 +656,44 @@ fn procesar_bucle_para(linea: &str, bloque: &[String], entorno: &mut Entorno, li
     Ok(())
 }
 
+fn procesar_bucle_mientras(linea: &str, bloque: &[String], entorno: &mut Entorno, linea_num: usize) -> Result<(), String> {
+    let ini = linea.find('(').ok_or_else(|| formatear_error(linea_num, "Bucle mientras inválido"))?;
+    let fin = linea.rfind(')').ok_or_else(|| formatear_error(linea_num, "Bucle mientras inválido"))?;
+    let condicion = &linea[ini + 1..fin];
+    while evaluar_bool(condicion, entorno)? {
+        procesar_lineas(bloque, entorno, linea_num + 1)?;
+    }
+    Ok(())
+}
+
+fn procesar_bucle_hacer(bloque: &[String], condicion: &str, entorno: &mut Entorno, linea_num: usize) -> Result<(), String> {
+    loop {
+        procesar_lineas(bloque, entorno, linea_num + 1)?;
+        if !evaluar_bool(condicion, entorno)? { break; }
+    }
+    Ok(())
+}
+
+fn procesar_bucle_foreach(linea: &str, bloque: &[String], entorno: &mut Entorno, linea_num: usize) -> Result<(), String> {
+    let ini = linea.find('(').ok_or_else(|| formatear_error(linea_num, "Bucle para inválido"))?;
+    let fin = linea.rfind(')').ok_or_else(|| formatear_error(linea_num, "Bucle para inválido"))?;
+    let contenido = &linea[ini + 1..fin];
+    let partes: Vec<&str> = contenido.split(" en ").collect();
+    if partes.len() != 2 { return Err(formatear_error(linea_num, "Bucle para inválido")); }
+    let var = partes[0].trim();
+    let lista_nombre = partes[1].trim();
+    let lista = entorno.obtener(lista_nombre).cloned().ok_or_else(|| formatear_error(linea_num, "Variable no encontrada"))?;
+    if let Valor::Lista(elementos) = lista {
+        for elem in elementos {
+            entorno.establecer(var, elem);
+            procesar_lineas(bloque, entorno, linea_num + 1)?;
+        }
+        Ok(())
+    } else {
+        Err(formatear_error(linea_num, "Variable no es lista"))
+    }
+}
+
 fn evaluar_condicion(condicion: &str, entorno: &Entorno) -> Result<bool, String> {
     let tokens: Vec<&str> = condicion.split_whitespace().collect();
     if tokens.len() != 3 {
@@ -637,6 +722,44 @@ fn obtener_entero(texto: &str, entorno: &Entorno) -> Result<i64, String> {
         }
     }
     Err("Valor entero inválido".to_string())
+}
+
+fn aplicar_metodo_valor(valor: &mut Valor, metodo: &str, args: Vec<Valor>) -> Result<Option<Valor>, String> {
+    match valor {
+        Valor::Lista(lista) => match metodo {
+            "agregar" => {
+                if let Some(a) = args.get(0) { lista.push(a.clone()); }
+                Ok(None)
+            }
+            "longitud" => Ok(Some(Valor::Entero(lista.len() as i64))),
+            _ => Ok(None),
+        },
+        Valor::Cadena(c) => match metodo {
+            "entero" => Ok(Some(Valor::Entero(c.parse::<i64>().map_err(|_| "Conversión inválida".to_string())?))),
+            "numero" => Ok(Some(Valor::Numero(c.parse::<f64>().map_err(|_| "Conversión inválida".to_string())?))),
+            "bool" => match c.as_str() {
+                "verdadero" => Ok(Some(Valor::Bool(true))),
+                "falso" => Ok(Some(Valor::Bool(false))),
+                _ => Err("Conversión inválida".to_string()),
+            },
+            "cadena" => Ok(Some(Valor::Cadena(c.clone()))),
+            _ => Ok(None),
+        },
+        Valor::Numero(n) => match metodo {
+            "cadena" => Ok(Some(Valor::Cadena(n.to_string()))),
+            _ => Ok(None),
+        },
+        Valor::Entero(i) => match metodo {
+            "cadena" => Ok(Some(Valor::Cadena(i.to_string()))),
+            "numero" => Ok(Some(Valor::Numero(*i as f64))),
+            _ => Ok(None),
+        },
+        Valor::Bool(b) => match metodo {
+            "cadena" => Ok(Some(Valor::Cadena(if *b { "verdadero".to_string() } else { "falso".to_string() }))),
+            _ => Ok(None),
+        },
+        _ => Ok(None),
+    }
 }
 
 fn aplicar_incremento(expresion: &str, entorno: &mut Entorno) -> Result<(), String> {

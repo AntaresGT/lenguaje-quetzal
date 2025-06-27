@@ -28,7 +28,11 @@ pub fn interpretar(contenido: &str) -> Result<(), String> {
         }
 
         if linea.starts_with("imprimir") {
-            let expresion = linea.trim_start_matches("imprimir").trim();
+            let mut expresion = linea.trim_start_matches("imprimir").trim();
+            if expresion.starts_with('(') && expresion.ends_with(')') {
+                expresion = expresion[1..expresion.len() - 1].trim();
+            }
+
             if expresion.starts_with('"') && expresion.ends_with('"') {
                 println!("{}", expresion.trim_matches('"'));
             } else if let Some(valor) = entorno.obtener(expresion) {

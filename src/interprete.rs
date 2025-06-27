@@ -87,7 +87,14 @@ fn procesar_declaracion(linea: &str, entorno: &mut Entorno) -> Result<(), String
     if tokens.len() < 2 {
         return Err("Declaración inválida".to_string());
     }
-    let tipo = tokens[0];
+    let mut tipo = tokens[0];
+    // Soporte para tipos genéricos como `lista<entero>` simplemente
+    // identificando el tipo base antes del carácter '<'
+    if let Some(inicio) = tipo.find('<') {
+        if tipo.ends_with('>') {
+            tipo = &tipo[..inicio];
+        }
+    }
     let mut indice = 1;
     if tokens.get(indice).copied() == Some("mut") {
         indice += 1;

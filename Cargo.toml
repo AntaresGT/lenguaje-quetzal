@@ -4,3 +4,8 @@ version = "0.0.1"
 edition = "2024"
 
 [dependencies]
+serde_json = "1.0"
+
+[[bin]]
+name = "lenguaje-quetzal"
+path = "src/principal.rs"

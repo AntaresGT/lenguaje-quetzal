@@ -84,7 +84,7 @@ fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> R
 
 fn procesar_declaracion(linea: &str, entorno: &mut Entorno) -> Result<(), String> {
     let tokens: Vec<&str> = linea.split_whitespace().collect();
-    if tokens.len() < 4 {
+    if tokens.len() < 2 {
         return Err("Declaración inválida".to_string());
     }
     let tipo = tokens[0];
@@ -94,45 +94,46 @@ fn procesar_declaracion(linea: &str, entorno: &mut Entorno) -> Result<(), String
     }
     let nombre = tokens.get(indice).ok_or("Falta nombre de variable")?;
     indice += 1;
-    if tokens.get(indice) != Some(&"=") {
-        return Err("Falta '=' en la declaración".to_string());
-    }
-    indice += 1;
-    let valor_cadena = tokens[indice..].join(" ");
-    let valor = match tipo {
-        "entero" => Valor::Entero(valor_cadena.parse().map_err(|_| "Valor entero inválido")?),
-        "número" => Valor::Numero(valor_cadena.parse().map_err(|_| "Valor númerico inválido")?),
-        "cadena" => {
-            if valor_cadena.starts_with('"') && valor_cadena.ends_with('"') {
-                Valor::Cadena(valor_cadena.trim_matches('"').to_string())
-            } else {
-                return Err("La cadena debe ir entre comillas".to_string());
-            }
-        }
-        "bool" => match valor_cadena.as_str() {
-            "verdadero" => Valor::Bool(true),
-            "falso" => Valor::Bool(false),
-            _ => return Err("Valor bool inválido".to_string()),
-        },
-        "lista" => {
-            if !valor_cadena.starts_with('[') || !valor_cadena.ends_with(']') {
-                return Err("Lista inválida".to_string());
-            }
-            let contenido = &valor_cadena[1..valor_cadena.len() - 1];
-            let mut elementos = Vec::new();
-            if !contenido.trim().is_empty() {
-                for texto_elemento in contenido.split(',') {
-                    elementos.push(parsear_literal(texto_elemento.trim())?);
+    let valor = if tokens.get(indice) == Some(&"=") {
+        indice += 1;
+        let valor_cadena = tokens[indice..].join(" ");
+        match tipo {
+            "entero" => Valor::Entero(valor_cadena.parse().map_err(|_| "Valor entero inválido")?),
+            "número" => Valor::Numero(valor_cadena.parse().map_err(|_| "Valor numérico inválido")?),
+            "cadena" => {
+                if valor_cadena.starts_with('"') && valor_cadena.ends_with('"') {
+                    Valor::Cadena(valor_cadena.trim_matches('"').to_string())
+                } else {
+                    return Err("La cadena debe ir entre comillas".to_string());
                 }
             }
-            Valor::Lista(elementos)
+            "bool" => match valor_cadena.as_str() {
+                "verdadero" => Valor::Bool(true),
+                "falso" => Valor::Bool(false),
+                _ => return Err("Valor bool inválido".to_string()),
+            },
+            "lista" => {
+                if !valor_cadena.starts_with('[') || !valor_cadena.ends_with(']') {
+                    return Err("Lista inválida".to_string());
+                }
+                let contenido = &valor_cadena[1..valor_cadena.len() - 1];
+                let mut elementos = Vec::new();
+                if !contenido.trim().is_empty() {
+                    for texto_elemento in contenido.split(',') {
+                        elementos.push(parsear_literal(texto_elemento.trim())?);
+                    }
+                }
+                Valor::Lista(elementos)
+            }
+            "jsn" => {
+                let valor_json: serde_json::Value =
+                    serde_json::from_str(&valor_cadena).map_err(|_| "JSON inválido")?;
+                convertir_json(&valor_json)
+            }
+            _ => return Err("Tipo desconocido".to_string()),
         }
-        "jsn" => {
-            let valor_json: serde_json::Value =
-                serde_json::from_str(&valor_cadena).map_err(|_| "JSON inválido")?;
-            convertir_json(&valor_json)
-        }
-        _ => return Err("Tipo desconocido".to_string()),
+    } else {
+        Valor::valor_por_defecto(tipo).ok_or_else(|| "Tipo desconocido".to_string())?
     };
 
     entorno.establecer(nombre, valor);

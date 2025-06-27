@@ -4,8 +4,9 @@ use crate::objetos::{DefObjeto, TipoMetodo};
 use crate::consola;
 
 pub fn interpretar(contenido: &str) -> Result<(), String> {
+    let limpio = contenido.trim_start_matches('\u{feff}');
     let mut entorno = Entorno::nuevo();
-    let lineas: Vec<String> = contenido.lines().map(|l| l.to_string()).collect();
+    let lineas: Vec<String> = limpio.lines().map(|l| l.to_string()).collect();
     procesar_lineas(&lineas, &mut entorno, 0)
 }
 

@@ -75,7 +75,24 @@ fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> R
             continue;
         }
 
-        if let Err(error) = procesar_declaracion(linea, entorno) {
+        if linea.starts_with("jsn") && linea.contains('=') && linea.contains('{') && !linea.contains('}') {
+            let mut compuesto = linea.to_string();
+            let mut nivel = linea.matches('{').count() as i32 - linea.matches('}').count() as i32;
+            while indice < lineas.len() && nivel > 0 {
+                let sig = lineas[indice].trim();
+                compuesto.push(' ');
+                compuesto.push_str(sig);
+                nivel += sig.matches('{').count() as i32;
+                nivel -= sig.matches('}').count() as i32;
+                indice += 1;
+            }
+            if nivel != 0 {
+                return Err(formatear_error(inicio + indice - 1, "JSON sin cerrar"));
+            }
+            if let Err(error) = procesar_declaracion(&compuesto, entorno) {
+                return Err(formatear_error(inicio + indice - 1, &error));
+            }
+        } else if let Err(error) = procesar_declaracion(linea, entorno) {
             return Err(formatear_error(inicio + indice - 1, &error));
         }
     }
@@ -132,11 +149,7 @@ fn procesar_declaracion(linea: &str, entorno: &mut Entorno) -> Result<(), String
                 }
                 Valor::Lista(elementos)
             }
-            "jsn" => {
-                let valor_json: serde_json::Value =
-                    serde_json::from_str(&valor_cadena).map_err(|_| "JSON inválido")?;
-                convertir_json(&valor_json)
-            }
+            "jsn" => parsear_jsn(&valor_cadena)?,
             _ => return Err("Tipo desconocido".to_string()),
         }
     } else {
@@ -183,6 +196,143 @@ fn convertir_json(valor: &serde_json::Value) -> Valor {
             Valor::Objeto(obj.iter().map(|(k, v)| (k.clone(), convertir_json(v))).collect())
         }
     }
+}
+
+fn parsear_jsn(texto: &str) -> Result<Valor, String> {
+    fn saltar(bl: &[u8], i: &mut usize) {
+        while *i < bl.len() && bl[*i].is_ascii_whitespace() {
+            *i += 1;
+        }
+    }
+
+    fn leer_cadena(bl: &[u8], i: &mut usize) -> Result<String, String> {
+        *i += 1; // salta la comilla inicial
+        let inicio = *i;
+        while *i < bl.len() {
+            if bl[*i] == b'"' {
+                let s = String::from_utf8(bl[inicio..*i].to_vec()).map_err(|_| "Cadena inválida".to_string())?;
+                *i += 1;
+                return Ok(s);
+            }
+            *i += 1;
+        }
+        Err("Cadena sin cerrar".to_string())
+    }
+
+    fn leer_identificador(bl: &[u8], i: &mut usize) -> String {
+        let inicio = *i;
+        while *i < bl.len() && (bl[*i].is_ascii_alphanumeric() || bl[*i] == b'_') {
+            *i += 1;
+        }
+        String::from_utf8_lossy(&bl[inicio..*i]).to_string()
+    }
+
+    fn leer_valor(bl: &[u8], i: &mut usize) -> Result<Valor, String> {
+        saltar(bl, i);
+        if *i >= bl.len() {
+            return Err("JSON incompleto".to_string());
+        }
+        match bl[*i] {
+            b'{' => leer_objeto(bl, i),
+            b'[' => leer_lista(bl, i),
+            b'"' => Ok(Valor::Cadena(leer_cadena(bl, i)?)),
+            b'-' | b'0'..=b'9' => leer_numero(bl, i),
+            b'v' => {
+                if bl.len() >= *i + 9 && &bl[*i..*i + 9] == b"verdadero" {
+                    *i += 9;
+                    Ok(Valor::Bool(true))
+                } else {
+                    Err("Valor bool inválido".to_string())
+                }
+            }
+            b'f' => {
+                if bl.len() >= *i + 5 && &bl[*i..*i + 5] == b"falso" {
+                    *i += 5;
+                    Ok(Valor::Bool(false))
+                } else {
+                    Err("Valor bool inválido".to_string())
+                }
+            }
+            _ => Err("JSON inválido".to_string()),
+        }
+    }
+
+    fn leer_numero(bl: &[u8], i: &mut usize) -> Result<Valor, String> {
+        let inicio = *i;
+        if bl[*i] == b'-' { *i += 1; }
+        while *i < bl.len() && (bl[*i].is_ascii_digit() || bl[*i] == b'.') {
+            *i += 1;
+        }
+        let s = String::from_utf8_lossy(&bl[inicio..*i]);
+        if s.contains('.') {
+            s.parse::<f64>().map(Valor::Numero).map_err(|_| "Número inválido".to_string())
+        } else {
+            s.parse::<i64>().map(Valor::Entero).map_err(|_| "Número inválido".to_string())
+        }
+    }
+
+    fn leer_lista(bl: &[u8], i: &mut usize) -> Result<Valor, String> {
+        *i += 1; // salta '['
+        let mut elementos = Vec::new();
+        loop {
+            saltar(bl, i);
+            if *i >= bl.len() { return Err("Lista sin cerrar".to_string()); }
+            if bl[*i] == b']' {
+                *i += 1;
+                break;
+            }
+            elementos.push(leer_valor(bl, i)?);
+            saltar(bl, i);
+            if *i < bl.len() && bl[*i] == b',' {
+                *i += 1;
+            } else if *i < bl.len() && bl[*i] == b']' {
+                *i += 1;
+                break;
+            } else {
+                return Err("Lista inválida".to_string());
+            }
+        }
+        Ok(Valor::Lista(elementos))
+    }
+
+    fn leer_objeto(bl: &[u8], i: &mut usize) -> Result<Valor, String> {
+        *i += 1; // salta '{'
+        let mut mapa = std::collections::HashMap::new();
+        loop {
+            saltar(bl, i);
+            if *i >= bl.len() { return Err("JSON sin cerrar".to_string()); }
+            if bl[*i] == b'}' {
+                *i += 1;
+                break;
+            }
+            let clave = if bl[*i] == b'"' { leer_cadena(bl, i)? } else { leer_identificador(bl, i) };
+            saltar(bl, i);
+            if *i >= bl.len() || bl[*i] != b':' { return Err("JSON inválido".to_string()); }
+            *i += 1;
+            let valor = leer_valor(bl, i)?;
+            mapa.insert(clave, valor);
+            saltar(bl, i);
+            if *i < bl.len() && bl[*i] == b',' {
+                *i += 1;
+                continue;
+            } else if *i < bl.len() && bl[*i] == b'}' {
+                *i += 1;
+                break;
+            } else {
+                return Err("JSON inválido".to_string());
+            }
+        }
+        Ok(Valor::Objeto(mapa))
+    }
+
+    let bytes = texto.as_bytes();
+    let mut i = 0;
+    let valor = leer_valor(bytes, &mut i)?;
+    saltar(bytes, &mut i);
+    if i != bytes.len() {
+        return Err("JSON inválido".to_string());
+    }
+    Ok(valor)
 }
 
 fn formatear_error(linea: usize, mensaje: &str) -> String {

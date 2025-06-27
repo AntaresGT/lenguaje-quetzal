@@ -245,12 +245,12 @@ fn procesar_declaracion(linea: &str, entorno: &mut Entorno) -> Result<(), String
                         return Err("Instancia de objeto inválida".to_string());
                     }
                 } else {
-                    return Err("Tipo desconocido".to_string());
+                    return Err(format!("Tipo desconocido: {}", tipo));
                 }
             }
         }
     } else {
-        Valor::valor_por_defecto(tipo).ok_or_else(|| "Tipo desconocido".to_string())?
+        Valor::valor_por_defecto(tipo).ok_or_else(|| format!("Tipo desconocido: {}", tipo))?
     };
 
     entorno.establecer(nombre, valor);

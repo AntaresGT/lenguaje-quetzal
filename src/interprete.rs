@@ -4,10 +4,17 @@ use crate::consola;
 
 pub fn interpretar(contenido: &str) -> Result<(), String> {
     let mut entorno = Entorno::nuevo();
-    let mut en_comentario = false;
+    let lineas: Vec<String> = contenido.lines().map(|l| l.to_string()).collect();
+    procesar_lineas(&lineas, &mut entorno, 0)
+}
 
-    for (indice, linea_original) in contenido.lines().enumerate() {
-        let mut linea = linea_original.trim();
+fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> Result<(), String> {
+    let mut en_comentario = false;
+    let mut indice = 0;
+
+    while indice < lineas.len() {
+        let mut linea = lineas[indice].trim();
+        indice += 1;
         if en_comentario {
             if let Some(pos) = linea.find("*/") {
                 linea = &linea[pos + 2..];
@@ -28,41 +35,48 @@ pub fn interpretar(contenido: &str) -> Result<(), String> {
             continue;
         }
 
+        if linea.starts_with("para") {
+            let (bloque, fin) = extraer_bloque(lineas, indice - 1)?;
+            procesar_bucle_para(linea, &bloque, entorno, inicio + indice - 1)?;
+            indice = fin + 1;
+            continue;
+        }
+
         if linea.starts_with("imprimir_error") {
-            manejar_impresion(linea, "imprimir_error", indice, &entorno, consola::imprimir_error)?;
+            manejar_impresion(linea, "imprimir_error", inicio + indice - 1, &entorno, consola::imprimir_error)?;
             continue;
         }
         if linea.starts_with("imprimir_advertencia") {
-            manejar_impresion(linea, "imprimir_advertencia", indice, &entorno, consola::imprimir_advertencia)?;
+            manejar_impresion(linea, "imprimir_advertencia", inicio + indice - 1, &entorno, consola::imprimir_advertencia)?;
             continue;
         }
         if linea.starts_with("imprimir_informacion") {
-            manejar_impresion(linea, "imprimir_informacion", indice, &entorno, consola::imprimir_informacion)?;
+            manejar_impresion(linea, "imprimir_informacion", inicio + indice - 1, &entorno, consola::imprimir_informacion)?;
             continue;
         }
         if linea.starts_with("imprimir_depurar") {
-            manejar_impresion(linea, "imprimir_depurar", indice, &entorno, consola::imprimir_depurar)?;
+            manejar_impresion(linea, "imprimir_depurar", inicio + indice - 1, &entorno, consola::imprimir_depurar)?;
             continue;
         }
         if linea.starts_with("imprimir_exito") {
-            manejar_impresion(linea, "imprimir_exito", indice, &entorno, consola::imprimir_exito)?;
+            manejar_impresion(linea, "imprimir_exito", inicio + indice - 1, &entorno, consola::imprimir_exito)?;
             continue;
         }
         if linea.starts_with("imprimir_alerta") {
-            manejar_impresion(linea, "imprimir_alerta", indice, &entorno, consola::imprimir_alerta)?;
+            manejar_impresion(linea, "imprimir_alerta", inicio + indice - 1, &entorno, consola::imprimir_alerta)?;
             continue;
         }
         if linea.starts_with("imprimir_confirmacion") {
-            manejar_impresion(linea, "imprimir_confirmacion", indice, &entorno, consola::imprimir_confirmacion)?;
+            manejar_impresion(linea, "imprimir_confirmacion", inicio + indice - 1, &entorno, consola::imprimir_confirmacion)?;
             continue;
         }
         if linea.starts_with("imprimir") {
-            manejar_impresion(linea, "imprimir", indice, &entorno, |t| println!("{}", t))?;
+            manejar_impresion(linea, "imprimir", inicio + indice - 1, &entorno, |t| println!("{}", t))?;
             continue;
         }
 
         if let Err(error) = procesar_declaracion(linea, &mut entorno) {
-            return Err(formatear_error(indice, &error));
+            return Err(formatear_error(inicio + indice - 1, &error));
         }
     }
     Ok(())
@@ -210,4 +224,91 @@ fn valor_desde_expresion(expresion: &str, linea_num: usize, entorno: &Entorno) -
     } else {
         Err(formatear_error(linea_num, "Variable no encontrada"))
     }
+}
+
+fn extraer_bloque(lineas: &[String], inicio: usize) -> Result<(Vec<String>, usize), String> {
+    let mut bloque = Vec::new();
+    let mut nivel = lineas[inicio].matches('{').count() as i32 - lineas[inicio].matches('}').count() as i32;
+    let mut i = inicio + 1;
+    while i < lineas.len() {
+        let linea = &lineas[i];
+        nivel += linea.matches('{').count() as i32;
+        if linea.contains('}') {
+            nivel -= linea.matches('}').count() as i32;
+            if nivel == 0 {
+                return Ok((bloque, i));
+            }
+        }
+        bloque.push(linea.clone());
+        i += 1;
+    }
+    Err("Bloque sin cerrar".to_string())
+}
+
+fn procesar_bucle_para(linea: &str, bloque: &[String], entorno: &mut Entorno, linea_num: usize) -> Result<(), String> {
+    let texto = linea.trim();
+    let inicio_paren = texto.find('(').ok_or_else(|| formatear_error(linea_num, "Bucle para inválido"))?;
+    let fin_paren = texto.rfind(')').ok_or_else(|| formatear_error(linea_num, "Bucle para inválido"))?;
+    let contenido = &texto[inicio_paren + 1..fin_paren];
+    let partes: Vec<&str> = contenido.split(';').collect();
+    if partes.len() != 3 {
+        return Err(formatear_error(linea_num, "Bucle para inválido"));
+    }
+    procesar_declaracion(partes[0].trim(), entorno).map_err(|e| formatear_error(linea_num, &e))?;
+    while evaluar_condicion(partes[1].trim(), entorno)? {
+        procesar_lineas(bloque, entorno, linea_num + 1)?;
+        aplicar_incremento(partes[2].trim(), entorno)?;
+    }
+    Ok(())
+}
+
+fn evaluar_condicion(condicion: &str, entorno: &Entorno) -> Result<bool, String> {
+    let tokens: Vec<&str> = condicion.split_whitespace().collect();
+    if tokens.len() != 3 {
+        return Err("Condición inválida".to_string());
+    }
+    let izq = obtener_entero(tokens[0], entorno)?;
+    let der = obtener_entero(tokens[2], entorno)?;
+    match tokens[1] {
+        "<" => Ok(izq < der),
+        "<=" => Ok(izq <= der),
+        ">" => Ok(izq > der),
+        ">=" => Ok(izq >= der),
+        "==" => Ok(izq == der),
+        "!=" => Ok(izq != der),
+        _ => Err("Operador de comparación inválido".to_string()),
+    }
+}
+
+fn obtener_entero(texto: &str, entorno: &Entorno) -> Result<i64, String> {
+    if let Ok(i) = texto.parse::<i64>() {
+        return Ok(i);
+    }
+    if let Some(valor) = entorno.obtener(texto) {
+        if let Valor::Entero(i) = valor {
+            return Ok(*i);
+        }
+    }
+    Err("Valor entero inválido".to_string())
+}
+
+fn aplicar_incremento(expresion: &str, entorno: &mut Entorno) -> Result<(), String> {
+    if expresion.ends_with("++") {
+        let nombre = expresion.trim_end_matches("++").trim();
+        if let Some(Valor::Entero(i)) = entorno.obtener(nombre).cloned() {
+            entorno.establecer(nombre, Valor::Entero(i + 1));
+            return Ok(());
+        } else {
+            return Err("Variable no encontrada".to_string());
+        }
+    } else if expresion.ends_with("--") {
+        let nombre = expresion.trim_end_matches("--").trim();
+        if let Some(Valor::Entero(i)) = entorno.obtener(nombre).cloned() {
+            entorno.establecer(nombre, Valor::Entero(i - 1));
+            return Ok(());
+        } else {
+            return Err("Variable no encontrada".to_string());
+        }
+    }
+    Err("Incremento inválido".to_string())
 }

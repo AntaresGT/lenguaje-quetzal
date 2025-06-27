@@ -1,6 +1,6 @@
 use crate::entorno::Entorno;
 use crate::valores::Valor;
-use crate::objetos::DefObjeto;
+use crate::objetos::{DefObjeto, TipoMetodo};
 use crate::consola;
 
 pub fn interpretar(contenido: &str) -> Result<(), String> {
@@ -460,13 +460,18 @@ fn valor_desde_expresion(expresion: &str, linea_num: usize, entorno: &mut Entorn
                 }
                 if let Some(Valor::Instancia(t, campos)) = entorno.obtener(base).cloned() {
                     let mut mapa = campos;
-                    let res = ejecutar_metodo(&t, &mut mapa, metodo, args);
-                    // actualiza instancia
-                    let mut mutable = unsafe { &mut *(entorno as *const _ as *mut Entorno) };
-                    mutable.establecer(base, Valor::Instancia(t.clone(), mapa));
-                    if let Some(v) = res { return Ok(v.a_cadena()); } else { return Ok(String::new()); }
+                    if let Some(def) = entorno.obtener_objeto(&t) {
+                        let res = ejecutar_metodo(def, &mut mapa, metodo, args);
+                        let mut mutable = unsafe { &mut *(entorno as *const _ as *mut Entorno) };
+                        mutable.establecer(base, Valor::Instancia(t.clone(), mapa));
+                        if let Some(v) = res { return Ok(v.a_cadena()); } else { return Ok(String::new()); }
+                    } else {
+                        return Err(formatear_error(linea_num, "Objeto no definido"));
+                    }
                 } else if entorno.obtener_objeto(base).is_some() {
-                    if let Some(v) = ejecutar_metodo(base, &mut std::collections::HashMap::new(), metodo, args) { return Ok(v.a_cadena()); } else { return Ok(String::new()); }
+                    let mut dummy = std::collections::HashMap::new();
+                    let def = entorno.obtener_objeto(base).unwrap();
+                    if let Some(v) = ejecutar_metodo(def, &mut dummy, metodo, args) { return Ok(v.a_cadena()); } else { return Ok(String::new()); }
                 } else {
                     let es_var = entorno.obtener(base).is_some();
                     let mut val = obtener_valor(base, entorno)?;
@@ -804,11 +809,14 @@ fn procesar_objeto(lineas: &[String], inicio: usize) -> Result<(DefObjeto, usize
         .trim_end_matches('{')
         .trim();
     let mut campos = Vec::new();
+    let mut metodos: std::collections::HashMap<String, TipoMetodo> = std::collections::HashMap::new();
     let mut i = inicio + 1;
     while i < lineas.len() {
         let linea = lineas[i].trim();
         if linea.starts_with('}') {
-            return Ok((DefObjeto { nombre: nombre.to_string(), campos }, i));
+            let mut def = DefObjeto { nombre: nombre.to_string(), campos, metodos };
+            agregar_metodos_built_in(&mut def);
+            return Ok((def, i));
         }
         if linea.ends_with('{') {
             let (_, fin) = extraer_bloque(lineas, i)?;
@@ -848,15 +856,15 @@ fn instanciar_objeto(obj: &DefObjeto, argumentos: Vec<Valor>) -> Valor {
     Valor::Instancia(obj.nombre.clone(), mapa)
 }
 
-fn ejecutar_metodo(objeto: &str, instancia: &mut std::collections::HashMap<String, Valor>, metodo: &str, args: Vec<Valor>) -> Option<Valor> {
-    match (objeto, metodo) {
-        ("Empleado", "obtener_informacion") => {
-            let nombre = instancia.get("nombre").map(|v| v.a_cadena()).unwrap_or_default();
-            let edad = instancia.get("edad").map(|v| v.a_cadena()).unwrap_or_default();
-            let salario = instancia.get("salario").map(|v| v.a_cadena()).unwrap_or_default();
+fn agregar_metodos_built_in(def: &mut DefObjeto) {
+    if def.nombre == "Empleado" {
+        def.metodos.insert("obtener_informacion".to_string(), |campos, _| {
+            let nombre = campos.get("nombre").map(|v| v.a_cadena()).unwrap_or_default();
+            let edad = campos.get("edad").map(|v| v.a_cadena()).unwrap_or_default();
+            let salario = campos.get("salario").map(|v| v.a_cadena()).unwrap_or_default();
             Some(Valor::Cadena(format!("Empleado: {}, Edad: {}, Salario: {}", nombre, edad, salario)))
-        }
-        ("Empleado", "aumentar_salario") => {
+        });
+        def.metodos.insert("aumentar_salario".to_string(), |campos, args| {
             let mut porcentaje = 10.0;
             if let Some(arg) = args.get(0) {
                 porcentaje = match arg {
@@ -865,16 +873,23 @@ fn ejecutar_metodo(objeto: &str, instancia: &mut std::collections::HashMap<Strin
                     _ => porcentaje,
                 };
             }
-            if let Some(Valor::Numero(sal)) = instancia.get("salario").cloned() {
+            if let Some(Valor::Numero(sal)) = campos.get("salario").cloned() {
                 let nuevo = sal * (1.0 + porcentaje / 100.0);
-                instancia.insert("salario".to_string(), Valor::Numero(nuevo));
+                campos.insert("salario".to_string(), Valor::Numero(nuevo));
             }
             None
-        }
-        ("Empleado", "obtener_empresa") => {
+        });
+        def.metodos.insert("obtener_empresa".to_string(), |_, _| {
             Some(Valor::Cadena("TechCorp S.A.".to_string()))
-        }
-        _ => None,
+        });
+    }
+}
+
+fn ejecutar_metodo(def: &DefObjeto, instancia: &mut std::collections::HashMap<String, Valor>, metodo: &str, args: Vec<Valor>) -> Option<Valor> {
+    if let Some(funcion) = def.metodos.get(metodo) {
+        funcion(instancia, args)
+    } else {
+        None
     }
 }
 

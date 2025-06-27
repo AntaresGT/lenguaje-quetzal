@@ -176,12 +176,28 @@ where
         expresion = expresion[1..expresion.len() - 1].trim();
     }
 
-    if expresion.starts_with('"') && expresion.ends_with('"') {
-        accion(expresion.trim_matches('"'));
+    let resultado = if expresion.contains('+') {
+        let partes: Vec<&str> = expresion.split('+').collect();
+        let mut acumulado = String::new();
+        for parte in partes {
+            let p = parte.trim();
+            if p.starts_with('"') && p.ends_with('"') {
+                acumulado.push_str(p.trim_matches('"'));
+            } else if let Some(valor) = entorno.obtener(p) {
+                acumulado.push_str(&valor.a_cadena());
+            } else {
+                return Err(formatear_error(linea_num, "Variable no encontrada"));
+            }
+        }
+        acumulado
+    } else if expresion.starts_with('"') && expresion.ends_with('"') {
+        expresion.trim_matches('"').to_string()
     } else if let Some(valor) = entorno.obtener(expresion) {
-        accion(&format!("{:?}", valor));
+        valor.a_cadena()
     } else {
         return Err(formatear_error(linea_num, "Variable no encontrada"));
-    }
+    };
+
+    accion(&resultado);
     Ok(())
 }

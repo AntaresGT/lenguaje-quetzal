@@ -10,6 +10,15 @@ pub enum Valor {
     Lista(Vec<Valor>),
     Objeto(HashMap<String, Valor>),
     Instancia(String, HashMap<String, Valor>),
+    Funcion(DefFuncion),
+}
+
+#[derive(Clone, Debug)]
+pub struct DefFuncion {
+    pub nombre: String,
+    pub parametros: Vec<(String, String)>, // (nombre, tipo)
+    pub tipo_retorno: String,
+    pub cuerpo: Vec<String>,
 }
 
 impl Valor {
@@ -53,6 +62,46 @@ impl Valor {
                     .collect();
                 format!("{} {{ {} }}", nombre, partes.join(", "))
             }
+            Valor::Funcion(func) => {
+                format!("funcion {}({})", func.nombre, 
+                    func.parametros.iter()
+                        .map(|(nombre, tipo)| format!("{}: {}", nombre, tipo))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            }
+        }
+    }
+
+    pub fn convertir_a_entero(&self) -> Result<i64, String> {
+        match self {
+            Valor::Entero(i) => Ok(*i),
+            Valor::Numero(n) => Ok(*n as i64),
+            Valor::Cadena(s) => s.parse::<i64>().map_err(|_| "Conversión a entero inválida".to_string()),
+            _ => Err("No se puede convertir a entero".to_string()),
+        }
+    }
+    
+    pub fn convertir_a_numero(&self) -> Result<f64, String> {
+        match self {
+            Valor::Numero(n) => Ok(*n),
+            Valor::Entero(i) => Ok(*i as f64),
+            Valor::Cadena(s) => s.parse::<f64>().map_err(|_| "Conversión a número inválida".to_string()),
+            _ => Err("No se puede convertir a número".to_string()),
+        }
+    }
+    
+    pub fn convertir_a_bool(&self) -> Result<bool, String> {
+        match self {
+            Valor::Bool(b) => Ok(*b),
+            Valor::Cadena(s) => match s.as_str() {
+                "verdadero" => Ok(true),
+                "falso" => Ok(false),
+                _ => Err("Conversión a booleano inválida".to_string()),
+            },
+            Valor::Entero(i) => Ok(*i != 0),
+            Valor::Numero(n) => Ok(*n != 0.0),
+            _ => Err("No se puede convertir a booleano".to_string()),
         }
     }
 }

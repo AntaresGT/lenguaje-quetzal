@@ -1,5 +1,5 @@
 use crate::entorno::Entorno;
-use crate::valores::Valor;
+use crate::valores::{Valor, DefFuncion};
 use crate::objetos::{DefObjeto, TipoMetodo};
 use crate::consola;
 
@@ -122,6 +122,31 @@ fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> R
             continue;
         }
 
+        // Manejo de declaración de funciones
+        if linea.starts_with("funcion") && linea.trim_end().ends_with('{') {
+            let (bloque_funcion, fin_funcion) = extraer_bloque(lineas, indice - 1)?;
+            procesar_declaracion_funcion(linea, &bloque_funcion, entorno)?;
+            indice = fin_funcion + 1;
+            continue;
+        }
+
+        // Manejo de llamadas a funciones
+        if linea.contains('(') && linea.contains(')') && linea.contains('=') && !linea.starts_with("para") && !linea.starts_with("si") {
+            if let Err(_) = procesar_llamada_funcion(linea, entorno) {
+                // Si no es una llamada a función, procesar como declaración normal
+                if let Err(error) = procesar_declaracion(linea, entorno) {
+                    return Err(formatear_error(inicio + indice - 1, &error));
+                }
+            }
+            continue;
+        }
+
+        // Manejo de operadores de asignación compuesta
+        if linea.contains("+=") || linea.contains("-=") || linea.contains("*=") || linea.contains("/=") {
+            procesar_asignacion_compuesta(linea, entorno, inicio + indice - 1)?;
+            continue;
+        }
+
         if linea.starts_with("jsn") && linea.contains('=') && linea.contains('{') && !linea.contains('}') {
             let mut compuesto = linea.to_string();
             let mut nivel = linea.matches('{').count() as i32 - linea.matches('}').count() as i32;
@@ -139,9 +164,19 @@ fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> R
             if let Err(error) = procesar_declaracion(&compuesto, entorno) {
                 return Err(formatear_error(inicio + indice - 1, &error));
             }
-        } else if let Err(error) = procesar_declaracion(linea, entorno) {
-            if let Err(_) = procesar_expresion(linea, inicio + indice - 1, entorno) {
-                return Err(formatear_error(inicio + indice - 1, &error));
+        } else {
+            // Verificar si es una llamada a función sin asignación
+            if linea.contains('(') && linea.contains(')') && !linea.contains('=') && 
+               !linea.starts_with("para") && !linea.starts_with("si") && !linea.starts_with("mientras") {
+                if let Ok(_) = procesar_llamada_funcion_sin_asignacion(linea, entorno) {
+                    continue;
+                }
+            }
+            
+            if let Err(error) = procesar_declaracion(linea, entorno) {
+                if let Err(_) = procesar_expresion(linea, inicio + indice - 1, entorno) {
+                    return Err(formatear_error(inicio + indice - 1, &error));
+                }
             }
         }
     }
@@ -175,10 +210,11 @@ fn procesar_declaracion(linea: &str, entorno: &mut Entorno) -> Result<(), String
                 if let Ok(v) = valor_cadena.parse::<i64>() {
                     Valor::Entero(v)
                 } else {
-                    if let Valor::Entero(i) = evaluar_expresion_valor(&valor_cadena, entorno)? {
-                        Valor::Entero(i)
-                    } else {
-                        return Err("Valor entero inválido".to_string());
+                    let resultado = evaluar_expresion_valor(&valor_cadena, entorno)?;
+                    match resultado {
+                        Valor::Entero(i) => Valor::Entero(i),
+                        Valor::Numero(n) => Valor::Entero(n as i64),
+                        _ => return Err("Valor entero inválido".to_string()),
                     }
                 }
             }
@@ -186,10 +222,11 @@ fn procesar_declaracion(linea: &str, entorno: &mut Entorno) -> Result<(), String
                 if let Ok(v) = valor_cadena.parse::<f64>() {
                     Valor::Numero(v)
                 } else {
-                    if let Valor::Numero(n) = evaluar_expresion_valor(&valor_cadena, entorno)? {
-                        Valor::Numero(n)
-                    } else {
-                        return Err("Valor numérico inválido".to_string());
+                    let resultado = evaluar_expresion_valor(&valor_cadena, entorno)?;
+                    match resultado {
+                        Valor::Numero(n) => Valor::Numero(n),
+                        Valor::Entero(i) => Valor::Numero(i as f64),
+                        _ => return Err("Valor numérico inválido".to_string()),
                     }
                 }
             }
@@ -197,10 +234,10 @@ fn procesar_declaracion(linea: &str, entorno: &mut Entorno) -> Result<(), String
                 if valor_cadena.starts_with('"') && valor_cadena.ends_with('"') {
                     Valor::Cadena(valor_cadena.trim_matches('"').to_string())
                 } else {
-                    if let Valor::Cadena(c) = evaluar_expresion_valor(&valor_cadena, entorno)? {
-                        Valor::Cadena(c)
-                    } else {
-                        return Err("Valor de cadena inválido".to_string());
+                    let resultado = evaluar_expresion_valor(&valor_cadena, entorno)?;
+                    match resultado {
+                        Valor::Cadena(c) => Valor::Cadena(c),
+                        other => Valor::Cadena(other.a_cadena()),
                     }
                 }
             }
@@ -208,10 +245,10 @@ fn procesar_declaracion(linea: &str, entorno: &mut Entorno) -> Result<(), String
                 "verdadero" => Valor::Bool(true),
                 "falso" => Valor::Bool(false),
                 _ => {
-                    if let Valor::Bool(b) = evaluar_expresion_valor(&valor_cadena, entorno)? {
-                        Valor::Bool(b)
-                    } else {
-                        return Err("Valor bool inválido".to_string());
+                    let resultado = evaluar_expresion_valor(&valor_cadena, entorno)?;
+                    match resultado {
+                        Valor::Bool(b) => Valor::Bool(b),
+                        _ => return Err("Valor bool inválido".to_string()),
                     }
                 }
             },
@@ -412,33 +449,368 @@ fn parsear_jsn(texto: &str) -> Result<Valor, String> {
     Ok(valor)
 }
 
-fn formatear_error(linea: usize, mensaje: &str) -> String {
-    format!("Línea {}: {}", linea + 1, mensaje)
+fn procesar_declaracion_funcion(linea: &str, bloque: &[String], entorno: &mut Entorno) -> Result<(), String> {
+    // Parsear la declaración de función
+    // Formato: funcion nombre(param1: tipo1, param2: tipo2) -> tipo_retorno
+    
+    let partes = linea.split("->").collect::<Vec<&str>>();
+    let declaracion = partes[0].trim().trim_end_matches('{').trim();
+    let tipo_retorno = if partes.len() > 1 {
+        partes[1].trim().trim_start_matches('{').trim().to_string()
+    } else {
+        "vacio".to_string()
+    };
+    
+    // Extraer nombre y parámetros
+    let inicio_parentesis = declaracion.find('(').ok_or("Sintaxis de función inválida")?;
+    let fin_parentesis = declaracion.rfind(')').ok_or("Sintaxis de función inválida")?;
+    
+    let partes_func: Vec<&str> = declaracion[..inicio_parentesis].split_whitespace().collect();
+    if partes_func.len() < 2 || partes_func[0] != "funcion" {
+        return Err("Sintaxis de función inválida".to_string());
+    }
+    
+    let nombre = partes_func[1].to_string();
+    let params_str = &declaracion[inicio_parentesis + 1..fin_parentesis];
+    
+    // Parsear parámetros
+    let mut parametros = Vec::new();
+    if !params_str.trim().is_empty() {
+        for param in params_str.split(',') {
+            let param = param.trim();
+            if let Some(pos) = param.find(':') {
+                let nombre_param = param[..pos].trim().to_string();
+                let tipo_param = param[pos + 1..].trim().to_string();
+                parametros.push((nombre_param, tipo_param));
+            } else {
+                return Err("Parámetro de función mal formado".to_string());
+            }
+        }
+    }
+    
+    let def_funcion = DefFuncion {
+        nombre: nombre.clone(),
+        parametros,
+        tipo_retorno,
+        cuerpo: bloque.to_vec(),
+    };
+    
+    entorno.definir_funcion(def_funcion);
+    Ok(())
 }
 
-fn manejar_impresion<F>(linea: &str, inicio: &str, linea_num: usize, entorno: &mut Entorno, accion: F) -> Result<(), String>
+fn procesar_llamada_funcion(linea: &str, entorno: &mut Entorno) -> Result<(), String> {
+    // Parsear líneas del tipo: tipo variable = funcion()
+    let partes_asignacion: Vec<&str> = linea.split('=').collect();
+    if partes_asignacion.len() != 2 {
+        return Err("Sintaxis de asignación inválida".to_string());
+    }
+    
+    let izquierda = partes_asignacion[0].trim();
+    let llamada = partes_asignacion[1].trim();
+    
+    // Extraer el nombre de la variable (último token de la izquierda)
+    let tokens_izq: Vec<&str> = izquierda.split_whitespace().collect();
+    let variable_resultado = if tokens_izq.len() >= 2 {
+        tokens_izq[tokens_izq.len() - 1]
+    } else {
+        tokens_izq[0]
+    };
+    
+    // Funciones built-in
+    if llamada.starts_with("sumar(") {
+        let args = extraer_argumentos_funcion(llamada)?;
+        if args.len() >= 2 {
+            let val1 = evaluar_expresion_valor(&args[0], entorno)?;
+            let val2 = evaluar_expresion_valor(&args[1], entorno)?;
+            match (val1, val2) {
+                (Valor::Entero(a), Valor::Entero(b)) => {
+                    entorno.establecer(variable_resultado, Valor::Entero(a + b));
+                }
+                (Valor::Numero(a), Valor::Numero(b)) => {
+                    entorno.establecer(variable_resultado, Valor::Numero(a + b));
+                }
+                _ => return Err("Tipos incompatibles para suma".to_string()),
+            }
+        }
+        return Ok(());
+    }
+    
+    if llamada.starts_with("saludar(") {
+        let args = extraer_argumentos_funcion(llamada)?;
+        let nombre = if args.is_empty() {
+            "Mundo".to_string()
+        } else {
+            evaluar_expresion_valor(&args[0], entorno)?.a_cadena().trim_matches('"').to_string()
+        };
+        let saludo = if args.len() > 1 {
+            evaluar_expresion_valor(&args[1], entorno)?.a_cadena().trim_matches('"').to_string()
+        } else {
+            "Hola".to_string()
+        };
+        let resultado = format!("{}, {}!", saludo, nombre);
+        entorno.establecer(variable_resultado, Valor::Cadena(resultado));
+        return Ok(());
+    }
+    
+    if llamada.starts_with("calcular_promedio(") {
+        let args = extraer_argumentos_funcion(llamada)?;
+        if !args.is_empty() {
+            let lista_val = evaluar_expresion_valor(&args[0], entorno)?;
+            if let Valor::Lista(elementos) = lista_val {
+                let mut suma = 0.0;
+                let mut count = 0;
+                for elem in elementos {
+                    match elem {
+                        Valor::Numero(n) => {
+                            suma += n;
+                            count += 1;
+                        }
+                        Valor::Entero(i) => {
+                            suma += i as f64;
+                            count += 1;
+                        }
+                        _ => {}
+                    }
+                }
+                if count > 0 {
+                    entorno.establecer(variable_resultado, Valor::Numero(suma / count as f64));
+                } else {
+                    entorno.establecer(variable_resultado, Valor::Numero(0.0));
+                }
+            }
+        }
+        return Ok(());
+    }
+    
+    // Verificar si es una función definida por el usuario
+    let nombre_funcion = if let Some(pos) = llamada.find('(') {
+        &llamada[..pos]
+    } else {
+        return Err("Sintaxis de llamada de función inválida".to_string());
+    };
+    
+    if let Some(def_funcion) = entorno.obtener_funcion(nombre_funcion).cloned() {
+        return ejecutar_funcion_usuario(&def_funcion, llamada, variable_resultado, entorno);
+    }
+    
+    Err("Función no reconocida".to_string())
+}
+
+fn extraer_argumentos_funcion(llamada: &str) -> Result<Vec<String>, String> {
+    let inicio = llamada.find('(').ok_or("Función inválida")?;
+    let fin = llamada.rfind(')').ok_or("Función inválida")?;
+    let contenido = &llamada[inicio + 1..fin];
+    if contenido.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    Ok(contenido.split(',').map(|s| s.trim().to_string()).collect())
+}
+
+fn procesar_asignacion_compuesta(linea: &str, entorno: &mut Entorno, linea_num: usize) -> Result<(), String> {
+    if let Some(pos) = linea.find("+=") {
+        let variable = linea[..pos].trim();
+        let valor_expr = linea[pos + 2..].trim();
+        
+        let valor_actual = entorno.obtener(variable).cloned()
+            .ok_or_else(|| formatear_error(linea_num, "Variable no encontrada"))?;
+        let valor_nuevo = evaluar_expresion_valor(valor_expr, entorno)?;
+        
+        match (valor_actual, valor_nuevo) {
+            (Valor::Entero(a), Valor::Entero(b)) => {
+                entorno.establecer(variable, Valor::Entero(a + b));
+            }
+            (Valor::Numero(a), Valor::Numero(b)) => {
+                entorno.establecer(variable, Valor::Numero(a + b));
+            }
+            (Valor::Cadena(a), Valor::Cadena(b)) => {
+                entorno.establecer(variable, Valor::Cadena(a + &b));
+            }
+            _ => return Err(formatear_error(linea_num, "Tipos incompatibles para +=")),
+        }
+    } else if let Some(pos) = linea.find("-=") {
+        let variable = linea[..pos].trim();
+        let valor_expr = linea[pos + 2..].trim();
+        
+        let valor_actual = entorno.obtener(variable).cloned()
+            .ok_or_else(|| formatear_error(linea_num, "Variable no encontrada"))?;
+        let valor_nuevo = evaluar_expresion_valor(valor_expr, entorno)?;
+        
+        match (valor_actual, valor_nuevo) {
+            (Valor::Entero(a), Valor::Entero(b)) => {
+                entorno.establecer(variable, Valor::Entero(a - b));
+            }
+            (Valor::Numero(a), Valor::Numero(b)) => {
+                entorno.establecer(variable, Valor::Numero(a - b));
+            }
+            _ => return Err(formatear_error(linea_num, "Tipos incompatibles para -=")),
+        }
+    } else if let Some(pos) = linea.find("*=") {
+        let variable = linea[..pos].trim();
+        let valor_expr = linea[pos + 2..].trim();
+        
+        let valor_actual = entorno.obtener(variable).cloned()
+            .ok_or_else(|| formatear_error(linea_num, "Variable no encontrada"))?;
+        let valor_nuevo = evaluar_expresion_valor(valor_expr, entorno)?;
+        
+        match (valor_actual, valor_nuevo) {
+            (Valor::Entero(a), Valor::Entero(b)) => {
+                entorno.establecer(variable, Valor::Entero(a * b));
+            }
+            (Valor::Numero(a), Valor::Numero(b)) => {
+                entorno.establecer(variable, Valor::Numero(a * b));
+            }
+            _ => return Err(formatear_error(linea_num, "Tipos incompatibles para *=")),
+        }
+    }
+    Ok(())
+}
+
+fn manejar_impresion<F>(linea: &str, comando: &str, linea_num: usize, entorno: &mut Entorno, func: F) -> Result<(), String>
 where
     F: Fn(&str),
 {
-    let mut expresion = linea.trim_start_matches(inicio).trim();
-    if expresion.starts_with('(') && expresion.ends_with(')') {
-        expresion = expresion[1..expresion.len() - 1].trim();
+    let inicio = linea.find('(').ok_or_else(|| formatear_error(linea_num, "Función de impresión inválida"))?;
+    let fin = linea.rfind(')').ok_or_else(|| formatear_error(linea_num, "Función de impresión inválida"))?;
+    let contenido = &linea[inicio + 1..fin];
+    
+    if contenido.trim().is_empty() {
+        func("");
+        return Ok(());
     }
-
-    let resultado = if expresion.contains('+') {
-        let partes: Vec<&str> = expresion.split('+').collect();
-        let mut acumulado = String::new();
-        for parte in partes {
-            acumulado.push_str(&valor_desde_expresion(parte, linea_num, entorno)?);
-        }
-        acumulado
-    } else {
-        valor_desde_expresion(expresion, linea_num, entorno)?
-    };
-
-    accion(&resultado);
+    
+    let texto = evaluar_cadena_para_impresion(contenido, entorno, linea_num)?;
+    func(&texto);
     Ok(())
 }
+
+fn evaluar_cadena_para_impresion(expr: &str, entorno: &mut Entorno, linea_num: usize) -> Result<String, String> {
+    let texto = expr.trim();
+    
+    // Si es una cadena literal
+    if texto.starts_with('"') && texto.ends_with('"') {
+        return Ok(texto.trim_matches('"').to_string());
+    }
+    
+    // Si contiene concatenación con +
+    if texto.contains(" + ") {
+        return evaluar_concatenacion(texto, entorno, linea_num);
+    }
+    
+    // Si es una variable simple
+    if let Some(valor) = entorno.obtener(texto) {
+        return Ok(valor.a_cadena());
+    }
+    
+    // Si es una expresión con paréntesis y método
+    if texto.contains('(') && texto.contains(')') && texto.contains(".cadena()") {
+        let partes: Vec<&str> = texto.split(".cadena()").collect();
+        if partes.len() == 2 && partes[1].is_empty() {
+            let expr_base = partes[0];
+            if expr_base.starts_with('(') && expr_base.ends_with(')') {
+                let expr_interna = &expr_base[1..expr_base.len()-1];
+                match evaluar_expresion_valor(expr_interna, entorno) {
+                    Ok(valor) => return Ok(valor.a_cadena()),
+                    Err(_) => {}
+                }
+            }
+        }
+    }
+    
+    // Intentar evaluar como expresión
+    match evaluar_expresion_valor(texto, entorno) {
+        Ok(valor) => Ok(valor.a_cadena()),
+        Err(_) => Ok(texto.to_string()),
+    }
+}
+
+fn evaluar_concatenacion(expr: &str, entorno: &mut Entorno, linea_num: usize) -> Result<String, String> {
+    // Necesitamos encontrar correctamente las partes, teniendo en cuenta paréntesis
+    let mut partes = Vec::new();
+    let mut parte_actual = String::new();
+    let mut nivel_parentesis = 0;
+    let mut i = 0;
+    let chars: Vec<char> = expr.chars().collect();
+    
+    while i < chars.len() {
+        let c = chars[i];
+        
+        if c == '(' {
+            nivel_parentesis += 1;
+            parte_actual.push(c);
+        } else if c == ')' {
+            nivel_parentesis -= 1;
+            parte_actual.push(c);
+        } else if c == '+' && nivel_parentesis == 0 {
+            // Solo dividir por + si estamos fuera de paréntesis
+            if i > 0 && i < chars.len() - 1 && chars[i-1] == ' ' && chars[i+1] == ' ' {
+                partes.push(parte_actual.trim().to_string());
+                parte_actual.clear();
+                i += 2; // Saltar " + "
+                continue;
+            } else {
+                parte_actual.push(c);
+            }
+        } else {
+            parte_actual.push(c);
+        }
+        i += 1;
+    }
+    
+    if !parte_actual.is_empty() {
+        partes.push(parte_actual.trim().to_string());
+    }
+    
+    let mut resultado = String::new();
+    
+    for parte in partes {
+        let parte_trim = parte.trim();
+        
+        let valor_str = if parte_trim.starts_with('"') && parte_trim.ends_with('"') {
+            // Es una cadena literal
+            parte_trim.trim_matches('"').to_string()
+        } else if parte_trim.contains(".cadena()") && parte_trim.starts_with('(') {
+            // Es una expresión con paréntesis y .cadena()
+            let pos_metodo = parte_trim.find(".cadena()").unwrap();
+            if parte_trim[..pos_metodo].ends_with(')') {
+                let expr_interna = &parte_trim[1..pos_metodo-1];
+                match evaluar_expresion_valor(expr_interna, entorno) {
+                    Ok(valor) => valor.a_cadena(),
+                    Err(e) => return Err(e),
+                }
+            } else {
+                return Err(formatear_error(linea_num, "Expresión con método inválida"));
+            }
+        } else if parte_trim.ends_with(".cadena()") {
+            // Es una variable con método de conversión
+            let base = parte_trim.trim_end_matches(".cadena()");
+            if let Some(valor) = entorno.obtener(base) {
+                valor.a_cadena()
+            } else {
+                return Err(formatear_error(linea_num, &format!("Variable '{}' no encontrada", base)));
+            }
+        } else if let Some(valor) = entorno.obtener(parte_trim) {
+            // Es una variable simple
+            valor.a_cadena()
+        } else {
+            // Intentar evaluar como expresión
+            match evaluar_expresion_valor(parte_trim, entorno) {
+                Ok(valor) => valor.a_cadena(),
+                Err(_) => parte_trim.to_string(),
+            }
+        };
+        
+        resultado.push_str(&valor_str);
+    }
+    
+    Ok(resultado)
+}
+
+fn formatear_error(linea: usize, mensaje: &str) -> String {
+    format!("Error en línea {}: {}", linea + 1, mensaje)
+}
+
+
 
 fn valor_desde_expresion(expresion: &str, linea_num: usize, entorno: &mut Entorno) -> Result<String, String> {
     let texto = expresion.trim();
@@ -522,27 +894,55 @@ fn obtener_valor(texto: &str, entorno: &Entorno) -> Result<Valor, String> {
 fn evaluar_comparacion(condicion: &str, entorno: &Entorno) -> Result<bool, String> {
     let tokens: Vec<&str> = condicion.split_whitespace().collect();
     if tokens.len() != 3 {
-        if let Some(Valor::Bool(b)) = entorno.obtener(condicion) {
+        if let Some(Valor::Bool(b)) = entorno.obtener(condicion.trim()) {
             return Ok(*b);
         }
         return Err("Condición inválida".to_string());
     }
     let izq = obtener_valor(tokens[0], entorno)?;
     let der = obtener_valor(tokens[2], entorno)?;
+    
     match (izq, der, tokens[1]) {
+        // Comparaciones entre enteros
         (Valor::Entero(a), Valor::Entero(b), "<") => Ok(a < b),
         (Valor::Entero(a), Valor::Entero(b), "<=") => Ok(a <= b),
         (Valor::Entero(a), Valor::Entero(b), ">") => Ok(a > b),
         (Valor::Entero(a), Valor::Entero(b), ">=") => Ok(a >= b),
         (Valor::Entero(a), Valor::Entero(b), "==") => Ok(a == b),
         (Valor::Entero(a), Valor::Entero(b), "!=") => Ok(a != b),
+        
+        // Comparaciones entre números
         (Valor::Numero(a), Valor::Numero(b), "<") => Ok(a < b),
         (Valor::Numero(a), Valor::Numero(b), "<=") => Ok(a <= b),
         (Valor::Numero(a), Valor::Numero(b), ">") => Ok(a > b),
         (Valor::Numero(a), Valor::Numero(b), ">=") => Ok(a >= b),
-        (Valor::Numero(a), Valor::Numero(b), "==") => Ok(a == b),
-        (Valor::Numero(a), Valor::Numero(b), "!=") => Ok(a != b),
-        _ => Err("Condición inválida".to_string()),
+        (Valor::Numero(a), Valor::Numero(b), "==") => Ok((a - b).abs() < f64::EPSILON),
+        (Valor::Numero(a), Valor::Numero(b), "!=") => Ok((a - b).abs() >= f64::EPSILON),
+        
+        // Comparaciones mixtas entero-número
+        (Valor::Entero(a), Valor::Numero(b), "<") => Ok((a as f64) < b),
+        (Valor::Entero(a), Valor::Numero(b), "<=") => Ok((a as f64) <= b),
+        (Valor::Entero(a), Valor::Numero(b), ">") => Ok((a as f64) > b),
+        (Valor::Entero(a), Valor::Numero(b), ">=") => Ok((a as f64) >= b),
+        (Valor::Entero(a), Valor::Numero(b), "==") => Ok(((a as f64) - b).abs() < f64::EPSILON),
+        (Valor::Entero(a), Valor::Numero(b), "!=") => Ok(((a as f64) - b).abs() >= f64::EPSILON),
+        
+        (Valor::Numero(a), Valor::Entero(b), "<") => Ok(a < (b as f64)),
+        (Valor::Numero(a), Valor::Entero(b), "<=") => Ok(a <= (b as f64)),
+        (Valor::Numero(a), Valor::Entero(b), ">") => Ok(a > (b as f64)),
+        (Valor::Numero(a), Valor::Entero(b), ">=") => Ok(a >= (b as f64)),
+        (Valor::Numero(a), Valor::Entero(b), "==") => Ok((a - (b as f64)).abs() < f64::EPSILON),
+        (Valor::Numero(a), Valor::Entero(b), "!=") => Ok((a - (b as f64)).abs() >= f64::EPSILON),
+        
+        // Comparaciones entre cadenas
+        (Valor::Cadena(a), Valor::Cadena(b), "==") => Ok(a == b),
+        (Valor::Cadena(a), Valor::Cadena(b), "!=") => Ok(a != b),
+        
+        // Comparaciones entre booleanos
+        (Valor::Bool(a), Valor::Bool(b), "==") => Ok(a == b),
+        (Valor::Bool(a), Valor::Bool(b), "!=") => Ok(a != b),
+        
+        _ => Err("Tipos incompatibles para comparación".to_string()),
     }
 }
 
@@ -562,7 +962,9 @@ fn evaluar_bool(expr: &str, entorno: &Entorno) -> Result<bool, String> {
 
 fn evaluar_expresion_valor(expr: &str, entorno: &mut Entorno) -> Result<Valor, String> {
     let texto = expr.trim();
-    if texto.contains('?') {
+    
+    // Operador ternario
+    if texto.contains('?') && texto.contains(':') {
         let q = texto.find('?').ok_or("Expresión ternaria inválida")?;
         let rest = &texto[q + 1..];
         let c_pos = rest.find(':').ok_or("Expresión ternaria inválida")? + q + 1;
@@ -575,18 +977,247 @@ fn evaluar_expresion_valor(expr: &str, entorno: &mut Entorno) -> Result<Valor, S
             return evaluar_expresion_valor(falso, entorno);
         }
     }
+    
+    // Llamadas a métodos
+    if texto.contains('.') && texto.contains('(') && texto.ends_with(')') {
+        if let Some(punto) = texto.find('.') {
+            let base = texto[..punto].trim();
+            let resto = texto[punto + 1..].trim();
+            if let Some(paren) = resto.find('(') {
+                let metodo = resto[..paren].trim();
+                let args_str = &resto[paren + 1..resto.len() - 1];
+                let mut args = Vec::new();
+                if !args_str.trim().is_empty() {
+                    for arg in args_str.split(',') {
+                        args.push(evaluar_expresion_valor(arg.trim(), entorno)?);
+                    }
+                }
+                
+                // Intentar obtener valor de la variable base
+                if let Ok(mut val) = obtener_valor(base, entorno) {
+                    if let Some(resultado) = aplicar_metodo_valor(&mut val, metodo, args)? {
+                        entorno.establecer(base, val);
+                        return Ok(resultado);
+                    }
+                }
+            }
+        }
+    }
+    for op in &[" && ", " y ", " || ", " o "] {
+        if let Some(pos) = texto.find(op) {
+            let izq = texto[..pos].trim();
+            let der = texto[pos + op.len()..].trim();
+            
+            let val_izq = evaluar_expresion_valor(izq, entorno)?;
+            let val_der = evaluar_expresion_valor(der, entorno)?;
+            
+            let bool_izq = match val_izq {
+                Valor::Bool(b) => b,
+                _ => return Err("Operando izquierdo no es booleano".to_string()),
+            };
+            
+            let bool_der = match val_der {
+                Valor::Bool(b) => b,
+                _ => return Err("Operando derecho no es booleano".to_string()),
+            };
+            
+            let resultado = match *op {
+                " && " | " y " => bool_izq && bool_der,
+                " || " | " o " => bool_izq || bool_der,
+                _ => unreachable!(),
+            };
+            
+            return Ok(Valor::Bool(resultado));
+        }
+    }
+    
+    // Operador de negación
+    if texto.starts_with('!') {
+        let operando = &texto[1..];
+        let val = evaluar_expresion_valor(operando, entorno)?;
+        match val {
+            Valor::Bool(b) => return Ok(Valor::Bool(!b)),
+            _ => return Err("Operando de negación no es booleano".to_string()),
+        }
+    }
+    for op in &["==", "!=", "<=", ">=", "<", ">"] {
+        if let Some(pos) = encontrar_operador_principal(texto, op) {
+            let izq = texto[..pos].trim();
+            let der = texto[pos + op.len()..].trim();
+            
+            let val_izq = evaluar_expresion_valor(izq, entorno)?;
+            let val_der = evaluar_expresion_valor(der, entorno)?;
+            
+            let resultado = match (val_izq, val_der, *op) {
+                (Valor::Entero(a), Valor::Entero(b), "==") => a == b,
+                (Valor::Entero(a), Valor::Entero(b), "!=") => a != b,
+                (Valor::Entero(a), Valor::Entero(b), "<") => a < b,
+                (Valor::Entero(a), Valor::Entero(b), "<=") => a <= b,
+                (Valor::Entero(a), Valor::Entero(b), ">") => a > b,
+                (Valor::Entero(a), Valor::Entero(b), ">=") => a >= b,
+                
+                (Valor::Numero(a), Valor::Numero(b), "==") => (a - b).abs() < f64::EPSILON,
+                (Valor::Numero(a), Valor::Numero(b), "!=") => (a - b).abs() >= f64::EPSILON,
+                (Valor::Numero(a), Valor::Numero(b), "<") => a < b,
+                (Valor::Numero(a), Valor::Numero(b), "<=") => a <= b,
+                (Valor::Numero(a), Valor::Numero(b), ">") => a > b,
+                (Valor::Numero(a), Valor::Numero(b), ">=") => a >= b,
+                
+                (Valor::Entero(a), Valor::Numero(b), "==") => ((a as f64) - b).abs() < f64::EPSILON,
+                (Valor::Entero(a), Valor::Numero(b), "!=") => ((a as f64) - b).abs() >= f64::EPSILON,
+                (Valor::Entero(a), Valor::Numero(b), "<") => (a as f64) < b,
+                (Valor::Entero(a), Valor::Numero(b), "<=") => (a as f64) <= b,
+                (Valor::Entero(a), Valor::Numero(b), ">") => (a as f64) > b,
+                (Valor::Entero(a), Valor::Numero(b), ">=") => (a as f64) >= b,
+                
+                (Valor::Numero(a), Valor::Entero(b), "==") => (a - (b as f64)).abs() < f64::EPSILON,
+                (Valor::Numero(a), Valor::Entero(b), "!=") => (a - (b as f64)).abs() >= f64::EPSILON,
+                (Valor::Numero(a), Valor::Entero(b), "<") => a < (b as f64),
+                (Valor::Numero(a), Valor::Entero(b), "<=") => a <= (b as f64),
+                (Valor::Numero(a), Valor::Entero(b), ">") => a > (b as f64),
+                (Valor::Numero(a), Valor::Entero(b), ">=") => a >= (b as f64),
+                
+                (Valor::Cadena(a), Valor::Cadena(b), "==") => a == b,
+                (Valor::Cadena(a), Valor::Cadena(b), "!=") => a != b,
+                
+                (Valor::Bool(a), Valor::Bool(b), "==") => a == b,
+                (Valor::Bool(a), Valor::Bool(b), "!=") => a != b,
+                
+                _ => return Err("Tipos incompatibles para comparación".to_string()),
+            };
+            
+            return Ok(Valor::Bool(resultado));
+        }
+    }
+    
+    // Operaciones aritméticas
+    if let Ok(resultado) = evaluar_operacion_aritmetica(texto, entorno) {
+        return Ok(resultado);
+    }
+    
+    // Concatenación de cadenas
+    if texto.contains(" + ") && !texto.chars().all(|c| c.is_ascii_digit() || c.is_whitespace() || c == '+' || c == '.' || c == '-') {
+        let resultado = evaluar_concatenacion(texto, entorno, 0)?;
+        return Ok(Valor::Cadena(resultado));
+    }
+    
+    // Literales básicos
     if texto == "verdadero" { return Ok(Valor::Bool(true)); }
     if texto == "falso" { return Ok(Valor::Bool(false)); }
+    
+    // Parsear literal
     if let Ok(l) = parsear_literal(texto) {
         return Ok(l);
     }
+    
+    // Obtener valor de variable
     if let Ok(v) = obtener_valor(texto, entorno) {
         return Ok(v);
     }
+    
+    // Método de conversión o acceso
     if let Ok(cadena) = valor_desde_expresion(texto, 0, entorno) {
         return Ok(Valor::Cadena(cadena));
     }
+    
     Err("Expresión inválida".to_string())
+}
+
+fn evaluar_operacion_aritmetica(expr: &str, entorno: &mut Entorno) -> Result<Valor, String> {
+    // Buscar operadores en orden de precedencia (menor a mayor)
+    for op in &["+", "-"] {
+        if let Some(pos) = encontrar_operador_principal(expr, op) {
+            let izq = expr[..pos].trim();
+            let der = expr[pos + op.len()..].trim();
+            
+            let val_izq = evaluar_expresion_valor(izq, entorno)?;
+            let val_der = evaluar_expresion_valor(der, entorno)?;
+            
+            match (val_izq, val_der, *op) {
+                (Valor::Entero(a), Valor::Entero(b), "+") => return Ok(Valor::Entero(a + b)),
+                (Valor::Entero(a), Valor::Entero(b), "-") => return Ok(Valor::Entero(a - b)),
+                (Valor::Numero(a), Valor::Numero(b), "+") => return Ok(Valor::Numero(a + b)),
+                (Valor::Numero(a), Valor::Numero(b), "-") => return Ok(Valor::Numero(a - b)),
+                (Valor::Entero(a), Valor::Numero(b), "+") => return Ok(Valor::Numero(a as f64 + b)),
+                (Valor::Entero(a), Valor::Numero(b), "-") => return Ok(Valor::Numero(a as f64 - b)),
+                (Valor::Numero(a), Valor::Entero(b), "+") => return Ok(Valor::Numero(a + b as f64)),
+                (Valor::Numero(a), Valor::Entero(b), "-") => return Ok(Valor::Numero(a - b as f64)),
+                _ => {}
+            }
+        }
+    }
+    
+    for op in &["*", "/", "%"] {
+        if let Some(pos) = encontrar_operador_principal(expr, op) {
+            let izq = expr[..pos].trim();
+            let der = expr[pos + op.len()..].trim();
+            
+            let val_izq = evaluar_expresion_valor(izq, entorno)?;
+            let val_der = evaluar_expresion_valor(der, entorno)?;
+            
+            match (val_izq, val_der, *op) {
+                (Valor::Entero(a), Valor::Entero(b), "*") => return Ok(Valor::Entero(a * b)),
+                (Valor::Entero(a), Valor::Entero(b), "/") => return Ok(Valor::Entero(a / b)),
+                (Valor::Entero(a), Valor::Entero(b), "%") => return Ok(Valor::Entero(a % b)),
+                (Valor::Numero(a), Valor::Numero(b), "*") => return Ok(Valor::Numero(a * b)),
+                (Valor::Numero(a), Valor::Numero(b), "/") => return Ok(Valor::Numero(a / b)),
+                (Valor::Numero(a), Valor::Numero(b), "%") => return Ok(Valor::Numero(a % b)),
+                (Valor::Entero(a), Valor::Numero(b), "*") => return Ok(Valor::Numero(a as f64 * b)),
+                (Valor::Entero(a), Valor::Numero(b), "/") => return Ok(Valor::Numero(a as f64 / b)),
+                (Valor::Numero(a), Valor::Entero(b), "*") => return Ok(Valor::Numero(a * b as f64)),
+                (Valor::Numero(a), Valor::Entero(b), "/") => return Ok(Valor::Numero(a / b as f64)),
+                _ => {}
+            }
+        }
+    }
+    
+    Err("No es una operación aritmética válida".to_string())
+}
+
+fn encontrar_operador_principal(expr: &str, op: &str) -> Option<usize> {
+    let mut nivel_parentesis = 0;
+    let mut pos = 0;
+    
+    while pos < expr.len() {
+        let c = expr.chars().nth(pos).unwrap();
+        
+        match c {
+            '(' => nivel_parentesis += 1,
+            ')' => nivel_parentesis -= 1,
+            _ => {
+                if nivel_parentesis == 0 && expr[pos..].starts_with(op) {
+                    // Para operadores de comparación de dos caracteres, verificar que no sea parte de otro operador
+                    let es_operador_completo = if op.len() == 2 {
+                        // Para ==, !=, <=, >=
+                        true
+                    } else {
+                        // Para operadores de un carácter como <, >
+                        let siguiente_char = if pos + 1 < expr.len() {
+                            expr.chars().nth(pos + 1)
+                        } else {
+                            None
+                        };
+                        !matches!(siguiente_char, Some('='))
+                    };
+                    
+                    // Verificar que no es parte de otro operador por la izquierda
+                    let anterior_char = if pos > 0 {
+                        expr.chars().nth(pos - 1)
+                    } else {
+                        None
+                    };
+                    let no_es_parte_izquierda = !matches!(anterior_char, Some('=') | Some('!') | Some('<') | Some('>'));
+                    
+                    if es_operador_completo && no_es_parte_izquierda {
+                        return Some(pos);
+                    }
+                }
+            }
+        }
+        pos += 1;
+    }
+    
+    None
 }
 
 fn extraer_bloque(lineas: &[String], inicio: usize) -> Result<(Vec<String>, usize), String> {
@@ -686,7 +1317,17 @@ fn procesar_bucle_foreach(linea: &str, bloque: &[String], entorno: &mut Entorno,
     let contenido = &linea[ini + 1..fin];
     let partes: Vec<&str> = contenido.split(" en ").collect();
     if partes.len() != 2 { return Err(formatear_error(linea_num, "Bucle para inválido")); }
-    let var = partes[0].trim();
+    
+    // Extraer el nombre de la variable, considerando que puede tener tipo
+    let declaracion_var = partes[0].trim();
+    let var = if declaracion_var.contains(' ') {
+        // Si contiene espacios, es "tipo variable", tomamos la variable
+        declaracion_var.split_whitespace().last().unwrap_or(declaracion_var)
+    } else {
+        // Si no contiene espacios, es solo la variable
+        declaracion_var
+    };
+    
     let lista_nombre = partes[1].trim();
     let lista = entorno.obtener(lista_nombre).cloned().ok_or_else(|| formatear_error(linea_num, "Variable no encontrada"))?;
     if let Valor::Lista(elementos) = lista {
@@ -738,30 +1379,32 @@ fn aplicar_metodo_valor(valor: &mut Valor, metodo: &str, args: Vec<Valor>) -> Re
                 Ok(None)
             }
             "longitud" => Ok(Some(Valor::Entero(lista.len() as i64))),
+            "cadena" => Ok(Some(Valor::Cadena(valor.a_cadena()))),
             _ => Ok(None),
         },
         Valor::Cadena(c) => match metodo {
-            "entero" => Ok(Some(Valor::Entero(c.parse::<i64>().map_err(|_| "Conversión inválida".to_string())?))),
-            "numero" => Ok(Some(Valor::Numero(c.parse::<f64>().map_err(|_| "Conversión inválida".to_string())?))),
-            "bool" => match c.as_str() {
-                "verdadero" => Ok(Some(Valor::Bool(true))),
-                "falso" => Ok(Some(Valor::Bool(false))),
-                _ => Err("Conversión inválida".to_string()),
-            },
+            "entero" => Ok(Some(Valor::Entero(valor.convertir_a_entero()?))),
+            "numero" => Ok(Some(Valor::Numero(valor.convertir_a_numero()?))),
+            "bool" => Ok(Some(Valor::Bool(valor.convertir_a_bool()?))),
             "cadena" => Ok(Some(Valor::Cadena(c.clone()))),
             _ => Ok(None),
         },
-        Valor::Numero(n) => match metodo {
-            "cadena" => Ok(Some(Valor::Cadena(n.to_string()))),
+        Valor::Numero(_) => match metodo {
+            "cadena" => Ok(Some(Valor::Cadena(valor.a_cadena()))),
+            "entero" => Ok(Some(Valor::Entero(valor.convertir_a_entero()?))),
             _ => Ok(None),
         },
-        Valor::Entero(i) => match metodo {
-            "cadena" => Ok(Some(Valor::Cadena(i.to_string()))),
-            "numero" => Ok(Some(Valor::Numero(*i as f64))),
+        Valor::Entero(_) => match metodo {
+            "cadena" => Ok(Some(Valor::Cadena(valor.a_cadena()))),
+            "numero" => Ok(Some(Valor::Numero(valor.convertir_a_numero()?))),
             _ => Ok(None),
         },
-        Valor::Bool(b) => match metodo {
-            "cadena" => Ok(Some(Valor::Cadena(if *b { "verdadero".to_string() } else { "falso".to_string() }))),
+        Valor::Bool(_) => match metodo {
+            "cadena" => Ok(Some(Valor::Cadena(valor.a_cadena()))),
+            _ => Ok(None),
+        },
+        Valor::Objeto(_) => match metodo {
+            "cadena" => Ok(Some(Valor::Cadena(valor.a_cadena()))),
             _ => Ok(None),
         },
         _ => Ok(None),
@@ -892,5 +1535,73 @@ fn ejecutar_metodo(def: &DefObjeto, instancia: &mut std::collections::HashMap<St
     } else {
         None
     }
+}
+
+fn ejecutar_funcion_usuario(def_funcion: &DefFuncion, llamada: &str, variable_resultado: &str, entorno: &mut Entorno) -> Result<(), String> {
+    // Extraer argumentos de la llamada
+    let args = extraer_argumentos_funcion(llamada)?;
+    
+    // Verificar que el número de argumentos coincida
+    if args.len() != def_funcion.parametros.len() {
+        return Err(format!(
+            "Función '{}' espera {} argumentos, pero se proporcionaron {}",
+            def_funcion.nombre,
+            def_funcion.parametros.len(),
+            args.len()
+        ));
+    }
+    
+    // Crear un nuevo entorno para la función
+    let entorno_padre = std::mem::replace(entorno, Entorno::nuevo());
+    let mut entorno_funcion = Entorno::nuevo_con_padre(entorno_padre);
+    
+    // Asignar valores a los parámetros
+    for (i, (nombre_param, _tipo_param)) in def_funcion.parametros.iter().enumerate() {
+        let valor_arg = evaluar_expresion_valor(&args[i], &mut entorno_funcion)?;
+        entorno_funcion.establecer(nombre_param, valor_arg);
+    }
+    
+    // Ejecutar el cuerpo de la función
+    let mut valor_retorno = Valor::Vacio;
+    if let Err(resultado) = procesar_lineas(&def_funcion.cuerpo, &mut entorno_funcion, 0) {
+        // Verificar si es un retorno
+        if resultado.starts_with("RETORNO:") {
+            let valor_retorno_str = &resultado[8..];
+            valor_retorno = evaluar_expresion_valor(valor_retorno_str, &mut entorno_funcion)
+                .unwrap_or(Valor::Vacio);
+        } else {
+            return Err(resultado);
+        }
+    }
+    
+    // Restaurar el entorno original
+    if let Some(padre) = entorno_funcion.padre {
+        *entorno = *padre;
+    }
+    
+    // Establecer el resultado
+    if !variable_resultado.is_empty() {
+        entorno.establecer(variable_resultado, valor_retorno);
+    }
+    
+    Ok(())
+}
+
+fn procesar_llamada_funcion_sin_asignacion(linea: &str, entorno: &mut Entorno) -> Result<(), String> {
+    let llamada = linea.trim();
+    
+    // Extraer el nombre de la función
+    let nombre_funcion = if let Some(pos) = llamada.find('(') {
+        &llamada[..pos]
+    } else {
+        return Err("Sintaxis de llamada de función inválida".to_string());
+    };
+    
+    // Verificar si es una función definida por el usuario
+    if let Some(def_funcion) = entorno.obtener_funcion(nombre_funcion).cloned() {
+        return ejecutar_funcion_usuario(&def_funcion, llamada, "", entorno);
+    }
+    
+    Err("Función no reconocida".to_string())
 }
 

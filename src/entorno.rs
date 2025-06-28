@@ -6,7 +6,7 @@ use crate::objetos::DefObjeto;
 pub struct Entorno {
     variables: HashMap<String, Valor>,
     objetos: HashMap<String, DefObjeto>,
-    funciones: HashMap<String, DefFuncion>,
+    pub funciones: HashMap<String, DefFuncion>,
     pub padre: Option<Box<Entorno>>,
 }
 

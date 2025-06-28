@@ -147,6 +147,16 @@ fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> R
             continue;
         }
 
+        // Manejo de retorno de funciones
+        if linea.starts_with("retornar") {
+            let valor_retorno = if linea.trim() == "retornar" {
+                "vacio"
+            } else {
+                linea.strip_prefix("retornar").unwrap_or("").trim()
+            };
+            return Err(format!("RETORNO:{}", valor_retorno));
+        }
+
         if linea.starts_with("jsn") && linea.contains('=') && linea.contains('{') && !linea.contains('}') {
             let mut compuesto = linea.to_string();
             let mut nivel = linea.matches('{').count() as i32 - linea.matches('}').count() as i32;
@@ -1176,45 +1186,37 @@ fn evaluar_operacion_aritmetica(expr: &str, entorno: &mut Entorno) -> Result<Val
 
 fn encontrar_operador_principal(expr: &str, op: &str) -> Option<usize> {
     let mut nivel_parentesis = 0;
-    let mut pos = 0;
     
-    while pos < expr.len() {
-        let c = expr.chars().nth(pos).unwrap();
-        
+    for (char_pos, c) in expr.char_indices() {
         match c {
             '(' => nivel_parentesis += 1,
             ')' => nivel_parentesis -= 1,
             _ => {
-                if nivel_parentesis == 0 && expr[pos..].starts_with(op) {
+                if nivel_parentesis == 0 && expr[char_pos..].starts_with(op) {
                     // Para operadores de comparación de dos caracteres, verificar que no sea parte de otro operador
                     let es_operador_completo = if op.len() == 2 {
                         // Para ==, !=, <=, >=
                         true
                     } else {
                         // Para operadores de un carácter como <, >
-                        let siguiente_char = if pos + 1 < expr.len() {
-                            expr.chars().nth(pos + 1)
-                        } else {
-                            None
-                        };
+                        let siguiente_char = expr[char_pos..].chars().nth(1);
                         !matches!(siguiente_char, Some('='))
                     };
                     
                     // Verificar que no es parte de otro operador por la izquierda
-                    let anterior_char = if pos > 0 {
-                        expr.chars().nth(pos - 1)
+                    let anterior_char = if char_pos > 0 {
+                        expr[..char_pos].chars().last()
                     } else {
                         None
                     };
                     let no_es_parte_izquierda = !matches!(anterior_char, Some('=') | Some('!') | Some('<') | Some('>'));
                     
                     if es_operador_completo && no_es_parte_izquierda {
-                        return Some(pos);
+                        return Some(char_pos);
                     }
                 }
             }
         }
-        pos += 1;
     }
     
     None
@@ -1551,35 +1553,43 @@ fn ejecutar_funcion_usuario(def_funcion: &DefFuncion, llamada: &str, variable_re
         ));
     }
     
-    // Crear un nuevo entorno para la función
-    let entorno_padre = std::mem::replace(entorno, Entorno::nuevo());
-    let mut entorno_funcion = Entorno::nuevo_con_padre(entorno_padre);
+    // Crear un nuevo entorno para la función con copia de funciones del entorno padre
+    let mut entorno_funcion = Entorno::nuevo();
+    
+    // Copiar las definiciones de funciones del entorno padre
+    for (_nombre, def_func) in &entorno.funciones {
+        entorno_funcion.definir_funcion(def_func.clone());
+    }
     
     // Asignar valores a los parámetros
     for (i, (nombre_param, _tipo_param)) in def_funcion.parametros.iter().enumerate() {
-        let valor_arg = evaluar_expresion_valor(&args[i], &mut entorno_funcion)?;
+        let valor_arg = evaluar_expresion_valor(&args[i], entorno)?;
         entorno_funcion.establecer(nombre_param, valor_arg);
     }
     
     // Ejecutar el cuerpo de la función
     let mut valor_retorno = Valor::Vacio;
-    if let Err(resultado) = procesar_lineas(&def_funcion.cuerpo, &mut entorno_funcion, 0) {
-        // Verificar si es un retorno
-        if resultado.starts_with("RETORNO:") {
-            let valor_retorno_str = &resultado[8..];
-            valor_retorno = evaluar_expresion_valor(valor_retorno_str, &mut entorno_funcion)
-                .unwrap_or(Valor::Vacio);
-        } else {
-            return Err(resultado);
+    match procesar_lineas(&def_funcion.cuerpo, &mut entorno_funcion, 0) {
+        Ok(_) => {
+            // La función terminó sin retornar explícitamente
+        }
+        Err(resultado) => {
+            // Verificar si es un retorno
+            if resultado.starts_with("RETORNO:") {
+                let valor_retorno_str = &resultado[8..];
+                if valor_retorno_str.trim().is_empty() || valor_retorno_str.trim() == "vacio" {
+                    valor_retorno = Valor::Vacio;
+                } else {
+                    valor_retorno = evaluar_expresion_valor(valor_retorno_str, &mut entorno_funcion)
+                        .unwrap_or(Valor::Vacio);
+                }
+            } else {
+                return Err(resultado);
+            }
         }
     }
     
-    // Restaurar el entorno original
-    if let Some(padre) = entorno_funcion.padre {
-        *entorno = *padre;
-    }
-    
-    // Establecer el resultado
+    // Establecer el resultado en el entorno padre
     if !variable_resultado.is_empty() {
         entorno.establecer(variable_resultado, valor_retorno);
     }

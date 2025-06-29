@@ -248,9 +248,7 @@ para (cadena modulo en configuracion.modulos) {
 | Característica | Quetzal | Python | JavaScript |
 |----------------|---------|--------|------------|
 | 🇪🇸 Sintaxis en español | ✅ | ❌ | ❌ |
-| ⚡ Rendimiento | 🔥 Alto (Rust) | 🐌 Medio | 🚀 Variable |
 | 🔧 Tipado fuerte | ✅ | ❌ | ❌ |
-| 📋 JSON nativo | ✅ | ❌ | ✅ |
 | 🎯 Simplicidad | ✅ | ✅ | ❌ |
 | 🔄 Async/await | ✅ | ✅ | ✅ |
 

@@ -122,10 +122,10 @@ fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> R
             continue;
         }
 
-        // Manejo de declaración de funciones
-        if linea.starts_with("funcion") && linea.trim_end().ends_with('{') {
+        // Manejo de declaración de funciones con sintaxis Quetzal: tipo nombre_funcion(parametros) {
+        if es_declaracion_funcion(linea) && linea.trim_end().ends_with('{') {
             let (bloque_funcion, fin_funcion) = extraer_bloque(lineas, indice - 1)?;
-            procesar_declaracion_funcion(linea, &bloque_funcion, entorno)?;
+            procesar_declaracion_funcion_quetzal(linea, &bloque_funcion, entorno)?;
             indice = fin_funcion + 1;
             continue;
         }
@@ -211,6 +211,16 @@ fn procesar_declaracion(linea: &str, entorno: &mut Entorno) -> Result<(), String
         indice += 1;
     }
     let nombre = tokens.get(indice).ok_or("Falta nombre de variable")?;
+    
+    // Validar nombre de variable
+    if es_palabra_reservada(nombre) {
+        return Err(format!("'{}' es una palabra reservada y no puede usarse como nombre de variable", nombre));
+    }
+    
+    if !es_nombre_variable_valido(nombre) {
+        return Err(format!("Nombre de variable inválido: {}", nombre));
+    }
+    
     indice += 1;
     let valor = if tokens.get(indice) == Some(&"=") {
         indice += 1;
@@ -457,6 +467,157 @@ fn parsear_jsn(texto: &str) -> Result<Valor, String> {
         return Err("JSON inválido".to_string());
     }
     Ok(valor)
+}
+
+// Función para detectar declaraciones de funciones con sintaxis Quetzal
+fn es_declaracion_funcion(linea: &str) -> bool {
+    let linea = linea.trim();
+    
+    // Verificar si empieza con "asincrono"
+    let linea_sin_async = if linea.starts_with("asincrono ") {
+        &linea[10..]
+    } else {
+        linea
+    };
+    
+    let tokens: Vec<&str> = linea_sin_async.split_whitespace().collect();
+    if tokens.len() < 2 {
+        return false;
+    }
+    
+    let tipo = tokens[0];
+    // Verificar que el primer token sea un tipo válido
+    if !["vacio", "entero", "número", "cadena", "bool", "lista", "jsn"].contains(&tipo) {
+        return false;
+    }
+    
+    // Verificar que tenga patrón nombre_funcion(
+    let resto = &linea_sin_async[tipo.len()..].trim_start();
+    if let Some(pos_paren) = resto.find('(') {
+        let nombre_parte = &resto[..pos_paren].trim();
+        return !nombre_parte.is_empty() && !nombre_parte.contains(' ');
+    }
+    
+    false
+}
+
+fn procesar_declaracion_funcion_quetzal(linea: &str, bloque: &[String], entorno: &mut Entorno) -> Result<(), String> {
+    let linea = linea.trim().trim_end_matches('{').trim();
+    
+    // Verificar si es asíncrona
+    let linea_sin_async = if linea.starts_with("asincrono ") {
+        &linea[10..]
+    } else {
+        linea
+    };
+    
+    let tokens: Vec<&str> = linea_sin_async.split_whitespace().collect();
+    if tokens.is_empty() {
+        return Err("Declaración de función inválida".to_string());
+    }
+    
+    let tipo_retorno = tokens[0].to_string();
+    
+    // Encontrar nombre y parámetros
+    let resto = &linea_sin_async[tipo_retorno.len()..].trim_start();
+    let inicio_parentesis = resto.find('(').ok_or("Sintaxis de función inválida")?;
+    let fin_parentesis = resto.rfind(')').ok_or("Sintaxis de función inválida")?;
+    
+    let nombre = resto[..inicio_parentesis].trim().to_string();
+    let params_str = &resto[inicio_parentesis + 1..fin_parentesis];
+    
+    if nombre.is_empty() {
+        return Err("Nombre de función vacío".to_string());
+    }
+    
+    // Verificar que no sea palabra reservada
+    if es_palabra_reservada(&nombre) {
+        return Err(format!("'{}' es una palabra reservada y no puede usarse como nombre de función", nombre));
+    }
+    
+    // Parsear parámetros: tipo nombre, tipo mut nombre, etc.
+    let mut parametros = Vec::new();
+    if !params_str.trim().is_empty() {
+        for param in params_str.split(',') {
+            let param = param.trim();
+            let tokens_param: Vec<&str> = param.split_whitespace().collect();
+            
+            if tokens_param.len() < 2 {
+                return Err("Parámetro de función mal formado".to_string());
+            }
+            
+            let mut tipo_param = tokens_param[0].to_string();
+            let mut nombre_param_inicio = 1;
+            
+            // Manejar parámetros mutables: tipo mut nombre
+            if tokens_param.len() > 2 && tokens_param[1] == "mut" {
+                tipo_param = format!("{} mut", tipo_param);
+                nombre_param_inicio = 2;
+            }
+            
+            if tokens_param.len() <= nombre_param_inicio {
+                return Err("Falta nombre del parámetro".to_string());
+            }
+            
+            let nombre_param = tokens_param[nombre_param_inicio].to_string();
+            
+            if es_palabra_reservada(&nombre_param) {
+                return Err(format!("'{}' es una palabra reservada y no puede usarse como nombre de parámetro", nombre_param));
+            }
+            
+            parametros.push((nombre_param, tipo_param));
+        }
+    }
+    
+    let def_funcion = DefFuncion {
+        nombre: nombre.clone(),
+        parametros,
+        tipo_retorno,
+        cuerpo: bloque.to_vec(),
+    };
+    
+    entorno.definir_funcion(def_funcion);
+    Ok(())
+}
+
+// Función para verificar si un nombre es palabra reservada
+fn es_palabra_reservada(nombre: &str) -> bool {
+    let palabras_reservadas = [
+        "vacio", "entero", "número", "numero", "cadena", "bool", "verdadero", "falso",
+        "lista", "jsn", "mut", "tipo", "publico", "privado", "libre", "fn", "retornar",
+        "objeto", "nuevo", "ambiente", "asincrono", "esperar", "si", "sino", "mientras",
+        "para", "hacer", "romper", "continuar", "intentar", "atrapar", "finalmente",
+        "lanzar", "excepción", "importar", "exportar", "desde", "como", "y", "o", "en"
+    ];
+    
+    palabras_reservadas.contains(&nombre)
+}
+
+// Función para validar nombres de variables (permite camelCase y snake_case)
+fn es_nombre_variable_valido(nombre: &str) -> bool {
+    if nombre.is_empty() {
+        return false;
+    }
+    
+    let primer_char = nombre.chars().next().unwrap();
+    // No puede empezar con número
+    if primer_char.is_ascii_digit() {
+        return false;
+    }
+    
+    // Debe empezar con letra o guion bajo
+    if !primer_char.is_alphabetic() && primer_char != '_' {
+        return false;
+    }
+    
+    // Solo puede contener letras, números y guiones bajos
+    for c in nombre.chars() {
+        if !c.is_alphanumeric() && c != '_' {
+            return false;
+        }
+    }
+    
+    true
 }
 
 fn procesar_declaracion_funcion(linea: &str, bloque: &[String], entorno: &mut Entorno) -> Result<(), String> {

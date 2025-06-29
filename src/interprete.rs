@@ -183,6 +183,11 @@ fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> R
                 }
             }
             
+            // Ignorar líneas que solo contienen estructuras de control (como } sino {)
+            if linea.trim().starts_with("}") && linea.contains("sino") {
+                continue;
+            }
+            
             if let Err(error) = procesar_declaracion(linea, entorno) {
                 if let Err(_) = procesar_expresion(linea, inicio + indice - 1, entorno) {
                     return Err(formatear_error(inicio + indice - 1, &error));

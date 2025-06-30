@@ -437,6 +437,17 @@ fn parsear_jsn(texto: &str) -> Result<Valor, String> {
                 if bl.len() >= *i + 5 && &bl[*i..*i + 5] == b"falso" {
                     *i += 5;
                     Ok(Valor::Bool(false))
+                } else if bl.len() >= *i + 5 && &bl[*i..*i + 5] == b"false" {
+                    *i += 5;
+                    Ok(Valor::Bool(false))
+                } else {
+                    Err("Valor bool inválido".to_string())
+                }
+            }
+            b't' => {
+                if bl.len() >= *i + 4 && &bl[*i..*i + 4] == b"true" {
+                    *i += 4;
+                    Ok(Valor::Bool(true))
                 } else {
                     Err("Valor bool inválido".to_string())
                 }

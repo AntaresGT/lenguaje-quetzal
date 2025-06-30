@@ -1,3 +1,0 @@
-cadena elementos_separados = "1,2,3,4,5"
-lista lista_convertida = elementos_separados.lista()
-imprimir("Cadena a lista: " + lista_convertida.cadena())

@@ -142,7 +142,7 @@ fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> R
         }
 
         // Manejo de operadores de asignación compuesta
-        if linea.contains("+=") || linea.contains("-=") || linea.contains("*=") || linea.contains("/=") {
+        if linea.contains("+=") || linea.contains("-=") || linea.contains("*=") || linea.contains("/=") || linea.contains("%=") {
             procesar_asignacion_compuesta(linea, entorno, inicio + indice - 1)?;
             continue;
         }
@@ -155,6 +155,15 @@ fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> R
                 linea.strip_prefix("retornar").unwrap_or("").trim()
             };
             return Err(format!("RETORNO:{}", valor_retorno));
+        }
+
+        // Manejo de control de flujo en bucles
+        if linea.trim() == "romper" {
+            return Err("ROMPER".to_string());
+        }
+        
+        if linea.trim() == "continuar" {
+            return Err("CONTINUAR".to_string());
         }
 
         if linea.starts_with("jsn") && linea.contains('=') && linea.contains('{') && !linea.contains('}') {
@@ -203,7 +212,31 @@ fn procesar_declaracion(linea: &str, entorno: &mut Entorno) -> Result<(), String
     if tokens.len() < 2 {
         return Err("Declaración inválida".to_string());
     }
+    
+    let primer_token = tokens[0];
+    
+    // Verificar si el primer token es un tipo válido
+    let tipos_validos = ["vacio", "entero", "número", "cadena", "bool", "lista", "jsn", "mutable"];
+    if !tipos_validos.contains(&primer_token) && !primer_token.starts_with("lista<") {
+        return Err("No es una declaración válida".to_string());
+    }
+    
+    // Debug: imprimir tokens para entender el problema
+    // eprintln!("DEBUG: Procesando línea: '{}'", linea);
+    // eprintln!("DEBUG: Tokens: {:?}", tokens);
+    
     let mut tipo = tokens[0];
+    let mut indice_tipo = 0;
+    
+    // Manejar el caso de variables mutables que pueden empezar con 'mutable'
+    if tipo == "mutable" {
+        if tokens.len() < 3 {
+            return Err("Declaración mutable inválida".to_string());
+        }
+        indice_tipo = 1;
+        tipo = tokens[1];
+    }
+    
     // Soporte para tipos genéricos como `lista<entero>` simplemente
     // identificando el tipo base antes del carácter '<'
     if let Some(inicio) = tipo.find('<') {
@@ -211,11 +244,17 @@ fn procesar_declaracion(linea: &str, entorno: &mut Entorno) -> Result<(), String
             tipo = &tipo[..inicio];
         }
     }
-    let mut indice = 1;
+    
+    let mut indice = indice_tipo + 1;
+    
+    // Verificar si hay 'mut' después del tipo (sintaxis: tipo mut nombre)
     if tokens.get(indice).copied() == Some("mut") {
         indice += 1;
     }
+    
     let nombre = tokens.get(indice).ok_or("Falta nombre de variable")?;
+    
+    // eprintln!("DEBUG: tipo='{}', indice={}, nombre='{}'", tipo, indice, nombre);
     
     // Validar nombre de variable
     if es_palabra_reservada(nombre) {
@@ -256,8 +295,9 @@ fn procesar_declaracion(linea: &str, entorno: &mut Entorno) -> Result<(), String
                 }
             }
             "cadena" => {
-                if valor_cadena.starts_with('"') && valor_cadena.ends_with('"') {
-                    Valor::Cadena(valor_cadena.trim_matches('"').to_string())
+                if (valor_cadena.starts_with('"') && valor_cadena.ends_with('"')) ||
+                   (valor_cadena.starts_with('\'') && valor_cadena.ends_with('\'')) {
+                    Valor::Cadena(valor_cadena.trim_matches(|c| c == '"' || c == '\'').to_string())
                 } else {
                     let resultado = evaluar_expresion_valor(&valor_cadena, entorno)?;
                     match resultado {
@@ -278,17 +318,26 @@ fn procesar_declaracion(linea: &str, entorno: &mut Entorno) -> Result<(), String
                 }
             },
             "lista" => {
-                if !valor_cadena.starts_with('[') || !valor_cadena.ends_with(']') {
-                    return Err("Lista inválida".to_string());
-                }
-                let contenido = &valor_cadena[1..valor_cadena.len() - 1];
-                let mut elementos = Vec::new();
-                if !contenido.trim().is_empty() {
-                    for texto_elemento in contenido.split(',') {
-                        elementos.push(parsear_literal(texto_elemento.trim())?);
+                if valor_cadena.starts_with('[') && valor_cadena.ends_with(']') {
+                    // Es una lista literal
+                    let contenido = &valor_cadena[1..valor_cadena.len() - 1];
+                    let mut elementos = Vec::new();
+                    if !contenido.trim().is_empty() {
+                        // Dividir respetando listas anidadas
+                        let elementos_texto = dividir_elementos_lista(contenido)?;
+                        for texto_elemento in elementos_texto {
+                            elementos.push(parsear_elemento_lista(texto_elemento.trim(), entorno)?);
+                        }
+                    }
+                    Valor::Lista(elementos)
+                } else {
+                    // Es una expresión que debe evaluarse
+                    let resultado = evaluar_expresion_valor(&valor_cadena, entorno)?;
+                    match resultado {
+                        Valor::Lista(_) => resultado,
+                        _ => return Err("El valor no es una lista".to_string()),
                     }
                 }
-                Valor::Lista(elementos)
             }
             "jsn" => parsear_jsn(&valor_cadena)?,
             _ => {
@@ -838,6 +887,44 @@ fn procesar_asignacion_compuesta(linea: &str, entorno: &mut Entorno, linea_num: 
             }
             _ => return Err(formatear_error(linea_num, "Tipos incompatibles para *=")),
         }
+    } else if let Some(pos) = linea.find("/=") {
+        let variable = linea[..pos].trim();
+        let valor_expr = linea[pos + 2..].trim();
+        
+        let valor_actual = entorno.obtener(variable).cloned()
+            .ok_or_else(|| formatear_error(linea_num, "Variable no encontrada"))?;
+        let valor_nuevo = evaluar_expresion_valor(valor_expr, entorno)?;
+        
+        match (valor_actual, valor_nuevo) {
+            (Valor::Entero(a), Valor::Entero(b)) => {
+                if b == 0 { return Err(formatear_error(linea_num, "División por cero")); }
+                entorno.establecer(variable, Valor::Entero(a / b));
+            }
+            (Valor::Numero(a), Valor::Numero(b)) => {
+                if b == 0.0 { return Err(formatear_error(linea_num, "División por cero")); }
+                entorno.establecer(variable, Valor::Numero(a / b));
+            }
+            _ => return Err(formatear_error(linea_num, "Tipos incompatibles para /=")),
+        }
+    } else if let Some(pos) = linea.find("%=") {
+        let variable = linea[..pos].trim();
+        let valor_expr = linea[pos + 2..].trim();
+        
+        let valor_actual = entorno.obtener(variable).cloned()
+            .ok_or_else(|| formatear_error(linea_num, "Variable no encontrada"))?;
+        let valor_nuevo = evaluar_expresion_valor(valor_expr, entorno)?;
+        
+        match (valor_actual, valor_nuevo) {
+            (Valor::Entero(a), Valor::Entero(b)) => {
+                if b == 0 { return Err(formatear_error(linea_num, "División por cero en módulo")); }
+                entorno.establecer(variable, Valor::Entero(a % b));
+            }
+            (Valor::Numero(a), Valor::Numero(b)) => {
+                if b == 0.0 { return Err(formatear_error(linea_num, "División por cero en módulo")); }
+                entorno.establecer(variable, Valor::Numero(a % b));
+            }
+            _ => return Err(formatear_error(linea_num, "Tipos incompatibles para %=")),
+        }
     }
     Ok(())
 }
@@ -982,6 +1069,70 @@ fn evaluar_concatenacion(expr: &str, entorno: &mut Entorno, linea_num: usize) ->
     Ok(resultado)
 }
 
+// Función para dividir elementos de lista respetando corchetes anidados
+fn dividir_elementos_lista(contenido: &str) -> Result<Vec<String>, String> {
+    let mut elementos = Vec::new();
+    let mut elemento_actual = String::new();
+    let mut nivel_corchetes = 0;
+    let mut en_cadena = false;
+    
+    for c in contenido.chars() {
+        match c {
+            '"' => {
+                en_cadena = !en_cadena;
+                elemento_actual.push(c);
+            }
+            '[' if !en_cadena => {
+                nivel_corchetes += 1;
+                elemento_actual.push(c);
+            }
+            ']' if !en_cadena => {
+                nivel_corchetes -= 1;
+                elemento_actual.push(c);
+            }
+            ',' if !en_cadena && nivel_corchetes == 0 => {
+                elementos.push(elemento_actual.trim().to_string());
+                elemento_actual.clear();
+            }
+            _ => {
+                elemento_actual.push(c);
+            }
+        }
+    }
+    
+    if !elemento_actual.trim().is_empty() {
+        elementos.push(elemento_actual.trim().to_string());
+    }
+    
+    Ok(elementos)
+}
+
+// Función para parsear un elemento de lista (puede ser literal o lista anidada)
+fn parsear_elemento_lista(texto: &str, entorno: &mut Entorno) -> Result<Valor, String> {
+    let texto = texto.trim();
+    
+    if texto.starts_with('[') && texto.ends_with(']') {
+        // Es una lista anidada
+        let contenido = &texto[1..texto.len() - 1];
+        let mut elementos = Vec::new();
+        if !contenido.trim().is_empty() {
+            let elementos_texto = dividir_elementos_lista(contenido)?;
+            for elemento_texto in elementos_texto {
+                elementos.push(parsear_elemento_lista(elemento_texto.trim(), entorno)?);
+            }
+        }
+        Ok(Valor::Lista(elementos))
+    } else {
+        // Es un literal o expresión
+        if let Ok(literal) = parsear_literal(texto) {
+            Ok(literal)
+        } else {
+            // Intentar evaluar como expresión (para variables)
+            evaluar_expresion_valor(texto, entorno)
+        }
+    }
+}
+
 fn formatear_error(linea: usize, mensaje: &str) -> String {
     format!("Error en línea {}: {}", linea + 1, mensaje)
 }
@@ -1067,62 +1218,83 @@ fn obtener_valor(texto: &str, entorno: &Entorno) -> Result<Valor, String> {
     Err("Valor no encontrado".to_string())
 }
 
-fn evaluar_comparacion(condicion: &str, entorno: &Entorno) -> Result<bool, String> {
-    let tokens: Vec<&str> = condicion.split_whitespace().collect();
-    if tokens.len() != 3 {
-        if let Some(Valor::Bool(b)) = entorno.obtener(condicion.trim()) {
-            return Ok(*b);
+fn evaluar_comparacion(condicion: &str, entorno: &mut Entorno) -> Result<bool, String> {
+    // Buscar operadores de comparación
+    let ops = ["!=", "==", "<=", ">=", "<", ">"];
+    for op in &ops {
+        if let Some(pos) = condicion.find(op) {
+            let izq_expr = condicion[..pos].trim();
+            let der_expr = condicion[pos + op.len()..].trim();
+            
+            // Evaluar las expresiones del lado izquierdo y derecho
+            let izq = evaluar_expresion_valor(izq_expr, entorno)?;
+            let der = evaluar_expresion_valor(der_expr, entorno)?;
+            
+            return match (izq, der, *op) {
+                // Comparaciones entre enteros
+                (Valor::Entero(a), Valor::Entero(b), "<") => Ok(a < b),
+                (Valor::Entero(a), Valor::Entero(b), "<=") => Ok(a <= b),
+                (Valor::Entero(a), Valor::Entero(b), ">") => Ok(a > b),
+                (Valor::Entero(a), Valor::Entero(b), ">=") => Ok(a >= b),
+                (Valor::Entero(a), Valor::Entero(b), "==") => Ok(a == b),
+                (Valor::Entero(a), Valor::Entero(b), "!=") => Ok(a != b),
+                
+                // Comparaciones entre números
+                (Valor::Numero(a), Valor::Numero(b), "<") => Ok(a < b),
+                (Valor::Numero(a), Valor::Numero(b), "<=") => Ok(a <= b),
+                (Valor::Numero(a), Valor::Numero(b), ">") => Ok(a > b),
+                (Valor::Numero(a), Valor::Numero(b), ">=") => Ok(a >= b),
+                (Valor::Numero(a), Valor::Numero(b), "==") => Ok((a - b).abs() < f64::EPSILON),
+                (Valor::Numero(a), Valor::Numero(b), "!=") => Ok((a - b).abs() >= f64::EPSILON),
+                
+                // Comparaciones mixtas entero-número
+                (Valor::Entero(a), Valor::Numero(b), "<") => Ok((a as f64) < b),
+                (Valor::Entero(a), Valor::Numero(b), "<=") => Ok((a as f64) <= b),
+                (Valor::Entero(a), Valor::Numero(b), ">") => Ok((a as f64) > b),
+                (Valor::Entero(a), Valor::Numero(b), ">=") => Ok((a as f64) >= b),
+                (Valor::Entero(a), Valor::Numero(b), "==") => Ok(((a as f64) - b).abs() < f64::EPSILON),
+                (Valor::Entero(a), Valor::Numero(b), "!=") => Ok(((a as f64) - b).abs() >= f64::EPSILON),
+                
+                (Valor::Numero(a), Valor::Entero(b), "<") => Ok(a < (b as f64)),
+                (Valor::Numero(a), Valor::Entero(b), "<=") => Ok(a <= (b as f64)),
+                (Valor::Numero(a), Valor::Entero(b), ">") => Ok(a > (b as f64)),
+                (Valor::Numero(a), Valor::Entero(b), ">=") => Ok(a >= (b as f64)),
+                (Valor::Numero(a), Valor::Entero(b), "==") => Ok((a - (b as f64)).abs() < f64::EPSILON),
+                (Valor::Numero(a), Valor::Entero(b), "!=") => Ok((a - (b as f64)).abs() >= f64::EPSILON),
+                
+                // Comparaciones entre cadenas
+                (Valor::Cadena(a), Valor::Cadena(b), "==") => Ok(a == b),
+                (Valor::Cadena(a), Valor::Cadena(b), "!=") => Ok(a != b),
+                
+                // Comparaciones entre booleanos
+                (Valor::Bool(a), Valor::Bool(b), "==") => Ok(a == b),
+                (Valor::Bool(a), Valor::Bool(b), "!=") => Ok(a != b),
+                
+                _ => Err("Tipos incompatibles para comparación".to_string()),
+            };
         }
-        return Err("Condición inválida".to_string());
     }
-    let izq = obtener_valor(tokens[0], entorno)?;
-    let der = obtener_valor(tokens[2], entorno)?;
     
-    match (izq, der, tokens[1]) {
-        // Comparaciones entre enteros
-        (Valor::Entero(a), Valor::Entero(b), "<") => Ok(a < b),
-        (Valor::Entero(a), Valor::Entero(b), "<=") => Ok(a <= b),
-        (Valor::Entero(a), Valor::Entero(b), ">") => Ok(a > b),
-        (Valor::Entero(a), Valor::Entero(b), ">=") => Ok(a >= b),
-        (Valor::Entero(a), Valor::Entero(b), "==") => Ok(a == b),
-        (Valor::Entero(a), Valor::Entero(b), "!=") => Ok(a != b),
-        
-        // Comparaciones entre números
-        (Valor::Numero(a), Valor::Numero(b), "<") => Ok(a < b),
-        (Valor::Numero(a), Valor::Numero(b), "<=") => Ok(a <= b),
-        (Valor::Numero(a), Valor::Numero(b), ">") => Ok(a > b),
-        (Valor::Numero(a), Valor::Numero(b), ">=") => Ok(a >= b),
-        (Valor::Numero(a), Valor::Numero(b), "==") => Ok((a - b).abs() < f64::EPSILON),
-        (Valor::Numero(a), Valor::Numero(b), "!=") => Ok((a - b).abs() >= f64::EPSILON),
-        
-        // Comparaciones mixtas entero-número
-        (Valor::Entero(a), Valor::Numero(b), "<") => Ok((a as f64) < b),
-        (Valor::Entero(a), Valor::Numero(b), "<=") => Ok((a as f64) <= b),
-        (Valor::Entero(a), Valor::Numero(b), ">") => Ok((a as f64) > b),
-        (Valor::Entero(a), Valor::Numero(b), ">=") => Ok((a as f64) >= b),
-        (Valor::Entero(a), Valor::Numero(b), "==") => Ok(((a as f64) - b).abs() < f64::EPSILON),
-        (Valor::Entero(a), Valor::Numero(b), "!=") => Ok(((a as f64) - b).abs() >= f64::EPSILON),
-        
-        (Valor::Numero(a), Valor::Entero(b), "<") => Ok(a < (b as f64)),
-        (Valor::Numero(a), Valor::Entero(b), "<=") => Ok(a <= (b as f64)),
-        (Valor::Numero(a), Valor::Entero(b), ">") => Ok(a > (b as f64)),
-        (Valor::Numero(a), Valor::Entero(b), ">=") => Ok(a >= (b as f64)),
-        (Valor::Numero(a), Valor::Entero(b), "==") => Ok((a - (b as f64)).abs() < f64::EPSILON),
-        (Valor::Numero(a), Valor::Entero(b), "!=") => Ok((a - (b as f64)).abs() >= f64::EPSILON),
-        
-        // Comparaciones entre cadenas
-        (Valor::Cadena(a), Valor::Cadena(b), "==") => Ok(a == b),
-        (Valor::Cadena(a), Valor::Cadena(b), "!=") => Ok(a != b),
-        
-        // Comparaciones entre booleanos
-        (Valor::Bool(a), Valor::Bool(b), "==") => Ok(a == b),
-        (Valor::Bool(a), Valor::Bool(b), "!=") => Ok(a != b),
-        
-        _ => Err("Tipos incompatibles para comparación".to_string()),
+    // Si no hay operadores de comparación, intentar obtener un valor booleano directamente
+    if let Some(Valor::Bool(b)) = entorno.obtener(condicion.trim()) {
+        return Ok(*b);
     }
+    
+    Err("Condición inválida".to_string())
 }
 
-fn evaluar_bool(expr: &str, entorno: &Entorno) -> Result<bool, String> {
+fn evaluar_bool(expr: &str, entorno: &mut Entorno) -> Result<bool, String> {
+    // Primero verificar operadores lógicos && y ||
+    if let Some(pos) = expr.find("&&") {
+        let izquierda = &expr[..pos].trim();
+        let derecha = &expr[pos + 2..].trim();
+        return Ok(evaluar_bool(izquierda, entorno)? && evaluar_bool(derecha, entorno)?);
+    }
+    if let Some(pos) = expr.find("||") {
+        let izquierda = &expr[..pos].trim();
+        let derecha = &expr[pos + 2..].trim();
+        return Ok(evaluar_bool(izquierda, entorno)? || evaluar_bool(derecha, entorno)?);
+    }
     if let Some(pos) = expr.find(" y ") {
         let izquierda = &expr[..pos];
         let derecha = &expr[pos + 3..];
@@ -1156,7 +1328,21 @@ fn evaluar_expresion_valor(expr: &str, entorno: &mut Entorno) -> Result<Valor, S
     
     // Llamadas a métodos
     if texto.contains('.') && texto.contains('(') && texto.ends_with(')') {
-        if let Some(punto) = texto.find('.') {
+        // Buscar el punto que está fuera de cadenas
+        let mut punto_valido = None;
+        let mut en_cadena = false;
+        let chars: Vec<char> = texto.chars().collect();
+        
+        for (i, &c) in chars.iter().enumerate() {
+            if c == '"' {
+                en_cadena = !en_cadena;
+            } else if c == '.' && !en_cadena {
+                punto_valido = Some(i);
+                break;
+            }
+        }
+        
+        if let Some(punto) = punto_valido {
             let base = texto[..punto].trim();
             let resto = texto[punto + 1..].trim();
             if let Some(paren) = resto.find('(') {
@@ -1454,8 +1640,16 @@ fn procesar_bucle_para(linea: &str, bloque: &[String], entorno: &mut Entorno, li
         return Err(formatear_error(linea_num, "Bucle para inválido"));
     }
     procesar_declaracion(partes[0].trim(), entorno).map_err(|e| formatear_error(linea_num, &e))?;
-    while evaluar_condicion(partes[1].trim(), entorno)? {
-        procesar_lineas(bloque, entorno, linea_num + 1)?;
+    while evaluar_bool(partes[1].trim(), entorno)? {
+        match procesar_lineas(bloque, entorno, linea_num + 1) {
+            Ok(()) => {},
+            Err(error) if error == "ROMPER" => break,
+            Err(error) if error == "CONTINUAR" => {
+                aplicar_incremento(partes[2].trim(), entorno)?;
+                continue;
+            },
+            Err(error) => return Err(error),
+        }
         aplicar_incremento(partes[2].trim(), entorno)?;
     }
     Ok(())
@@ -1466,14 +1660,27 @@ fn procesar_bucle_mientras(linea: &str, bloque: &[String], entorno: &mut Entorno
     let fin = linea.rfind(')').ok_or_else(|| formatear_error(linea_num, "Bucle mientras inválido"))?;
     let condicion = &linea[ini + 1..fin];
     while evaluar_bool(condicion, entorno)? {
-        procesar_lineas(bloque, entorno, linea_num + 1)?;
+        match procesar_lineas(bloque, entorno, linea_num + 1) {
+            Ok(()) => {},
+            Err(error) if error == "ROMPER" => break,
+            Err(error) if error == "CONTINUAR" => continue,
+            Err(error) => return Err(error),
+        }
     }
     Ok(())
 }
 
 fn procesar_bucle_hacer(bloque: &[String], condicion: &str, entorno: &mut Entorno, linea_num: usize) -> Result<(), String> {
     loop {
-        procesar_lineas(bloque, entorno, linea_num + 1)?;
+        match procesar_lineas(bloque, entorno, linea_num + 1) {
+            Ok(()) => {},
+            Err(error) if error == "ROMPER" => break,
+            Err(error) if error == "CONTINUAR" => {
+                if !evaluar_bool(condicion, entorno)? { break; }
+                continue;
+            },
+            Err(error) => return Err(error),
+        }
         if !evaluar_bool(condicion, entorno)? { break; }
     }
     Ok(())
@@ -1501,7 +1708,12 @@ fn procesar_bucle_foreach(linea: &str, bloque: &[String], entorno: &mut Entorno,
     if let Valor::Lista(elementos) = lista {
         for elem in elementos {
             entorno.establecer(var, elem);
-            procesar_lineas(bloque, entorno, linea_num + 1)?;
+            match procesar_lineas(bloque, entorno, linea_num + 1) {
+                Ok(()) => {},
+                Err(error) if error == "ROMPER" => break,
+                Err(error) if error == "CONTINUAR" => continue,
+                Err(error) => return Err(error),
+            }
         }
         Ok(())
     } else {
@@ -1555,6 +1767,31 @@ fn aplicar_metodo_valor(valor: &mut Valor, metodo: &str, args: Vec<Valor>) -> Re
             "numero" => Ok(Some(Valor::Numero(valor.convertir_a_numero()?))),
             "bool" => Ok(Some(Valor::Bool(valor.convertir_a_bool()?))),
             "cadena" => Ok(Some(Valor::Cadena(c.clone()))),
+            "lista" => {
+                // Convertir cadena a lista separando por comas
+                let elementos: Vec<&str> = c.split(',').collect();
+                let lista: Vec<Valor> = elementos.iter().map(|e| {
+                    let elem = e.trim();
+                    // Intentar convertir a número si es posible
+                    if let Ok(entero) = elem.parse::<i64>() {
+                        Valor::Entero(entero)
+                    } else if let Ok(numero) = elem.parse::<f64>() {
+                        Valor::Numero(numero)
+                    } else if elem == "verdadero" {
+                        Valor::Bool(true)
+                    } else if elem == "falso" {
+                        Valor::Bool(false)
+                    } else {
+                        Valor::Cadena(elem.to_string())
+                    }
+                }).collect();
+                Ok(Some(Valor::Lista(lista)))
+            },
+            "jsn" => {
+                // Convertir cadena a objeto JSON
+                let resultado = parsear_jsn(c)?;
+                Ok(Some(resultado))
+            },
             _ => Ok(None),
         },
         Valor::Numero(_) => match metodo {
@@ -1602,6 +1839,25 @@ fn aplicar_incremento(expresion: &str, entorno: &mut Entorno) -> Result<(), Stri
 
 fn procesar_expresion(linea: &str, linea_num: usize, entorno: &mut Entorno) -> Result<(), String> {
     let texto = linea.trim();
+    
+    // Manejar asignaciones simples (variable = valor)
+    if texto.contains('=') && !texto.contains("==") && !texto.contains("!=") && !texto.contains("<=") && !texto.contains(">=") {
+        let partes: Vec<&str> = texto.splitn(2, '=').collect();
+        if partes.len() == 2 {
+            let variable = partes[0].trim();
+            let valor_expr = partes[1].trim();
+            
+            // Verificar que la variable existe antes de asignar
+            if entorno.obtener(variable).is_none() {
+                return Err(format!("Variable '{}' no encontrada", variable));
+            }
+            
+            let valor = evaluar_expresion_valor(valor_expr, entorno)?;
+            entorno.establecer(variable, valor);
+            return Ok(());
+        }
+    }
+    
     if texto.contains('.') && texto.contains('(') && texto.ends_with(')') {
         let _ = valor_desde_expresion(texto, linea_num, entorno)?;
         return Ok(());

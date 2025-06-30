@@ -339,7 +339,16 @@ fn procesar_declaracion(linea: &str, entorno: &mut Entorno) -> Result<(), String
                     }
                 }
             }
-            "jsn" => parsear_jsn(&valor_cadena)?,
+            "jsn" => {
+                // Verificar si es una expresión (contiene método) o JSON directo
+                if valor_cadena.contains('.') && valor_cadena.contains('(') && valor_cadena.ends_with(')') {
+                    // Es una llamada a método, evaluar como expresión
+                    evaluar_expresion_valor(&valor_cadena, entorno)?
+                } else {
+                    // Es JSON directo, parsear
+                    parsear_jsn(&valor_cadena)?
+                }
+            },
             _ => {
                 if let Some(obj) = entorno.obtener_objeto(tipo) {
                     if valor_cadena.starts_with("nuevo") {
@@ -1800,7 +1809,14 @@ fn aplicar_metodo_valor(valor: &mut Valor, metodo: &str, args: Vec<Valor>) -> Re
             },
             "jsn" => {
                 // Convertir cadena a objeto JSON
-                let resultado = parsear_jsn(c)?;
+                // Limpiar comillas externas si existen
+                let json_limpio = if (c.starts_with('"') && c.ends_with('"')) || 
+                                   (c.starts_with('\'') && c.ends_with('\'')) {
+                    &c[1..c.len()-1]
+                } else {
+                    c
+                };
+                let resultado = parsear_jsn(json_limpio)?;
                 Ok(Some(resultado))
             },
             _ => Ok(None),

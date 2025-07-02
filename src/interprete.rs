@@ -62,15 +62,15 @@ fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> R
             if sig.is_empty() {
                 nuevo_indice += 1;
                 if nuevo_indice >= lineas.len() {
-                    return Err(formatear_error(inicio + fin, "Bucle do-while inválido"));
+                    return Err(formatear_error(inicio + fin, "Bucle hacer-mientras inválido"));
                 }
                 sig = lineas[nuevo_indice].trim();
             }
             if !sig.starts_with("mientras") {
-                return Err(formatear_error(inicio + nuevo_indice, "Bucle do-while inválido"));
+                return Err(formatear_error(inicio + nuevo_indice, "Bucle hacer-mientras inválido"));
             }
-            let ini = sig.find('(').ok_or_else(|| formatear_error(inicio + nuevo_indice, "Bucle do-while inválido"))?;
-            let fin_paren = sig.rfind(')').ok_or_else(|| formatear_error(inicio + nuevo_indice, "Bucle do-while inválido"))?;
+            let ini = sig.find('(').ok_or_else(|| formatear_error(inicio + nuevo_indice, "Bucle hacer-mientras inválido"))?;
+            let fin_paren = sig.rfind(')').ok_or_else(|| formatear_error(inicio + nuevo_indice, "Bucle hacer-mientras inválido"))?;
             let condicion = &sig[ini + 1..fin_paren];
             procesar_bucle_hacer(&bloque, condicion, entorno, inicio + indice - 1)?;
             indice = nuevo_indice + 1;

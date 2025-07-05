@@ -13,3 +13,4 @@ pub mod manejo_errores;
 pub mod conversiones;
 pub mod sintaxis_y_comentarios;
 pub mod integracion;
+pub mod funciones_cadena_avanzadas;

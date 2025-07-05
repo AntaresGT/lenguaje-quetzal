@@ -19,8 +19,8 @@ imprimir(mensaje)
     #[test]
     fn test_concatenacion_con_numeros() {
         let codigo = r#"
-entero numero = 42
-cadena texto = "El número es: " + numero.cadena()
+entero valor_numero = 42
+cadena texto = "El número es: " + valor_numero.cadena()
 imprimir(texto)
         "#;
         

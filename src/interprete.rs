@@ -1009,45 +1009,12 @@ fn evaluar_cadena_para_impresion(expr: &str, entorno: &mut Entorno, linea_num: u
 }
 
 fn evaluar_concatenacion(expr: &str, entorno: &mut Entorno, linea_num: usize) -> Result<String, String> {
-    // Necesitamos encontrar correctamente las partes, teniendo en cuenta paréntesis
-    let mut partes = Vec::new();
-    let mut parte_actual = String::new();
-    let mut nivel_parentesis = 0;
-    let mut i = 0;
-    let chars: Vec<char> = expr.chars().collect();
-    
-    while i < chars.len() {
-        let c = chars[i];
-        
-        if c == '(' {
-            nivel_parentesis += 1;
-            parte_actual.push(c);
-        } else if c == ')' {
-            nivel_parentesis -= 1;
-            parte_actual.push(c);
-        } else if c == '+' && nivel_parentesis == 0 {
-            // Solo dividir por + si estamos fuera de paréntesis
-            if i > 0 && i < chars.len() - 1 && chars[i-1] == ' ' && chars[i+1] == ' ' {
-                partes.push(parte_actual.trim().to_string());
-                parte_actual.clear();
-                i += 2; // Saltar " + "
-                continue;
-            } else {
-                parte_actual.push(c);
-            }
-        } else {
-            parte_actual.push(c);
-        }
-        i += 1;
-    }
-    
-    if !parte_actual.is_empty() {
-        partes.push(parte_actual.trim().to_string());
-    }
-    
+    // Dividir por " + " de manera más simple
+    let partes_simples: Vec<&str> = expr.split(" + ").collect();
+    println!("DEBUG: expr='{}', partes={:?}", expr, partes_simples);
     let mut resultado = String::new();
     
-    for parte in partes {
+    for parte in partes_simples {
         let parte_trim = parte.trim();
         
         let valor_str = if parte_trim.starts_with('"') && parte_trim.ends_with('"') {
@@ -1070,9 +1037,17 @@ fn evaluar_concatenacion(expr: &str, entorno: &mut Entorno, linea_num: usize) ->
             let pos_metodo = parte_trim.find(".cadena()").unwrap();
             if parte_trim[..pos_metodo].ends_with(')') {
                 let expr_interna = &parte_trim[1..pos_metodo-1];
-                match evaluar_expresion_valor(expr_interna, entorno) {
+                // Evaluar directamente como operación aritmética para evitar recursión infinita
+                match evaluar_operacion_aritmetica(expr_interna, entorno) {
                     Ok(valor) => valor.a_cadena(),
-                    Err(e) => return Err(e),
+                    Err(_) => {
+                        // Si no es operación aritmética, intentar obtener variable directamente
+                        if let Some(valor) = entorno.obtener(expr_interna) {
+                            valor.a_cadena()
+                        } else {
+                            return Err(formatear_error(linea_num, &format!("No se puede evaluar expresión: {}", expr_interna)));
+                        }
+                    }
                 }
             } else {
                 return Err(formatear_error(linea_num, "Expresión con método inválida"));
@@ -1089,10 +1064,16 @@ fn evaluar_concatenacion(expr: &str, entorno: &mut Entorno, linea_num: usize) ->
             // Es una variable simple
             valor.a_cadena()
         } else {
-            // Intentar evaluar como expresión
-            match evaluar_expresion_valor(parte_trim, entorno) {
+            // Intentar evaluar como operación aritmética simple para evitar recursión infinita
+            match evaluar_operacion_aritmetica(parte_trim, entorno) {
                 Ok(valor) => valor.a_cadena(),
-                Err(_) => parte_trim.to_string(),
+                Err(_) => {
+                    // Si no es una operación aritmética, intentar parsear como literal
+                    match parsear_literal(parte_trim) {
+                        Ok(valor) => valor.a_cadena(),
+                        Err(_) => parte_trim.to_string(),
+                    }
+                }
             }
         };
         
@@ -1280,6 +1261,22 @@ fn obtener_valor_mutable(texto: &str, entorno: &mut Entorno) -> Result<Valor, St
 }
 
 fn evaluar_comparacion(condicion: &str, entorno: &mut Entorno) -> Result<bool, String> {
+    let condicion = condicion.trim();
+    
+    // Manejar expresiones entre paréntesis
+    if condicion.starts_with('(') && condicion.ends_with(')') {
+        let expr_interna = &condicion[1..condicion.len() - 1];
+        return evaluar_comparacion(expr_interna, entorno);
+    }
+    
+    // Manejar literales booleanos
+    if condicion == "verdadero" {
+        return Ok(true);
+    }
+    if condicion == "falso" {
+        return Ok(false);
+    }
+    
     // Buscar operadores de comparación
     let ops = ["!=", "==", "<=", ">=", "<", ">"];
     for op in &ops {
@@ -1436,8 +1433,9 @@ fn evaluar_llamadas_encadenadas(expr: &str, entorno: &mut Entorno) -> Result<Val
             let mut args = Vec::new();
             
             if !args_str.trim().is_empty() {
-                for arg in args_str.split(',') {
-                    args.push(evaluar_expresion_valor(arg.trim(), entorno)?);
+                let argumentos_texto = dividir_elementos_lista(args_str)?;
+                for arg in argumentos_texto {
+                    args.push(evaluar_expresion_valor(&arg, entorno)?);
                 }
             }
             
@@ -1454,6 +1452,35 @@ fn evaluar_llamadas_encadenadas(expr: &str, entorno: &mut Entorno) -> Result<Val
 
 fn evaluar_expresion_valor(expr: &str, entorno: &mut Entorno) -> Result<Valor, String> {
     let texto = expr.trim();
+    println!("DEBUG evaluar_expresion_valor: '{}'", texto);
+    
+    // Acceso por índice [index]
+    if texto.contains('[') && texto.ends_with(']') {
+        if let Some(corchete_inicio) = texto.find('[') {
+            let base = texto[..corchete_inicio].trim();
+            let indice_str = &texto[corchete_inicio + 1..texto.len() - 1];
+            
+            let valor_base = evaluar_expresion_valor(base, entorno)?;
+            let indice = evaluar_expresion_valor(indice_str, entorno)?;
+            
+            match (valor_base, indice) {
+                (Valor::Cadena(cadena), Valor::Entero(i)) => {
+                    let chars: Vec<char> = cadena.chars().collect();
+                    if i < 0 || i as usize >= chars.len() {
+                        return Err("Índice fuera de rango".to_string());
+                    }
+                    return Ok(Valor::Cadena(chars[i as usize].to_string()));
+                }
+                (Valor::Lista(lista), Valor::Entero(i)) => {
+                    if i < 0 || i as usize >= lista.len() {
+                        return Err("Índice fuera de rango".to_string());
+                    }
+                    return Ok(lista[i as usize].clone());
+                }
+                _ => return Err("Acceso por índice no soportado para este tipo".to_string()),
+            }
+        }
+    }
     
     // Operador ternario
     if texto.contains('?') && texto.contains(':') {
@@ -1475,7 +1502,7 @@ fn evaluar_expresion_valor(expr: &str, entorno: &mut Entorno) -> Result<Valor, S
         return evaluar_llamadas_encadenadas(texto, entorno);
     }
     for op in &[" && ", " y ", " || ", " o "] {
-        if let Some(pos) = texto.find(op) {
+        if let Some(pos) = encontrar_operador_logico(texto, op) {
             let izq = texto[..pos].trim();
             let der = texto[pos + op.len()..].trim();
             
@@ -1561,15 +1588,42 @@ fn evaluar_expresion_valor(expr: &str, entorno: &mut Entorno) -> Result<Valor, S
         }
     }
     
-    // Operaciones aritméticas
+    // Manejo específico de expresiones con paréntesis
+    if texto.starts_with('(') && texto.ends_with(')') {
+        let expresion_interna = &texto[1..texto.len()-1];
+        return evaluar_expresion_valor(expresion_interna, entorno);
+    }
+    
+    // Verificar primero si es concatenación cuando hay cadenas literales
+    if texto.contains(" + ") && texto.contains('"') {
+        println!("DEBUG: Detectada concatenación para: '{}'", texto);
+        match evaluar_concatenacion(texto, entorno, 0) {
+            Ok(resultado) => return Ok(Valor::Cadena(resultado)),
+            Err(e) => {
+                println!("DEBUG: Error en concatenación: {}", e);
+                // Si falla la concatenación, continuar con otros métodos
+            }
+        }
+    }
+    
+    // Intentar primero operaciones aritméticas
     if let Ok(resultado) = evaluar_operacion_aritmetica(texto, entorno) {
         return Ok(resultado);
     }
     
-    // Concatenación de cadenas
-    if texto.contains(" + ") && !texto.chars().all(|c| c.is_ascii_digit() || c.is_whitespace() || c == '+' || c == '.' || c == '-') {
-        let resultado = evaluar_concatenacion(texto, entorno, 0)?;
-        return Ok(Valor::Cadena(resultado));
+    // Si no es operación aritmética, entonces puede ser concatenación de cadenas
+    if texto.contains(" + ") {
+        // Verificar si es probablemente concatenación (contiene cadenas literales)
+        let contiene_cadena_literal = texto.contains('"');
+        if contiene_cadena_literal {
+            let resultado = evaluar_concatenacion(texto, entorno, 0)?;
+            return Ok(Valor::Cadena(resultado));
+        }
+        
+        // Si no tiene cadenas literales, intentar concatenación de todas formas
+        if let Ok(resultado) = evaluar_concatenacion(texto, entorno, 0) {
+            return Ok(Valor::Cadena(resultado));
+        }
     }
     
     // Literales básicos
@@ -1643,6 +1697,26 @@ fn evaluar_operacion_aritmetica(expr: &str, entorno: &mut Entorno) -> Result<Val
     }
     
     Err("No es una operación aritmética válida".to_string())
+}
+
+fn encontrar_operador_logico(expr: &str, op: &str) -> Option<usize> {
+    let mut nivel_parentesis = 0;
+    let mut en_cadena = false;
+    
+    for (char_pos, c) in expr.char_indices() {
+        match c {
+            '"' => en_cadena = !en_cadena,
+            '(' if !en_cadena => nivel_parentesis += 1,
+            ')' if !en_cadena => nivel_parentesis -= 1,
+            _ => {
+                if !en_cadena && nivel_parentesis == 0 && expr[char_pos..].starts_with(op) {
+                    return Some(char_pos);
+                }
+            }
+        }
+    }
+    
+    None
 }
 
 fn encontrar_operador_principal(expr: &str, op: &str) -> Option<usize> {
@@ -1869,13 +1943,230 @@ fn aplicar_metodo_valor(valor: &mut Valor, metodo: &str, args: Vec<Valor>) -> Re
             }
             "longitud" => Ok(Some(Valor::Entero(lista.len() as i64))),
             "cadena" => Ok(Some(Valor::Cadena(valor.a_cadena()))),
+            "unir" => {
+                let separador = if let Some(sep) = args.get(0) {
+                    sep.a_cadena()
+                } else {
+                    ",".to_string()
+                };
+                let resultado = unir_lista(lista, &separador);
+                Ok(Some(Valor::Cadena(resultado)))
+            }
+            "unir_lineas" => {
+                let resultado = unir_lista(lista, "\n");
+                Ok(Some(Valor::Cadena(resultado)))
+            }
             _ => Ok(None),
         },
         Valor::Cadena(c) => match metodo {
+            // Conversiones básicas (ya existentes)
             "entero" => Ok(Some(Valor::Entero(valor.convertir_a_entero()?))),
             "numero" => Ok(Some(Valor::Numero(valor.convertir_a_numero()?))),
             "bool" => Ok(Some(Valor::Bool(valor.convertir_a_bool()?))),
             "cadena" => Ok(Some(Valor::Cadena(c.clone()))),
+            
+            // Propiedades básicas
+            "longitud" => Ok(Some(Valor::Entero(c.chars().count() as i64))),
+            "esta_vacia" => Ok(Some(Valor::Bool(c.is_empty()))),
+            
+            // Métodos de búsqueda y verificación
+            "buscar" => {
+                if let Some(patron) = args.get(0) {
+                    let patron_str = patron.a_cadena();
+                    match c.find(&patron_str) {
+                        Some(pos) => Ok(Some(Valor::Entero(pos as i64))),
+                        None => Ok(Some(Valor::Entero(-1))),
+                    }
+                } else {
+                    Err("buscar() requiere un parámetro".to_string())
+                }
+            },
+            "contiene" => {
+                if let Some(patron) = args.get(0) {
+                    let patron_str = patron.a_cadena();
+                    Ok(Some(Valor::Bool(c.contains(&patron_str))))
+                } else {
+                    Err("contiene() requiere un parámetro".to_string())
+                }
+            },
+            "empieza_con" => {
+                if let Some(prefijo) = args.get(0) {
+                    let prefijo_str = prefijo.a_cadena();
+                    Ok(Some(Valor::Bool(c.starts_with(&prefijo_str))))
+                } else {
+                    Err("empieza_con() requiere un parámetro".to_string())
+                }
+            },
+            "termina_con" => {
+                if let Some(sufijo) = args.get(0) {
+                    let sufijo_str = sufijo.a_cadena();
+                    Ok(Some(Valor::Bool(c.ends_with(&sufijo_str))))
+                } else {
+                    Err("termina_con() requiere un parámetro".to_string())
+                }
+            },
+            "contar_ocurrencias" => {
+                if let Some(patron) = args.get(0) {
+                    let patron_str = patron.a_cadena();
+                    if patron_str.is_empty() {
+                        return Err("El patrón no puede estar vacío".to_string());
+                    }
+                    let count = c.matches(&patron_str).count() as i64;
+                    Ok(Some(Valor::Entero(count)))
+                } else {
+                    Err("contar_ocurrencias() requiere un parámetro".to_string())
+                }
+            },
+            
+            // Transformaciones de caso
+            "a_mayusculas" => Ok(Some(Valor::Cadena(c.to_uppercase()))),
+            "a_minusculas" => Ok(Some(Valor::Cadena(c.to_lowercase()))),
+            "capitalizar" => {
+                if c.is_empty() {
+                    Ok(Some(Valor::Cadena(String::new())))
+                } else {
+                    let mut chars: Vec<char> = c.chars().collect();
+                    chars[0] = chars[0].to_uppercase().next().unwrap_or(chars[0]);
+                    for i in 1..chars.len() {
+                        chars[i] = chars[i].to_lowercase().next().unwrap_or(chars[i]);
+                    }
+                    Ok(Some(Valor::Cadena(chars.into_iter().collect())))
+                }
+            },
+            
+            // Métodos de limpieza
+            "recortar" => Ok(Some(Valor::Cadena(c.trim().to_string()))),
+            
+            // Métodos de manipulación
+            "repetir" => {
+                if let Some(veces) = args.get(0) {
+                    match veces.convertir_a_entero() {
+                        Ok(n) if n >= 0 => Ok(Some(Valor::Cadena(c.repeat(n as usize)))),
+                        Ok(_) => Err("El número de repeticiones debe ser positivo".to_string()),
+                        Err(_) => Err("repetir() requiere un número entero".to_string()),
+                    }
+                } else {
+                    Err("repetir() requiere un parámetro".to_string())
+                }
+            },
+            "invertir" => Ok(Some(Valor::Cadena(c.chars().rev().collect()))),
+            "reemplazar" => {
+                if args.len() >= 2 {
+                    let buscar_str = args[0].a_cadena();
+                    let reemplazar_str = args[1].a_cadena();
+                    Ok(Some(Valor::Cadena(c.replace(&buscar_str, &reemplazar_str))))
+                } else {
+                    Err("reemplazar() requiere dos parámetros: buscar y reemplazar".to_string())
+                }
+            },
+            
+            // Métodos de subcadena y división
+            "subcadena" => {
+                if args.len() >= 1 {
+                    let inicio = args[0].convertir_a_entero()
+                        .map_err(|_| "El índice inicial debe ser un entero")?;
+                    let chars: Vec<char> = c.chars().collect();
+                    let inicio_idx = if inicio < 0 {
+                        0
+                    } else {
+                        inicio as usize
+                    };
+                    
+                    if inicio_idx >= chars.len() {
+                        return Ok(Some(Valor::Cadena(String::new())));
+                    }
+                    
+                    let fin_idx = if args.len() >= 2 {
+                        let longitud = args[1].convertir_a_entero()
+                            .map_err(|_| "La longitud debe ser un entero")?;
+                        if longitud < 0 {
+                            chars.len()
+                        } else {
+                            (inicio_idx + longitud as usize).min(chars.len())
+                        }
+                    } else {
+                        chars.len()
+                    };
+                    
+                    let subcadena: String = chars[inicio_idx..fin_idx].iter().collect();
+                    Ok(Some(Valor::Cadena(subcadena)))
+                } else {
+                    Err("subcadena() requiere al menos un parámetro (índice inicial)".to_string())
+                }
+            },
+            "dividir" => {
+                if let Some(delimitador) = args.get(0) {
+                    let delim_str = delimitador.a_cadena();
+                    if delim_str.is_empty() {
+                        return Err("El delimitador no puede estar vacío".to_string());
+                    }
+                    let partes: Vec<Valor> = c.split(&delim_str)
+                        .map(|s| Valor::Cadena(s.to_string()))
+                        .collect();
+                    Ok(Some(Valor::Lista(partes)))
+                } else {
+                    Err("dividir() requiere un delimitador".to_string())
+                }
+            },
+            "partir_lineas" => {
+                let lineas: Vec<Valor> = c.lines()
+                    .map(|s| Valor::Cadena(s.to_string()))
+                    .collect();
+                Ok(Some(Valor::Lista(lineas)))
+            },
+            
+            // Métodos de comparación
+            "comparar" => {
+                if let Some(otra) = args.get(0) {
+                    let otra_str = otra.a_cadena();
+                    let resultado = match c.as_str().cmp(&otra_str) {
+                        std::cmp::Ordering::Less => -1,
+                        std::cmp::Ordering::Equal => 0,
+                        std::cmp::Ordering::Greater => 1,
+                    };
+                    Ok(Some(Valor::Entero(resultado)))
+                } else {
+                    Err("comparar() requiere un parámetro".to_string())
+                }
+            },
+            "igual_sin_caso" => {
+                if let Some(otra) = args.get(0) {
+                    let otra_str = otra.a_cadena();
+                    Ok(Some(Valor::Bool(c.to_lowercase() == otra_str.to_lowercase())))
+                } else {
+                    Err("igual_sin_caso() requiere un parámetro".to_string())
+                }
+            },
+            
+            // Métodos de codificación (implementación básica)
+            "codificar_base64" => {
+                // Implementación básica de Base64
+                let encoded = base64_encode(c.as_bytes());
+                Ok(Some(Valor::Cadena(encoded)))
+            },
+            "decodificar_base64" => {
+                match base64_decode(c) {
+                    Ok(decoded) => {
+                        match String::from_utf8(decoded) {
+                            Ok(s) => Ok(Some(Valor::Cadena(s))),
+                            Err(_) => Err("Los datos decodificados no son UTF-8 válido".to_string()),
+                        }
+                    },
+                    Err(_) => Err("Cadena Base64 inválida".to_string()),
+                }
+            },
+            "codificar_uri" => {
+                let encoded = uri_encode(c);
+                Ok(Some(Valor::Cadena(encoded)))
+            },
+            "decodificar_uri" => {
+                match uri_decode(c) {
+                    Ok(decoded) => Ok(Some(Valor::Cadena(decoded))),
+                    Err(e) => Err(format!("Error decodificando URI: {}", e)),
+                }
+            },
+            
+            // Conversiones existentes
             "lista" => {
                 // Convertir cadena a lista separando por comas
                 let elementos: Vec<&str> = c.split(',').collect();
@@ -1933,6 +2224,8 @@ fn aplicar_metodo_valor(valor: &mut Valor, metodo: &str, args: Vec<Valor>) -> Re
 }
 
 fn aplicar_incremento(expresion: &str, entorno: &mut Entorno) -> Result<(), String> {
+    let expresion = expresion.trim();
+    
     if expresion.ends_with("++") {
         let nombre = expresion.trim_end_matches("++").trim();
         if let Some(Valor::Entero(i)) = entorno.obtener(nombre).cloned() {
@@ -1948,6 +2241,16 @@ fn aplicar_incremento(expresion: &str, entorno: &mut Entorno) -> Result<(), Stri
             return Ok(());
         } else {
             return Err("Variable no encontrada".to_string());
+        }
+    } else if expresion.contains('=') && !expresion.contains("==") && !expresion.contains("!=") && !expresion.contains("<=") && !expresion.contains(">=") {
+        // Manejar asignaciones como i = i + 1
+        let partes: Vec<&str> = expresion.splitn(2, '=').collect();
+        if partes.len() == 2 {
+            let variable = partes[0].trim();
+            let valor_expr = partes[1].trim();
+            let valor_nuevo = evaluar_expresion_valor(valor_expr, entorno)?;
+            entorno.establecer(variable, valor_nuevo);
+            return Ok(());
         }
     }
     Err("Incremento inválido".to_string())
@@ -2209,5 +2512,116 @@ fn unir_lineas_divididas(lineas: &[String]) -> Vec<String> {
     }
     
     lineas_unidas
+}
+
+// Funciones auxiliares para codificación Base64
+fn base64_encode(input: &[u8]) -> String {
+    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut result = String::new();
+    
+    for chunk in input.chunks(3) {
+        let mut buf = [0u8; 3];
+        for (i, &byte) in chunk.iter().enumerate() {
+            buf[i] = byte;
+        }
+        
+        let b = ((buf[0] as u32) << 16) | ((buf[1] as u32) << 8) | (buf[2] as u32);
+        
+        result.push(CHARS[((b >> 18) & 63) as usize] as char);
+        result.push(CHARS[((b >> 12) & 63) as usize] as char);
+        result.push(if chunk.len() > 1 { CHARS[((b >> 6) & 63) as usize] as char } else { '=' });
+        result.push(if chunk.len() > 2 { CHARS[(b & 63) as usize] as char } else { '=' });
+    }
+    
+    result
+}
+
+fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
+    let input = input.trim();
+    if input.len() % 4 != 0 {
+        return Err("Longitud de Base64 inválida".to_string());
+    }
+    
+    let mut result = Vec::new();
+    let bytes = input.as_bytes();
+    
+    for chunk in bytes.chunks(4) {
+        let mut values = [0u8; 4];
+        for (i, &byte) in chunk.iter().enumerate() {
+            values[i] = match byte {
+                b'A'..=b'Z' => byte - b'A',
+                b'a'..=b'z' => byte - b'a' + 26,
+                b'0'..=b'9' => byte - b'0' + 52,
+                b'+' => 62,
+                b'/' => 63,
+                b'=' => 0,
+                _ => return Err("Carácter Base64 inválido".to_string()),
+            };
+        }
+        
+        let combined = ((values[0] as u32) << 18) | 
+                      ((values[1] as u32) << 12) | 
+                      ((values[2] as u32) << 6) | 
+                      (values[3] as u32);
+        
+        result.push((combined >> 16) as u8);
+        if chunk[2] != b'=' {
+            result.push((combined >> 8) as u8);
+        }
+        if chunk[3] != b'=' {
+            result.push(combined as u8);
+        }
+    }
+    
+    Ok(result)
+}
+
+// Funciones auxiliares para codificación URI
+fn uri_encode(input: &str) -> String {
+    let mut result = String::new();
+    
+    for byte in input.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                result.push(byte as char);
+            }
+            _ => {
+                result.push_str(&format!("%{:02X}", byte));
+            }
+        }
+    }
+    
+    result
+}
+
+fn uri_decode(input: &str) -> Result<String, String> {
+    let mut result = Vec::new();
+    let mut chars = input.chars().peekable();
+    
+    while let Some(ch) = chars.next() {
+        match ch {
+            '%' => {
+                let hex1 = chars.next().ok_or("URI mal formado: falta primer dígito hex")?;
+                let hex2 = chars.next().ok_or("URI mal formado: falta segundo dígito hex")?;
+                
+                let hex_str = format!("{}{}", hex1, hex2);
+                let byte = u8::from_str_radix(&hex_str, 16)
+                    .map_err(|_| "URI mal formado: dígitos hex inválidos")?;
+                result.push(byte);
+            }
+            '+' => result.push(b' '),
+            _ => result.push(ch as u8),
+        }
+    }
+    
+    String::from_utf8(result).map_err(|_| "URI decodificado no es UTF-8 válido".to_string())
+}
+
+// Función auxiliar para unir elementos de lista con un separador
+fn unir_lista(lista: &[Valor], separador: &str) -> String {
+    lista.iter()
+        .map(|v| v.a_cadena())
+        .collect::<Vec<String>>()
+        .join(separador)
 }
 

@@ -7,7 +7,8 @@ pub fn interpretar(contenido: &str) -> Result<(), String> {
     let limpio = contenido.trim_start_matches('\u{feff}');
     let mut entorno = Entorno::nuevo();
     let lineas: Vec<String> = limpio.lines().map(|l| l.to_string()).collect();
-    procesar_lineas(&lineas, &mut entorno, 0)
+    let lineas_unidas = unir_lineas_divididas(&lineas);
+    procesar_lineas(&lineas_unidas, &mut entorno, 0)
 }
 
 fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> Result<(), String> {
@@ -1052,6 +1053,18 @@ fn evaluar_concatenacion(expr: &str, entorno: &mut Entorno, linea_num: usize) ->
         let valor_str = if parte_trim.starts_with('"') && parte_trim.ends_with('"') {
             // Es una cadena literal
             parte_trim.trim_matches('"').to_string()
+        } else if parte_trim.contains('.') && parte_trim.contains('(') && parte_trim.ends_with(')') {
+            // Es una expresión con funciones encadenadas
+            match obtener_valor_mutable(parte_trim, entorno) {
+                Ok(valor) => valor.a_cadena(),
+                Err(_) => {
+                    // Si no funciona como función encadenada, intentar como expresión normal
+                    match evaluar_expresion_valor(parte_trim, entorno) {
+                        Ok(valor) => valor.a_cadena(),
+                        Err(_) => parte_trim.to_string(),
+                    }
+                }
+            }
         } else if parte_trim.contains(".cadena()") && parte_trim.starts_with('(') {
             // Es una expresión con paréntesis y .cadena()
             let pos_metodo = parte_trim.find(".cadena()").unwrap();
@@ -1165,6 +1178,16 @@ fn valor_desde_expresion(expresion: &str, linea_num: usize, entorno: &mut Entorn
         return Ok(texto.trim_matches('"').to_string());
     }
 
+    // Intentar evaluar como funciones encadenadas primero
+    if texto.contains('.') && texto.contains('(') && texto.ends_with(')') {
+        match evaluar_llamadas_encadenadas(texto, entorno) {
+            Ok(valor) => return Ok(valor.a_cadena()),
+            Err(_) => {
+                // Si falla, intentar el método anterior
+            }
+        }
+    }
+
     if let Some(punto) = texto.find('.') {
         let base = texto[..punto].trim();
         let resto = texto[punto + 1..].trim();
@@ -1182,8 +1205,7 @@ fn valor_desde_expresion(expresion: &str, linea_num: usize, entorno: &mut Entorn
                     let mut mapa = campos;
                     if let Some(def) = entorno.obtener_objeto(&t) {
                         let res = ejecutar_metodo(def, &mut mapa, metodo, args);
-                        let mut mutable = unsafe { &mut *(entorno as *const _ as *mut Entorno) };
-                        mutable.establecer(base, Valor::Instancia(t.clone(), mapa));
+                        entorno.establecer(base, Valor::Instancia(t.clone(), mapa));
                         if let Some(v) = res { return Ok(v.a_cadena()); } else { return Ok(String::new()); }
                     } else {
                         return Err(formatear_error(linea_num, "Objeto no definido"));
@@ -1194,16 +1216,14 @@ fn valor_desde_expresion(expresion: &str, linea_num: usize, entorno: &mut Entorn
                     if let Some(v) = ejecutar_metodo(def, &mut dummy, metodo, args) { return Ok(v.a_cadena()); } else { return Ok(String::new()); }
                 } else {
                     let es_var = entorno.obtener(base).is_some();
-                    let mut val = obtener_valor(base, entorno)?;
+                    let mut val = obtener_valor_mutable(base, entorno)?;
                     if let Some(ret) = aplicar_metodo_valor(&mut val, metodo, args)? {
                         if es_var {
-                            let mut m = unsafe { &mut *(entorno as *const _ as *mut Entorno) };
-                            m.establecer(base, val);
+                            entorno.establecer(base, val);
                         }
                         return Ok(ret.a_cadena());
                     } else if es_var {
-                        let mut m = unsafe { &mut *(entorno as *const _ as *mut Entorno) };
-                        m.establecer(base, val);
+                        entorno.establecer(base, val);
                         return Ok(String::new());
                     }
                 }
@@ -1234,6 +1254,27 @@ fn obtener_valor(texto: &str, entorno: &Entorno) -> Result<Valor, String> {
     if texto == "falso" { return Ok(Valor::Bool(false)); }
     if let Ok(i) = texto.parse::<i64>() { return Ok(Valor::Entero(i)); }
     if let Ok(n) = texto.parse::<f64>() { return Ok(Valor::Numero(n)); }
+    
+    if let Some(v) = entorno.obtener(texto) { return Ok(v.clone()); }
+    Err("Valor no encontrado".to_string())
+}
+
+fn obtener_valor_mutable(texto: &str, entorno: &mut Entorno) -> Result<Valor, String> {
+    if texto.starts_with('"') && texto.ends_with('"') {
+        return Ok(Valor::Cadena(texto.trim_matches('"').to_string()));
+    }
+    if texto == "verdadero" { return Ok(Valor::Bool(true)); }
+    if texto == "falso" { return Ok(Valor::Bool(false)); }
+    if let Ok(i) = texto.parse::<i64>() { return Ok(Valor::Entero(i)); }
+    if let Ok(n) = texto.parse::<f64>() { return Ok(Valor::Numero(n)); }
+    
+    // Intentar evaluar como funciones encadenadas
+    if texto.contains('.') && texto.contains('(') && texto.ends_with(')') {
+        if let Ok(valor) = evaluar_llamadas_encadenadas(texto, entorno) {
+            return Ok(valor);
+        }
+    }
+    
     if let Some(v) = entorno.obtener(texto) { return Ok(v.clone()); }
     Err("Valor no encontrado".to_string())
 }
@@ -1328,6 +1369,89 @@ fn evaluar_bool(expr: &str, entorno: &mut Entorno) -> Result<bool, String> {
     evaluar_comparacion(expr, entorno)
 }
 
+fn evaluar_llamadas_encadenadas(expr: &str, entorno: &mut Entorno) -> Result<Valor, String> {
+    let texto = expr.trim();
+    
+    // Encontrar la primera variable/expresión base
+    let mut punto_base = None;
+    let mut en_cadena = false;
+    let mut nivel_parentesis = 0;
+    let chars: Vec<char> = texto.chars().collect();
+    
+    for (i, &c) in chars.iter().enumerate() {
+        match c {
+            '"' => en_cadena = !en_cadena,
+            '(' if !en_cadena => nivel_parentesis += 1,
+            ')' if !en_cadena => nivel_parentesis -= 1,
+            '.' if !en_cadena && nivel_parentesis == 0 => {
+                punto_base = Some(i);
+                break;
+            }
+            _ => {}
+        }
+    }
+    
+    if punto_base.is_none() {
+        return Err("No se encontraron llamadas a métodos encadenadas".to_string());
+    }
+    
+    let punto_base = punto_base.unwrap();
+    let base = texto[..punto_base].trim();
+    let resto = &texto[punto_base + 1..];
+    
+    // Dividir el resto en llamadas a métodos individuales
+    let mut llamadas = Vec::new();
+    let mut inicio_llamada = 0;
+    nivel_parentesis = 0;
+    en_cadena = false;
+    let resto_chars: Vec<char> = resto.chars().collect();
+    
+    for (i, &c) in resto_chars.iter().enumerate() {
+        match c {
+            '"' => en_cadena = !en_cadena,
+            '(' if !en_cadena => nivel_parentesis += 1,
+            ')' if !en_cadena => {
+                nivel_parentesis -= 1;
+                if nivel_parentesis == 0 {
+                    let llamada = &resto[inicio_llamada..=i];
+                    llamadas.push(llamada.trim());
+                    
+                    if i + 1 < resto_chars.len() && resto_chars[i + 1] == '.' {
+                        inicio_llamada = i + 2;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    
+    // Evaluar la expresión base primero
+    let mut valor_actual = evaluar_expresion_valor(base, entorno)?;
+    
+    // Aplicar cada llamada a método en secuencia
+    for llamada in llamadas {
+        if let Some(paren) = llamada.find('(') {
+            let metodo = llamada[..paren].trim();
+            let args_str = &llamada[paren + 1..llamada.len() - 1];
+            let mut args = Vec::new();
+            
+            if !args_str.trim().is_empty() {
+                for arg in args_str.split(',') {
+                    args.push(evaluar_expresion_valor(arg.trim(), entorno)?);
+                }
+            }
+            
+            if let Some(resultado) = aplicar_metodo_valor(&mut valor_actual, metodo, args)? {
+                valor_actual = resultado;
+            } else {
+                return Err(format!("Método '{}' no encontrado", metodo));
+            }
+        }
+    }
+    
+    Ok(valor_actual)
+}
+
 fn evaluar_expresion_valor(expr: &str, entorno: &mut Entorno) -> Result<Valor, String> {
     let texto = expr.trim();
     
@@ -1346,44 +1470,9 @@ fn evaluar_expresion_valor(expr: &str, entorno: &mut Entorno) -> Result<Valor, S
         }
     }
     
-    // Llamadas a métodos
+    // Llamadas a métodos (incluyendo encadenamiento)
     if texto.contains('.') && texto.contains('(') && texto.ends_with(')') {
-        // Buscar el punto que está fuera de cadenas
-        let mut punto_valido = None;
-        let mut en_cadena = false;
-        let chars: Vec<char> = texto.chars().collect();
-        
-        for (i, &c) in chars.iter().enumerate() {
-            if c == '"' {
-                en_cadena = !en_cadena;
-            } else if c == '.' && !en_cadena {
-                punto_valido = Some(i);
-                break;
-            }
-        }
-        
-        if let Some(punto) = punto_valido {
-            let base = texto[..punto].trim();
-            let resto = texto[punto + 1..].trim();
-            if let Some(paren) = resto.find('(') {
-                let metodo = resto[..paren].trim();
-                let args_str = &resto[paren + 1..resto.len() - 1];
-                let mut args = Vec::new();
-                if !args_str.trim().is_empty() {
-                    for arg in args_str.split(',') {
-                        args.push(evaluar_expresion_valor(arg.trim(), entorno)?);
-                    }
-                }
-                
-                // Intentar obtener valor de la variable base
-                if let Ok(mut val) = obtener_valor(base, entorno) {
-                    if let Some(resultado) = aplicar_metodo_valor(&mut val, metodo, args)? {
-                        entorno.establecer(base, val);
-                        return Ok(resultado);
-                    }
-                }
-            }
-        }
+        return evaluar_llamadas_encadenadas(texto, entorno);
     }
     for op in &[" && ", " y ", " || ", " o "] {
         if let Some(pos) = texto.find(op) {
@@ -2062,5 +2151,63 @@ fn procesar_llamada_funcion_sin_asignacion(linea: &str, entorno: &mut Entorno) -
     }
     
     Err("Función no reconocida".to_string())
+}
+
+fn unir_lineas_divididas(lineas: &[String]) -> Vec<String> {
+    let mut lineas_unidas = Vec::new();
+    let mut linea_actual = String::new();
+    let mut en_expresion_dividida = false;
+    
+    for linea in lineas {
+        let mut linea_trim = linea.trim();
+        
+        // Remover comentarios al final de la línea
+        if let Some(pos) = linea_trim.find("//") {
+            linea_trim = &linea_trim[..pos].trim();
+        }
+        
+        // Saltar líneas vacías o solo comentarios
+        if linea_trim.is_empty() {
+            if !en_expresion_dividida {
+                lineas_unidas.push(linea.clone());
+            }
+            continue;
+        }
+        
+        // Si la línea anterior tenía una expresión incompleta
+        if en_expresion_dividida {
+            linea_actual.push_str(linea_trim);
+            
+            // Verificar si la expresión está completa (paréntesis balanceados)
+            let parentesis_abiertos = linea_actual.matches('(').count();
+            let parentesis_cerrados = linea_actual.matches(')').count();
+            
+            if parentesis_abiertos == parentesis_cerrados && !linea_actual.is_empty() {
+                lineas_unidas.push(linea_actual.trim().to_string());
+                linea_actual.clear();
+                en_expresion_dividida = false;
+            }
+        } else {
+            // Verificar si esta línea tiene una expresión que continúa en la siguiente línea
+            let parentesis_abiertos = linea_trim.matches('(').count();
+            let parentesis_cerrados = linea_trim.matches(')').count();
+            
+            if parentesis_abiertos > parentesis_cerrados && linea_trim.contains('.') {
+                // Esta línea tiene una expresión que continúa
+                linea_actual = linea_trim.to_string();
+                en_expresion_dividida = true;
+            } else {
+                // Línea completa
+                lineas_unidas.push(linea.clone());
+            }
+        }
+    }
+    
+    // Si quedó una línea pendiente, agregarla
+    if !linea_actual.is_empty() {
+        lineas_unidas.push(linea_actual);
+    }
+    
+    lineas_unidas
 }
 

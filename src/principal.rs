@@ -4,6 +4,9 @@ mod entorno;
 mod consola;
 mod objetos;
 
+#[cfg(test)]
+mod pruebas;
+
 use std::env;
 use std::fs;
 

@@ -56,7 +56,7 @@ entero resultado = duplicar(5)
 entero obtener_numero() {
     retornar 42
 }
-entero numero = obtener_numero()
+entero numero_valor = obtener_numero()
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -191,7 +191,7 @@ cadena resultado = formatear(42, "prueba")
         let codigo = r#"
 entero funcion_problematica() {
     entero x = 5
-    // No hay retorno
+    // No hay retorno y debería fallar
 }
         "#;
         

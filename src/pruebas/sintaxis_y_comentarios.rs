@@ -75,7 +75,7 @@ entero calcular(entero x) {
     #[test]
     fn test_lineas_vacias() {
         let codigo = r#"
-entero numero = 42
+entero numero_entero = 42
 
 
 cadena texto = "hola"
@@ -88,7 +88,7 @@ cadena texto = "hola"
     #[test]
     fn test_espacios_y_tabs() {
         let codigo = r#"
-    entero numero = 42
+    entero numero_entero = 42
 	cadena texto = "hola"
         bool estado = verdadero
         "#;
@@ -111,7 +111,7 @@ entero numero = 42
     fn test_comentario_solo_barras() {
         let codigo = r#"
 // 
-entero numero = 42
+entero numero_entero = 42
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -121,7 +121,7 @@ entero numero = 42
     fn test_comentario_bloque_vacio() {
         let codigo = r#"
 /**/
-entero numero = 42
+entero numero_entero = 42
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -131,7 +131,7 @@ entero numero = 42
     fn test_comentario_anidado_falso() {
         let codigo = r#"
 /* Comentario principal /* esto no debería anidar */ fin */
-entero numero = 42
+entero numero_entero = 42
         "#;
         
         // Los comentarios anidados generalmente no son soportados
@@ -141,7 +141,7 @@ entero numero = 42
     #[test]
     fn test_codigo_sin_comentarios() {
         let codigo = r#"
-entero numero = 42
+entero numero_entero = 42
 cadena texto = "hola"
 bool estado = verdadero
         "#;
@@ -179,7 +179,7 @@ cadena otra_variable = "comentada"
     fn test_comentario_con_doble_barra() {
         let codigo = r#"
 // Comentario con // doble barra dentro
-entero numero = 42
+entero numero_entero = 42
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -230,7 +230,7 @@ entero funcion_larga(entero parametro1,
     fn test_comentario_unicode() {
         let codigo = r#"
 // Prueba con emoji 🚀 y caracteres unicode ñáéíóúü
-entero numero = 42
+entero numero_entero = 42
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());

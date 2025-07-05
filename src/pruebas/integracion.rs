@@ -159,6 +159,34 @@ imprimir("Persona creada")
     }
 
     #[test]
+    fn test_programa_con_json_extrano(){
+        let codigo = r#"
+// Objeto JSON con estructura compleja
+jsn complejo = {
+    usuario: {
+        nombre: "Ana", // Comentario para Ana
+        detalles: {
+            edad: 28,
+            activo: falso // El interprete no debería fallar aquí al poner comentarios en la misma linea
+        },
+        intereses: ["programación", "música", "arte"]
+    },
+    lista_numeros: [1, 2, 3, 4, 5],
+    matriz: [[1, 2], [3, 4]],
+    fecha: "2023-10-01",
+    otro_json_raro: { clave: "valor", numero: 42, lista_interna: [1, 2, 3] },
+    configuracion: {
+        tema: "oscuro",
+        notificaciones: verdadero
+    }
+}
+imprimir("Objeto JSON complejo creado")
+        "#;
+        
+        assert!(interprete::interpretar(codigo).is_ok());
+    }
+
+    #[test]
     fn test_programa_con_condicionales_complejos() {
         let codigo = r#"
 // Condicionales anidados y complejos

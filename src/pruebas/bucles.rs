@@ -122,7 +122,7 @@ para (número i = 0.0; i < 2.5; i = i + 0.5) {
         let codigo = r#"
 entero a = 1
 entero b = 10
-mientras (a < 5 && b > 5) {
+mientras ((a < 5) && (b > 5)) {
     imprimir("a: " + a.cadena() + ", b: " + b.cadena())
     a = a + 1
     b = b - 1

@@ -59,7 +59,7 @@ entero numero = 10
     #[test]
     fn test_asignacion_tipo_incorrecto() {
         let codigo = r#"
-entero numero = "texto"
+entero numero_entero = "texto"
         "#;
         
         assert!(interprete::interpretar(codigo).is_err());

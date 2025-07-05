@@ -69,7 +69,7 @@ si (a > b) {
 entero a = 10
 entero b = 5
 entero c = 15
-si (a > b && c > a) {
+si ((a > b) && (c > a)) {
     imprimir("Condición compleja verdadera")
 }
         "#;

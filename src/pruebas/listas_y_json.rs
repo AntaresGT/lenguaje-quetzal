@@ -84,7 +84,10 @@ jsn datos = {
     titulo: "Proyecto",
     numeros: [1, 2, 3, 4, 5],
     configuraciones: {
-        opciones: ["opcion1", "opcion2"],
+        opciones: [
+            "opcion1",
+            "opcion2"
+        ], // Comentario para verificar que no falla
         valores: [verdadero, falso, verdadero]
     }
 }
@@ -114,7 +117,7 @@ jsn completo = {
     #[test]
     fn test_json_vacio() {
         let codigo = r#"
-jsn vacio = {}
+jsn json_vacio = {}
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());

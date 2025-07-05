@@ -172,7 +172,7 @@ cadena texto_estado = estado.cadena()
         let codigo = r#"
 número decimal = 123.456
 cadena texto = decimal.cadena()
-entero numero = texto.numero()
+entero numero_entero = texto.numero()
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -234,7 +234,7 @@ número decimal = texto_puntos.numero()
     fn test_conversion_numero_muy_grande() {
         let codigo = r#"
 cadena numero_grande = "999999999999999999999999999"
-entero numero = numero_grande.numero()
+entero entero_grande = numero_grande.numero()
         "#;
         
         assert!(interprete::interpretar(codigo).is_err());

@@ -28,7 +28,7 @@ cadena resultado = numero_decimal.cadena().numero().cadena()
     fn test_funciones_encadenadas_en_impresion() {
         let codigo = r#"
 número numero_test = 123
-imprimir("Resultado: " + numero_test.cadena().numero().cadena())
+consola.imprimir("Resultado: " + numero_test.cadena().numero().cadena())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -39,7 +39,7 @@ imprimir("Resultado: " + numero_test.cadena().numero().cadena())
         let codigo = r#"
 número numero1 = 10
 número numero2 = 20
-imprimir(numero1.cadena() + " y " + numero2.cadena())
+consola.imprimir(numero1.cadena() + " y " + numero2.cadena())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -109,7 +109,7 @@ cadena resultado = numero_test.cadena().numero().entero().numero().cadena()
     fn test_funciones_encadenadas_con_saltos_de_linea() {
         let codigo = r#"
 número numero_test = 3.14
-imprimir("Resultado: " + numero_test.cadena()
+consola.imprimir("Resultado: " + numero_test.cadena()
                                     .numero()
                                     .cadena()
         )

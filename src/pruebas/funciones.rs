@@ -247,4 +247,52 @@ entero resultado = usar_variable_global()
         
         assert!(interprete::interpretar(codigo).is_ok());
     }
+
+    #[test]
+    fn test_funcion_en_una_sola_linea_que_retornan_algo() {
+        let codigo = r#"
+entero doble(entero x) { retornar x * 2 }
+entero resultado = doble(10)
+        "#;
+        
+        assert!(interprete::interpretar(codigo).is_ok());
+    }
+
+    #[test]
+    fn test_funcion_en_una_sola_linea_que_no_retornan_nada() {
+        let codigo = r#"
+vacio imprimir_mensaje() { consola.imprimir("Hola") }
+imprimir_mensaje()
+        "#;
+        
+        assert!(interprete::interpretar(codigo).is_ok());
+    }
+
+    #[test]
+    fn test_funcion_con_multiples_retorno() {
+        let codigo = r#"
+entero operaciones(entero a, entero b) {
+    si (a > b) {
+        retornar a
+    } sino {
+        retornar b
+    }
+}
+entero resultado = operaciones(10, 5)
+        "#;
+        
+        assert!(interprete::interpretar(codigo).is_ok());
+    }
+
+    #[test]
+    fn test_funcion_con_parametros_por_defecto() {
+        let codigo = r#"
+entero sumar(entero a, entero b = 10) {
+    retornar a + b
+}
+entero resultado = sumar(5)
+        "#;
+        
+        assert!(interprete::interpretar(codigo).is_ok());
+    }
 }

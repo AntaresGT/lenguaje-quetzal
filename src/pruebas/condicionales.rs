@@ -9,7 +9,7 @@ mod tests {
         let codigo = r#"
 entero numero = 10
 si (numero > 5) {
-    imprimir("Número es mayor que 5")
+    consola.imprimir("Número es mayor que 5")
 }
         "#;
         
@@ -21,9 +21,9 @@ si (numero > 5) {
         let codigo = r#"
 entero numero = 3
 si (numero > 5) {
-    imprimir("Mayor que 5")
+    consola.imprimir("Mayor que 5")
 } sino {
-    imprimir("Menor o igual que 5")
+    consola.imprimir("Menor o igual que 5")
 }
         "#;
         
@@ -35,11 +35,11 @@ si (numero > 5) {
         let codigo = r#"
 entero numero = 10
 si (numero < 5) {
-    imprimir("Menor que 5")
+    consola.imprimir("Menor que 5")
 } sino si (numero == 10) {
-    imprimir("Igual a 10")
+    consola.imprimir("Igual a 10")
 } sino {
-    imprimir("Otro caso")
+    consola.imprimir("Otro caso")
 }
         "#;
         
@@ -53,9 +53,9 @@ entero a = 10
 entero b = 5
 si (a > b) {
     si (a > 8) {
-        imprimir("a es mayor que 8 y mayor que b")
+        consola.imprimir("a es mayor que 8 y mayor que b")
     } sino {
-        imprimir("a es mayor que b pero menor o igual que 8")
+        consola.imprimir("a es mayor que b pero menor o igual que 8")
     }
 }
         "#;
@@ -70,7 +70,7 @@ entero a = 10
 entero b = 5
 entero c = 15
 si ((a > b) && (c > a)) {
-    imprimir("Condición compleja verdadera")
+    consola.imprimir("Condición compleja verdadera")
 }
         "#;
         
@@ -83,7 +83,7 @@ si ((a > b) && (c > a)) {
 bool verdad = verdadero
 bool mentira = falso
 si (verdad y !mentira) {
-    imprimir("Condición en español verdadera")
+    consola.imprimir("Condición en español verdadera")
 }
         "#;
         
@@ -96,7 +96,7 @@ si (verdad y !mentira) {
 cadena texto1 = "Hola"
 cadena texto2 = "Hola"
 si (texto1 == texto2) {
-    imprimir("Las cadenas son iguales")
+    consola.imprimir("Las cadenas son iguales")
 }
         "#;
         
@@ -109,7 +109,7 @@ si (texto1 == texto2) {
 bool valor1 = verdadero
 bool valor2 = falso
 si (valor1 != valor2) {
-    imprimir("Los valores booleanos son diferentes")
+    consola.imprimir("Los valores booleanos son diferentes")
 }
         "#;
         
@@ -122,7 +122,7 @@ si (valor1 != valor2) {
 entero entero_val = 10
 número decimal_val = 10.0
 si (entero_val == decimal_val) {
-    imprimir("Valores numéricos iguales")
+    consola.imprimir("Valores numéricos iguales")
 }
         "#;
         

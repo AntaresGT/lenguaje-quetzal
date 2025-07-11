@@ -7,7 +7,7 @@ mod tests {
     #[test]
     fn test_imprimir_cadena_simple() {
         let codigo = r#"
-imprimir("Hola mundo")
+consola.imprimir("Hola mundo")
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -17,7 +17,7 @@ imprimir("Hola mundo")
     fn test_imprimir_numero_entero() {
         let codigo = r#"
 entero valor_numero = 42
-imprimir(valor_numero.cadena())
+consola.imprimir(valor_numero.cadena())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -27,7 +27,7 @@ imprimir(valor_numero.cadena())
     fn test_imprimir_numero_decimal() {
         let codigo = r#"
 número decimal = 3.14
-imprimir(decimal.cadena())
+consola.imprimir(decimal.cadena())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -37,7 +37,7 @@ imprimir(decimal.cadena())
     fn test_imprimir_booleano() {
         let codigo = r#"
 bool verdad = verdadero
-imprimir(verdad.cadena())
+consola.imprimir(verdad.cadena())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -47,7 +47,7 @@ imprimir(verdad.cadena())
     fn test_imprimir_variable_cadena() {
         let codigo = r#"
 cadena mensaje = "Este es un mensaje"
-imprimir(mensaje)
+consola.imprimir(mensaje)
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -58,7 +58,7 @@ imprimir(mensaje)
         let codigo = r#"
 cadena parte1 = "Hola"
 cadena parte2 = "mundo"
-imprimir(parte1 + " " + parte2)
+consola.imprimir(parte1 + " " + parte2)
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -69,7 +69,7 @@ imprimir(parte1 + " " + parte2)
         let codigo = r#"
 entero a = 10
 entero b = 5
-imprimir((a + b).cadena())
+consola.imprimir((a + b).cadena())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -78,7 +78,7 @@ imprimir((a + b).cadena())
     #[test]
     fn test_imprimir_exito() {
         let codigo = r#"
-imprimir_exito("Operación exitosa")
+consola.imprimir_exito("Operación exitosa")
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -87,7 +87,7 @@ imprimir_exito("Operación exitosa")
     #[test]
     fn test_imprimir_error() {
         let codigo = r#"
-imprimir_error("Mensaje de error")
+consola.imprimir_error("Mensaje de error")
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -96,7 +96,7 @@ imprimir_error("Mensaje de error")
     #[test]
     fn test_imprimir_informacion() {
         let codigo = r#"
-imprimir_informacion("Información importante")
+consola.imprimir_informacion("Información importante")
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -105,7 +105,7 @@ imprimir_informacion("Información importante")
     #[test]
     fn test_imprimir_advertencia() {
         let codigo = r#"
-imprimir_advertencia("Advertencia del sistema")
+consola.imprimir_advertencia("Advertencia del sistema")
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -114,9 +114,9 @@ imprimir_advertencia("Advertencia del sistema")
     #[test]
     fn test_imprimir_multiples_lineas() {
         let codigo = r#"
-imprimir("Primera línea")
-imprimir("Segunda línea")
-imprimir("Tercera línea")
+consola.imprimir("Primera línea")
+consola.imprimir("Segunda línea")
+consolaimprimir("Tercera línea")
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -125,7 +125,7 @@ imprimir("Tercera línea")
     #[test]
     fn test_imprimir_con_escape() {
         let codigo = r#"
-imprimir("Línea con \"comillas\"")
+consola.imprimir("Línea con \"comillas\"")
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -134,7 +134,7 @@ imprimir("Línea con \"comillas\"")
     #[test]
     fn test_imprimir_cadena_vacia() {
         let codigo = r#"
-imprimir("")
+consola.imprimir("")
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -146,7 +146,7 @@ imprimir("")
 cadena obtener_mensaje() {
     retornar "Mensaje desde función"
 }
-imprimir(obtener_mensaje())
+consola.imprimir(obtener_mensaje())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -158,9 +158,9 @@ imprimir(obtener_mensaje())
 entero valor_numero = 123
 número decimal = 45.67
 bool estado = verdadero
-imprimir("Número: " + valor_numero.cadena())
-imprimir("Decimal: " + decimal.cadena())
-imprimir("Estado: " + estado.cadena())
+consola.imprimir("Número: " + valor_numero.cadena())
+consola.imprimir("Decimal: " + decimal.cadena())
+consola.imprimir("Estado: " + estado.cadena())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -172,7 +172,7 @@ imprimir("Estado: " + estado.cadena())
 entero a = 10
 entero b = 20
 entero c = 30
-imprimir("Resultado: " + (a + b * c).cadena())
+consola.imprimir("Resultado: " + (a + b * c).cadena())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -181,7 +181,7 @@ imprimir("Resultado: " + (a + b * c).cadena())
     #[test]
     fn test_error_imprimir_sin_parametros() {
         let codigo = r#"
-imprimir()
+consola.imprimir()
         "#;
         
         // imprimir() sin parámetros es válido - imprime línea vacía
@@ -192,7 +192,7 @@ imprimir()
     fn test_error_imprimir_tipo_incorrecto() {
         let codigo = r#"
 entero valor_numero = 42
-imprimir(valor_numero)  // Debería convertir a cadena primero
+consola.imprimir(valor_numero)  // Debería convertir a cadena primero
         "#;
         
         // Esto podría ser válido si el intérprete hace conversión automática

@@ -11,7 +11,7 @@ mod tests {
 entero numero1 = 10
 entero numero2 = 20
 entero suma = numero1 + numero2
-imprimir("Suma: " + suma.cadena())
+consola.imprimir("Suma: " + suma.cadena())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -29,13 +29,13 @@ número calcular_area(número radio) {
 // Variables principales
 número radio_circulo = 5.0
 número area = calcular_area(radio_circulo)
-imprimir("Área del círculo: " + area.cadena())
+consola.imprimir("Área del círculo: " + area.cadena())
 
 // Condicional
 si (area > 50.0) {
-    imprimir("El círculo es grande")
+    consola.imprimir("El círculo es grande")
 } sino {
-    imprimir("El círculo es pequeño")
+    consola.imprimir("El círculo es pequeño")
 }
         "#;
         
@@ -57,7 +57,7 @@ entero sumar_lista(lista<entero> lista_nums) {
 }
 
 entero total = sumar_lista(numeros)
-imprimir("Total: " + total.cadena())
+consola.imprimir("Total: " + total.cadena())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -81,7 +81,7 @@ cadena mensaje_completo = "Número: " + numero_entero.cadena() +
                          ", Decimal: " + numero_decimal.cadena() + 
                          ", Estado: " + estado.cadena()
 
-imprimir(mensaje_completo)
+consola.imprimir(mensaje_completo)
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -110,7 +110,7 @@ bool mayor = resultado1 > resultado2
 bool menor_igual = resultado3 <= resultado4
 bool igual = a == b
 
-imprimir("Operaciones completadas")
+consola.imprimir("Operaciones completadas")
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -136,7 +136,7 @@ entero procesar_numero(entero num) {
 
 entero numero_inicial = 10
 entero resultado_final = procesar_numero(numero_inicial)
-imprimir("Resultado: " + resultado_final.cadena())
+consola.imprimir("Resultado: " + resultado_final.cadena())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -152,7 +152,7 @@ jsn persona = {
     activo: verdadero
 }
 
-imprimir("Persona creada")
+consola.imprimir("Persona creada")
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -180,7 +180,7 @@ jsn complejo = {
         notificaciones: verdadero
     }
 }
-imprimir("Objeto JSON complejo creado")
+consola.imprimir("Objeto JSON complejo creado")
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -196,14 +196,14 @@ bool tiene_trabajo = falso
 
 si (edad >= 18) {
     si (es_estudiante y !tiene_trabajo) {
-        imprimir("Estudiante adulto sin trabajo")
+        consola.imprimir("Estudiante adulto sin trabajo")
     } sino si (es_estudiante y tiene_trabajo) {
-        imprimir("Estudiante trabajador")
+        consola.imprimir("Estudiante trabajador")
     } sino {
-        imprimir("Adulto no estudiante")
+        consola.imprimir("Adulto no estudiante")
     }
 } sino {
-    imprimir("Menor de edad")
+    consola.imprimir("Menor de edad")
 }
         "#;
         
@@ -222,8 +222,8 @@ contador += 5
 contador *= 2
 mensaje = "Modificado"
 
-imprimir("Contador: " + contador.cadena())
-imprimir("Mensaje: " + mensaje)
+consola.imprimir("Contador: " + contador.cadena())
+consola.imprimir("Mensaje: " + mensaje)
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -250,14 +250,14 @@ entero numero_prueba = 42
 bool resultado_par = es_par(numero_prueba)
 cadena mensaje_final = formatear_resultado(numero_prueba, resultado_par)
 
-// Imprimir resultado
-imprimir(mensaje_final)
+// consola.Imprimir resultado
+consola.imprimir(mensaje_final)
 
 // Lista de números para procesar
 lista<entero> numeros = [10, 15, 20, 25]
 
 // Procesar cada número (simulado)
-imprimir("Procesando números...")
+consola.imprimir("Procesando números...")
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -283,7 +283,7 @@ cadena crear_reporte(entero num, número dec, cadena txt, bool activo) {
 }
 
 cadena reporte = crear_reporte(numero_entero, numero_decimal, texto, estado_activo)
-imprimir(reporte)
+consola.imprimir(reporte)
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());

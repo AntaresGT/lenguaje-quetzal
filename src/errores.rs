@@ -34,6 +34,9 @@ pub enum ErrorQuetzal {
     #[error("Conversión de tipo inválida en línea {linea}: no se puede convertir {tipo_origen} a {tipo_destino}")]
     ConversionInvalida { linea: usize, tipo_origen: String, tipo_destino: String },
     
+    #[error("Error de conversión en línea {linea}: {mensaje}")]
+    ErrorConversion { linea: usize, mensaje: String },
+    
     #[error("Número incorrecto de argumentos en línea {linea}: se esperaban {esperados}, se recibieron {recibidos}")]
     ArgumentosIncorrectos { linea: usize, esperados: usize, recibidos: usize },
     
@@ -147,6 +150,13 @@ impl ErrorQuetzal {
             ErrorQuetzal::ErrorInterno { mensaje } => {
                 eprintln!("{}: {}", 
                     "Error Interno".red().bold(),
+                    mensaje
+                );
+            },
+            ErrorQuetzal::ErrorConversion { linea, mensaje } => {
+                eprintln!("{} línea {}: {}", 
+                    "Error de Conversión".red().bold(),
+                    linea,
                     mensaje
                 );
             },

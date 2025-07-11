@@ -60,6 +60,14 @@ pub enum Nodo {
         linea: usize,
     },
     
+    // Asignación compuesta (+=, -=, etc.)
+    AsignacionCompuesta {
+        nombre: String,
+        operador: String,
+        valor: Box<Nodo>,
+        linea: usize,
+    },
+    
     // Llamada a función
     LlamadaFuncion {
         nombre: String,
@@ -230,6 +238,31 @@ impl AnalizadorSintactico {
         // Verificar si es una declaración de objeto
         if self.coincidir(&TipoToken::Objeto) {
             return self.declaracion_objeto();
+        }
+        
+        // Verificar si es un condicional
+        if self.coincidir(&TipoToken::Si) {
+            return self.condicional();
+        }
+        
+        // Verificar si es un bucle mientras
+        if self.coincidir(&TipoToken::Mientras) {
+            return self.bucle_mientras();
+        }
+        
+        // Verificar si es un bucle para
+        if self.coincidir(&TipoToken::Para) {
+            return self.bucle_para();
+        }
+        
+        // Verificar si es una declaración de retorno
+        if self.coincidir(&TipoToken::Retornar) {
+            return self.declaracion_retorno();
+        }
+        
+        // Verificar si es una declaración de retorno
+        if self.coincidir(&TipoToken::Retornar) {
+            return self.declaracion_retorno();
         }
         
         // Verificar si es una declaración de variable
@@ -522,7 +555,34 @@ impl AnalizadorSintactico {
     
     /// Analiza una expresión
     fn expresion(&mut self) -> ResultadoQuetzal<Nodo> {
-        self.operador_ternario()
+        self.asignacion()
+    }
+    
+    /// Analiza asignaciones (simples y compuestas)
+    fn asignacion(&mut self) -> ResultadoQuetzal<Nodo> {
+        let mut expresion = self.operador_ternario()?;
+        
+        // Verificar si es una asignación compuesta
+        if let Nodo::Identificador(nombre) = &expresion {
+            if self.coincidir(&TipoToken::AsignacionSuma) ||
+               self.coincidir(&TipoToken::AsignacionResta) ||
+               self.coincidir(&TipoToken::AsignacionMult) ||
+               self.coincidir(&TipoToken::AsignacionDiv) ||
+               self.coincidir(&TipoToken::AsignacionMod) {
+                let operador = self.token_anterior().lexema.clone();
+                let valor = Box::new(self.asignacion()?);
+                let linea = self.token_anterior().linea;
+                
+                return Ok(Nodo::AsignacionCompuesta {
+                    nombre: nombre.clone(),
+                    operador,
+                    valor,
+                    linea,
+                });
+            }
+        }
+        
+        Ok(expresion)
     }
     
     /// Analiza operador ternario
@@ -1035,5 +1095,128 @@ impl AnalizadorSintactico {
     /// Obtiene el token anterior
     fn token_anterior(&self) -> &Token {
         &self.tokens[self.posicion_actual - 1]
+    }
+    
+    /// Analiza un condicional si/sino
+    fn condicional(&mut self) -> ResultadoQuetzal<Nodo> {
+        let linea = self.token_anterior().linea;
+        
+        // Expresión de condición
+        let condicion = Box::new(self.expresion()?);
+        
+        // Bloque 'si'
+        let bloque_si = Box::new(self.bloque_o_declaracion()?);
+        
+        // Bloque 'sino' opcional
+        let bloque_sino = if self.coincidir(&TipoToken::Sino) {
+            Some(Box::new(self.bloque_o_declaracion()?))
+        } else {
+            None
+        };
+        
+        Ok(Nodo::Condicional {
+            condicion,
+            bloque_si,
+            bloque_sino,
+            linea,
+        })
+    }
+    
+    /// Analiza un bloque o una sola declaración
+    fn bloque_o_declaracion(&mut self) -> ResultadoQuetzal<Nodo> {
+        if self.coincidir(&TipoToken::LlaveAbre) {
+            // Bloque con llaves
+            let mut declaraciones = Vec::new();
+            
+            while !self.verificar(&TipoToken::LlaveCierra) && !self.esta_al_final() {
+                declaraciones.push(self.declaracion()?);
+            }
+            
+            if !self.coincidir(&TipoToken::LlaveCierra) {
+                return Err(ErrorQuetzal::ErrorSintaxis {
+                    linea: self.token_actual().linea,
+                    mensaje: "Se esperaba '}' después del bloque".to_string(),
+                });
+            }
+            
+            Ok(Nodo::Bloque(declaraciones))
+        } else {
+            // Una sola declaración
+            self.declaracion()
+        }
+    }
+    
+    /// Analiza un bucle mientras
+    fn bucle_mientras(&mut self) -> ResultadoQuetzal<Nodo> {
+        let linea = self.token_anterior().linea;
+        
+        // Expresión de condición
+        let condicion = Box::new(self.expresion()?);
+        
+        // Cuerpo del bucle
+        let cuerpo = Box::new(self.bloque_o_declaracion()?);
+        
+        Ok(Nodo::BucleMientras {
+            condicion,
+            cuerpo,
+            linea,
+        })
+    }
+    
+    /// Analiza un bucle para
+    fn bucle_para(&mut self) -> ResultadoQuetzal<Nodo> {
+        let linea = self.token_anterior().linea;
+        
+        // Variable del bucle
+        let variable = if let TipoToken::Identificador(nom) = &self.token_actual().tipo {
+            let n = nom.clone();
+            self.avanzar();
+            n
+        } else {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Se esperaba el nombre de la variable en bucle para".to_string(),
+            });
+        };
+        
+        // Esperar 'en' 
+        if !self.coincidir(&TipoToken::En) {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Se esperaba 'en' en bucle para".to_string(),
+            });
+        }
+        
+        // Expresión iterable (rango o lista)
+        let iterable = Box::new(self.expresion()?);
+        
+        // Cuerpo del bucle
+        let cuerpo = Box::new(self.bloque_o_declaracion()?);
+        
+        Ok(Nodo::BucleParaCada {
+            variable,
+            iterable,
+            cuerpo,
+            linea,
+        })
+    }
+    
+    /// Analiza una declaración de retorno
+    fn declaracion_retorno(&mut self) -> ResultadoQuetzal<Nodo> {
+        let linea = self.token_anterior().linea;
+        
+        // El valor a retornar es opcional
+        let valor = if self.verificar(&TipoToken::NuevaLinea) || self.esta_al_final() {
+            // Retorno sin valor (implícitamente vacio)
+            None
+        } else {
+            // Retorno con valor
+            Some(Box::new(self.expresion()?))
+        };
+        
+        Ok(Nodo::Retornar {
+            valor,
+            linea,
+        })
     }
 }

@@ -1488,10 +1488,64 @@ impl AnalizadorSintactico {
     fn inicializacion_bucle_para(&mut self) -> ResultadoQuetzal<Nodo> {
         // Verificar si es una declaración de variable con tipo
         if self.es_tipo_dato(&self.token_actual().tipo) {
-            return self.declaracion_variable();
+            return self.declaracion_variable_bucle();
         }
         
         // Si no, debe ser una asignación
         self.asignacion()
+    }
+    
+    /// Analiza una declaración de variable en bucle (por defecto es mutable)
+    fn declaracion_variable_bucle(&mut self) -> ResultadoQuetzal<Nodo> {
+        let linea = self.token_actual().linea;
+        
+        // Tipo de la variable
+        let tipo_dato = match &self.token_actual().tipo {
+            TipoToken::TipoVacio => { self.avanzar(); "vacio".to_string() },
+            TipoToken::TipoEntero => { self.avanzar(); "entero".to_string() },
+            TipoToken::TipoNumero => { self.avanzar(); "número".to_string() },
+            TipoToken::TipoCadena => { self.avanzar(); "cadena".to_string() },
+            TipoToken::TipoBool => { self.avanzar(); "bool".to_string() },
+            TipoToken::TipoLista => { self.avanzar(); "lista".to_string() },
+            TipoToken::TipoJson => { self.avanzar(); "jsn".to_string() },
+            _ => return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Se esperaba un tipo de dato".to_string(),
+            }),
+        };
+        
+        // En bucles, las variables son mutables por defecto (a menos que se especifique explícitamente)
+        let es_mutable = if self.coincidir(&TipoToken::Mut) {
+            true
+        } else {
+            true // Por defecto mutable en bucles
+        };
+        
+        // Nombre de la variable
+        let nombre = if let TipoToken::Identificador(nom) = &self.token_actual().tipo {
+            let n = nom.clone();
+            self.avanzar();
+            n
+        } else {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Se esperaba un nombre de variable".to_string(),
+            });
+        };
+        
+        // Valor inicial (opcional)
+        let valor = if self.coincidir(&TipoToken::Asignacion) {
+            Some(Box::new(self.expresion()?))
+        } else {
+            None
+        };
+        
+        Ok(Nodo::DeclaracionVariable {
+            nombre,
+            tipo_dato,
+            es_mutable,
+            valor,
+            linea,
+        })
     }
 }

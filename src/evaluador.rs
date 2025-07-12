@@ -235,10 +235,20 @@ impl Evaluador {
                 Ok((ultimo_valor, ControlFlujo::Ninguno))
             },
             
-            Nodo::DeclaracionVariable { nombre, tipo_dato, es_mutable, valor, linea: _ } => {
+            Nodo::DeclaracionVariable { nombre, tipo_dato, es_mutable, valor, linea } => {
                 // Evaluar el valor inicial si existe
                 let valor_inicial = if let Some(expr_valor) = valor {
                     let (val, _) = self.evaluar_con_entorno(expr_valor, entorno.clone())?;
+                    
+                    // Validar compatibilidad de tipos
+                    if !self.validar_tipo_compatible(&val, tipo_dato) {
+                        return Err(ErrorQuetzal::ErrorSintaxis {
+                            linea: *linea,
+                            mensaje: format!("Tipo incompatible: no se puede asignar {} a variable de tipo {}", 
+                                self.obtener_nombre_tipo(&val), tipo_dato),
+                        });
+                    }
+                    
                     val
                 } else {
                     // Valor por defecto según el tipo
@@ -411,16 +421,44 @@ impl Evaluador {
                 // Evaluar el valor a asignar
                 let (valor_evaluado, _) = self.evaluar_con_entorno(valor, entorno.clone())?;
                 
-                // Asignar el valor a la variable (crear si no existe)
-                {
-                    let mut entorno_mut = entorno.borrow_mut();
+                // Verificar si la variable existe
+                let variable_existente = entorno.borrow().obtener_variable(nombre);
+                
+                if let Some(var_actual) = variable_existente {
+                    // Variable existe - validar mutabilidad
+                    if matches!(var_actual.tipo_variable, TipoVariable::Inmutable) {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea: *linea,
+                            mensaje: format!("No se puede reasignar la variable inmutable '{}'", nombre),
+                        });
+                    }
+                    
+                    // Validar compatibilidad de tipos
+                    if !self.validar_tipo_compatible(&valor_evaluado, &var_actual.tipo_dato) {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea: *linea,
+                            mensaje: format!("Tipo incompatible: no se puede asignar {} a variable de tipo {}", 
+                                self.obtener_nombre_tipo(&valor_evaluado), var_actual.tipo_dato),
+                        });
+                    }
+                    
+                    // Actualizar variable existente
+                    let nueva_variable = Variable::nueva(
+                        nombre.clone(),
+                        valor_evaluado.clone(),
+                        var_actual.tipo_variable,
+                        var_actual.tipo_dato.clone(),
+                    );
+                    entorno.borrow_mut().definir_variable(nombre.clone(), nueva_variable)?;
+                } else {
+                    // Variable no existe - crear nueva (auto-inferir tipo como mutable)
                     let variable = Variable::nueva(
                         nombre.clone(),
                         valor_evaluado.clone(),
                         TipoVariable::Mutable,
                         "auto".to_string()
                     );
-                    entorno_mut.definir_variable(nombre.clone(), variable);
+                    entorno.borrow_mut().definir_variable(nombre.clone(), variable)?;
                 }
                 
                 Ok((valor_evaluado, ControlFlujo::Ninguno))
@@ -770,8 +808,13 @@ impl Evaluador {
                 valores_argumentos.push(valor);
             }
             
+            // Contar parámetros obligatorios (sin valor por defecto)
+            let parametros_obligatorios = funcion.parametros.iter()
+                .filter(|p| p.valor_defecto.is_none())
+                .count();
+            
             // Verificar número de argumentos
-            if valores_argumentos.len() != funcion.parametros.len() {
+            if valores_argumentos.len() < parametros_obligatorios || valores_argumentos.len() > funcion.parametros.len() {
                 return Err(ErrorQuetzal::ArgumentosIncorrectos {
                     linea,
                     esperados: funcion.parametros.len(),
@@ -790,9 +833,24 @@ impl Evaluador {
                     TipoVariable::Inmutable
                 };
                 
+                // Determinar el valor a usar
+                let valor = if i < valores_argumentos.len() {
+                    // Usar argumento proporcionado
+                    valores_argumentos[i].clone()
+                } else if let Some(valor_defecto) = &parametro.valor_defecto {
+                    // Usar valor por defecto
+                    valor_defecto.clone()
+                } else {
+                    return Err(ErrorQuetzal::ArgumentosIncorrectos {
+                        linea,
+                        esperados: parametros_obligatorios,
+                        recibidos: valores_argumentos.len(),
+                    });
+                };
+                
                 let variable = Variable::nueva(
                     parametro.nombre.clone(),
-                    valores_argumentos[i].clone(),
+                    valor,
                     tipo_variable,
                     parametro.tipo_dato.clone(),
                 );
@@ -1517,6 +1575,35 @@ impl Evaluador {
         }
     }
     
+    /// Valida si un valor es compatible con un tipo de dato específico
+    fn validar_tipo_compatible(&self, valor: &Valor, tipo_esperado: &str) -> bool {
+        match (valor, tipo_esperado) {
+            (Valor::Vacio, "vacio") => true,
+            (Valor::Entero(_), "entero") => true,
+            (Valor::Numero(_), "número") => true,
+            (Valor::Cadena(_), "cadena") => true,
+            (Valor::Bool(_), "bool") => true,
+            (Valor::Lista(_), "lista") => true,
+            (Valor::Json(_), "jsn") => true,
+            // Permitir conversiones automáticas compatibles
+            (Valor::Entero(_), "número") => true, // entero puede ser número
+            _ => false,
+        }
+    }
+    
+    /// Obtiene el nombre del tipo de un valor
+    fn obtener_nombre_tipo(&self, valor: &Valor) -> &str {
+        match valor {
+            Valor::Vacio => "vacio",
+            Valor::Entero(_) => "entero",
+            Valor::Numero(_) => "número",
+            Valor::Cadena(_) => "cadena",
+            Valor::Bool(_) => "bool",
+            Valor::Lista(_) => "lista",
+            Valor::Json(_) => "jsn",
+        }
+    }
+    
     /// Evalúa una operación binaria
     fn evaluar_operacion_binaria(&self, izquierdo: &Valor, operador: &str, derecho: &Valor) -> ResultadoQuetzal<Valor> {
         match operador {
@@ -1790,29 +1877,8 @@ impl Evaluador {
                     },
                     "codificar_uri" => {
                         // Implementación básica de codificación URI
-                        let encoded = urlencoding::encode(cadena);
-                        Ok((Valor::Cadena(encoded.to_string()), ControlFlujo::Ninguno))
-                    },
-                    "decodificar_uri" => {
-                        // Implementación básica de decodificación URI
-                        match urlencoding::decode(cadena) {
-                            Ok(decoded) => Ok((Valor::Cadena(decoded.to_string()), ControlFlujo::Ninguno)),
-                            Err(_) => Err(ErrorQuetzal::ErrorConversion {
-                                linea,
-                                mensaje: "Error al decodificar URI".to_string(),
-                            }),
-                        }
-                    },
-                    // Conversiones de tipo
-                    "cadena" => Ok((objeto.clone(), ControlFlujo::Ninguno)),
-                    "numero" => {
-                        match cadena.trim().parse::<f64>() {
-                            Ok(n) => Ok((Valor::Numero(n), ControlFlujo::Ninguno)),
-                            Err(_) => Err(ErrorQuetzal::ErrorConversion {
-                                linea: 0,
-                                mensaje: "No se puede convertir cadena a número".to_string(),
-                            }),
-                        }
+                        let encoded = urlencoding::encode(cadena).to_string();
+                        Ok((Valor::Cadena(encoded), ControlFlujo::Ninguno))
                     },
                     "entero" => {
                         match cadena.trim().parse::<i64>() {

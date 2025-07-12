@@ -405,11 +405,58 @@ impl AnalizadorLexico {
         let columna = self.columna_actual - 1;
         
         while self.mirar() != Some('"') && !self.esta_al_final() {
-            if self.mirar() == Some('\n') {
-                self.linea_actual += 1;
-                self.columna_actual = 1;
+            let c = self.avanzar();
+            
+            if c == '\\' {
+                // Procesar secuencia de escape
+                if let Some(siguiente) = self.mirar() {
+                    match siguiente {
+                        '"' => {
+                            valor.push('"');
+                            self.avanzar(); // Consumir el carácter escapado
+                        },
+                        '\\' => {
+                            valor.push('\\');
+                            self.avanzar();
+                        },
+                        'n' => {
+                            valor.push('\n');
+                            self.avanzar();
+                        },
+                        't' => {
+                            valor.push('\t');
+                            self.avanzar();
+                        },
+                        'r' => {
+                            valor.push('\r');
+                            self.avanzar();
+                        },
+                        '0' => {
+                            valor.push('\0');
+                            self.avanzar();
+                        },
+                        _ => {
+                            // Secuencia de escape no válida
+                            return Err(ErrorQuetzal::ErrorSintaxis {
+                                linea: self.linea_actual,
+                                mensaje: format!("Secuencia de escape no válida: \\{}", siguiente),
+                            });
+                        }
+                    }
+                } else {
+                    // Backslash al final de la cadena
+                    return Err(ErrorQuetzal::ErrorSintaxis {
+                        linea: self.linea_actual,
+                        mensaje: "Secuencia de escape incompleta".to_string(),
+                    });
+                }
+            } else {
+                if c == '\n' {
+                    self.linea_actual += 1;
+                    self.columna_actual = 1;
+                }
+                valor.push(c);
             }
-            valor.push(self.avanzar());
         }
         
         if self.esta_al_final() {

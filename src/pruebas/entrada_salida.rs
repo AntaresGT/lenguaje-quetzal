@@ -116,7 +116,7 @@ consola.imprimir_advertencia("Advertencia del sistema")
         let codigo = r#"
 consola.imprimir("Primera línea")
 consola.imprimir("Segunda línea")
-consolaimprimir("Tercera línea")
+consola.imprimir("Tercera línea")
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());

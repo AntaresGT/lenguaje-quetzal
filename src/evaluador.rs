@@ -297,6 +297,18 @@ impl Evaluador {
             },
             
             Nodo::DeclaracionFuncion { nombre, parametros, tipo_retorno, cuerpo, es_asincrona, .. } => {
+                // Validar que funciones no-vacías tengan cuerpo
+                if tipo_retorno != "vacio" {
+                    if let Nodo::Bloque(sentencias) = cuerpo.as_ref() {
+                        if sentencias.is_empty() {
+                            return Err(ErrorQuetzal::ErrorSintaxis {
+                                linea: 0,
+                                mensaje: format!("La función '{}' de tipo '{}' no puede tener un bloque vacío", nombre, tipo_retorno),
+                            });
+                        }
+                    }
+                }
+                
                 let funcion = FuncionDefinida {
                     parametros: parametros.clone(),
                     tipo_retorno: tipo_retorno.clone(),
@@ -1112,8 +1124,27 @@ impl Evaluador {
                             Valor::Entero(n) => Ok((Valor::Numero(n as f64), ControlFlujo::Ninguno)),
                             Valor::Numero(n) => Ok((Valor::Numero(n), ControlFlujo::Ninguno)),
                             Valor::Cadena(s) => {
-                                match s.trim().parse::<f64>() {
-                                    Ok(n) => Ok((Valor::Numero(n), ControlFlujo::Ninguno)),
+                                // Validar longitud de la cadena como proxy para números muy grandes
+                                let trimmed = s.trim();
+                                if trimmed.len() > 15 {  // Números con más de 15 dígitos son potencialmente problemáticos
+                                    return Err(ErrorQuetzal::ErrorConversion {
+                                        linea: 0,
+                                        mensaje: "Número demasiado grande para convertir".to_string(),
+                                    });
+                                }
+                                
+                                match trimmed.parse::<f64>() {
+                                    Ok(n) => {
+                                        // Verificar si el número es finito y está en un rango seguro
+                                        if n.is_finite() && !n.is_infinite() {
+                                            Ok((Valor::Numero(n), ControlFlujo::Ninguno))
+                                        } else {
+                                            Err(ErrorQuetzal::ErrorConversion {
+                                                linea: 0,
+                                                mensaje: "Número fuera del rango representable".to_string(),
+                                            })
+                                        }
+                                    },
                                     Err(_) => Err(ErrorQuetzal::ErrorConversion {
                                         linea: 0,
                                         mensaje: "No se puede convertir cadena a número".to_string(),
@@ -1192,11 +1223,11 @@ impl Evaluador {
                     Valor::Numero(n) => Ok((Valor::Numero(n), ControlFlujo::Ninguno)),
                     Valor::Cadena(s) => {
                         let trimmed = s.trim();
-                        // Verificar si es un número muy grande (más de 18 dígitos para i64)
-                        if trimmed.len() > 18 {
+                        // Verificar si es un número muy grande (más de 15 dígitos)
+                        if trimmed.len() > 15 {
                             return Err(ErrorQuetzal::ErrorConversion {
                                 linea: 0,
-                                mensaje: "Número demasiado grande para convertir a entero".to_string(),
+                                mensaje: "Número demasiado grande para convertir".to_string(),
                             });
                         }
                         
@@ -1204,7 +1235,14 @@ impl Evaluador {
                         if let Ok(i) = trimmed.parse::<i64>() {
                             Ok((Valor::Entero(i), ControlFlujo::Ninguno))
                         } else if let Ok(f) = trimmed.parse::<f64>() {
-                            Ok((Valor::Numero(f), ControlFlujo::Ninguno))
+                            if f.is_finite() && !f.is_infinite() {
+                                Ok((Valor::Numero(f), ControlFlujo::Ninguno))
+                            } else {
+                                Err(ErrorQuetzal::ErrorConversion {
+                                    linea: 0,
+                                    mensaje: "Número fuera del rango representable".to_string(),
+                                })
+                            }
                         } else {
                             Err(ErrorQuetzal::ErrorConversion {
                                 linea: 0,
@@ -1275,8 +1313,26 @@ impl Evaluador {
                         mensaje: "El método 'numero' no acepta argumentos".to_string(),
                     });
                 }
-                match cadena.trim().parse::<f64>() {
-                    Ok(n) => Ok((Valor::Numero(n), ControlFlujo::Ninguno)),
+                let trimmed = cadena.trim();
+                // Verificar si es un número muy grande (más de 15 dígitos)
+                if trimmed.len() > 15 {
+                    return Err(ErrorQuetzal::ErrorConversion {
+                        linea: 0,
+                        mensaje: "Número demasiado grande para convertir".to_string(),
+                    });
+                }
+                
+                match trimmed.parse::<f64>() {
+                    Ok(n) => {
+                        if n.is_finite() && !n.is_infinite() {
+                            Ok((Valor::Numero(n), ControlFlujo::Ninguno))
+                        } else {
+                            Err(ErrorQuetzal::ErrorConversion {
+                                linea: 0,
+                                mensaje: "Número fuera del rango representable".to_string(),
+                            })
+                        }
+                    },
                     Err(_) => Err(ErrorQuetzal::ErrorConversion {
                         linea: 0,
                         mensaje: "No se puede convertir cadena a número".to_string(),
@@ -2133,8 +2189,26 @@ impl Evaluador {
                     Valor::Entero(n) => Valor::Numero(*n as f64),
                     Valor::Numero(n) => Valor::Numero(*n),
                     Valor::Cadena(s) => {
-                        match s.trim().parse::<f64>() {
-                            Ok(n) => Valor::Numero(n),
+                        let trimmed = s.trim();
+                        // Verificar si es un número muy grande (más de 15 dígitos)
+                        if trimmed.len() > 15 {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "Número demasiado grande para convertir".to_string(),
+                            });
+                        }
+                        
+                        match trimmed.parse::<f64>() {
+                            Ok(n) => {
+                                if n.is_finite() && !n.is_infinite() {
+                                    Valor::Numero(n)
+                                } else {
+                                    return Err(ErrorQuetzal::ErrorEjecucion {
+                                        linea,
+                                        mensaje: "Número fuera del rango representable".to_string(),
+                                    });
+                                }
+                            },
                             Err(_) => return Err(ErrorQuetzal::ErrorEjecucion {
                                 linea,
                                 mensaje: format!("No se puede convertir '{}' a número", s),

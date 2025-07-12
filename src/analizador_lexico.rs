@@ -380,21 +380,33 @@ impl AnalizadorLexico {
         let linea = self.linea_actual;
         let columna = self.columna_actual - 2;
         let mut cerrado = false;
+        let mut nivel_anidacion = 1; // Empezamos con 1 porque ya encontramos el /*
         
-        while !self.esta_al_final() {
-            if self.mirar() == Some('*') && self.mirar_siguiente() == Some('/') {
-                self.avanzar(); // Saltar *
-                self.avanzar(); // Saltar /
-                cerrado = true;
-                break;
+        while !self.esta_al_final() && nivel_anidacion > 0 {
+            if self.mirar() == Some('/') && self.mirar_siguiente() == Some('*') {
+                // Encontramos otro /* - incrementar nivel (comentario anidado)
+                comentario.push(self.avanzar()); // /
+                comentario.push(self.avanzar()); // *
+                nivel_anidacion += 1;
+            } else if self.mirar() == Some('*') && self.mirar_siguiente() == Some('/') {
+                // Encontramos */ - decrementar nivel
+                nivel_anidacion -= 1;
+                if nivel_anidacion > 0 {
+                    comentario.push(self.avanzar()); // *
+                    comentario.push(self.avanzar()); // /
+                } else {
+                    self.avanzar(); // Saltar *
+                    self.avanzar(); // Saltar /
+                    cerrado = true;
+                }
+            } else {
+                let caracter = self.avanzar();
+                if caracter == '\n' {
+                    self.linea_actual += 1;
+                    self.columna_actual = 1;
+                }
+                comentario.push(caracter);
             }
-            
-            let caracter = self.avanzar();
-            if caracter == '\n' {
-                self.linea_actual += 1;
-                self.columna_actual = 1;
-            }
-            comentario.push(caracter);
         }
         
         if !cerrado {

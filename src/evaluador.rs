@@ -384,17 +384,27 @@ impl Evaluador {
             },
             
             Nodo::LlamadaMetodo { objeto, metodo, argumentos, linea } => {
-                // Evaluar la expresión del objeto primero
-                let (valor_objeto, _) = self.evaluar_con_entorno(objeto, entorno.clone())?;
-                
-                // Evaluar argumentos
+                // Evaluar argumentos primero
                 let mut args_evaluados = Vec::new();
                 for arg in argumentos {
                     let (valor_arg, _) = self.evaluar_con_entorno(arg, entorno.clone())?;
                     args_evaluados.push(valor_arg);
                 }
                 
-                // Llamar al método en el valor del objeto
+                // Métodos que modifican la variable original (como agregar)
+                if metodo == "agregar" || metodo == "quitar" || metodo == "limpiar" {
+                    if let Nodo::Identificador(nombre_var) = objeto.as_ref() {
+                        return self.evaluar_metodo_mutante(nombre_var, metodo, &args_evaluados, *linea, entorno);
+                    } else {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea: *linea,
+                            mensaje: format!("El método '{}' solo se puede llamar en variables", metodo),
+                        });
+                    }
+                }
+                
+                // Métodos que no modifican (como longitud, primero, ultimo, etc.)
+                let (valor_objeto, _) = self.evaluar_con_entorno(objeto, entorno.clone())?;
                 self.evaluar_metodo_en_valor(&valor_objeto, metodo, &args_evaluados, *linea)
             },
             
@@ -532,6 +542,72 @@ impl Evaluador {
                 }
                 
                 Ok((resultado, ControlFlujo::Ninguno))
+            },
+            
+            Nodo::AsignacionIndice { objeto, indice, valor, linea } => {
+                // Evaluar el objeto (debe ser una lista)
+                let (valor_objeto, _) = self.evaluar_con_entorno(objeto, entorno.clone())?;
+                let (valor_indice, _) = self.evaluar_con_entorno(indice, entorno.clone())?;
+                let (nuevo_valor, _) = self.evaluar_con_entorno(valor, entorno.clone())?;
+                
+                // Verificar que el índice sea un entero
+                let indice_usize = match valor_indice {
+                    Valor::Entero(i) => {
+                        if i < 0 {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea: *linea,
+                                mensaje: format!("Índice negativo: {}", i),
+                            });
+                        }
+                        i as usize
+                    },
+                    _ => {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea: *linea,
+                            mensaje: "El índice debe ser un número entero".to_string(),
+                        });
+                    }
+                };
+                
+                // Obtener la variable que contiene la lista (necesitamos el nombre)
+                if let Nodo::Identificador(nombre_var) = objeto.as_ref() {
+                    let mut entorno_ref = entorno.borrow_mut();
+                    if let Some(variable) = entorno_ref.variables.get_mut(nombre_var) {
+                        if !variable.es_mutable() {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea: *linea,
+                                mensaje: format!("No se puede modificar la lista inmutable '{}'", nombre_var),
+                            });
+                        }
+                        
+                        if let Valor::Lista(ref mut lista) = variable.valor {
+                            if indice_usize >= lista.len() {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea: *linea,
+                                    mensaje: format!("Índice fuera de rango: {} (tamaño: {})", indice_usize, lista.len()),
+                                });
+                            }
+                            
+                            lista[indice_usize] = nuevo_valor.clone();
+                            Ok((nuevo_valor, ControlFlujo::Ninguno))
+                        } else {
+                            Err(ErrorQuetzal::ErrorEjecucion {
+                                linea: *linea,
+                                mensaje: format!("'{}' no es una lista", nombre_var),
+                            })
+                        }
+                    } else {
+                        Err(ErrorQuetzal::VariableNoDefinida {
+                            linea: *linea,
+                            nombre: nombre_var.clone(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: *linea,
+                        mensaje: "Solo se puede asignar a índices de variables".to_string(),
+                    })
+                }
             },
             
             Nodo::BuclePara { inicializacion, condicion, incremento, cuerpo, linea: _ } => {
@@ -849,7 +925,12 @@ impl Evaluador {
                     args_evaluados.push(valor_arg);
                 }
                 
-                // Usar el nuevo sistema de métodos
+                // Verificar si es un método que modifica la variable (mutante)
+                if nombre_metodo == "agregar" || nombre_metodo == "quitar" || nombre_metodo == "limpiar" {
+                    return self.evaluar_metodo_mutante(nombre_variable, nombre_metodo, &args_evaluados, linea, entorno);
+                }
+                
+                // Para métodos que no modifican, usar el sistema estándar
                 return self.evaluar_metodo_en_valor(&valor_variable, nombre_metodo, &args_evaluados, linea);
             } else {
                 // Para cadenas de métodos múltiples, usar el sistema anterior
@@ -2119,6 +2200,26 @@ impl Evaluador {
                 match miembro {
                     "longitud" => Ok((Valor::Entero(lista.len() as i64), ControlFlujo::Ninguno)),
                     "esta_vacia" => Ok((Valor::Bool(lista.is_empty()), ControlFlujo::Ninguno)),
+                    "ultimo" => {
+                        if lista.is_empty() {
+                            Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "No se puede obtener el último elemento de una lista vacía".to_string(),
+                            })
+                        } else {
+                            Ok((lista.last().unwrap().clone(), ControlFlujo::Ninguno))
+                        }
+                    },
+                    "primero" => {
+                        if lista.is_empty() {
+                            Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "No se puede obtener el primer elemento de una lista vacía".to_string(),
+                            })
+                        } else {
+                            Ok((lista.first().unwrap().clone(), ControlFlujo::Ninguno))
+                        }
+                    },
                     _ => Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
                         mensaje: format!("La función '{}' no está definida para listas", miembro),
@@ -2253,18 +2354,6 @@ impl Evaluador {
                 Ok((resultado, ControlFlujo::Ninguno))
             },
             
-            // Métodos de cadena
-            "longitud" => {
-                if let Valor::Cadena(s) = valor {
-                    Ok((Valor::Entero(s.chars().count() as i64), ControlFlujo::Ninguno))
-                } else {
-                    Err(ErrorQuetzal::ErrorEjecucion {
-                        linea,
-                        mensaje: format!("El método 'longitud' solo es válido para cadenas"),
-                    })
-                }
-            },
-            
             "mayuscula" => {
                 if let Valor::Cadena(s) = valor {
                     Ok((Valor::Cadena(s.to_uppercase()), ControlFlujo::Ninguno))
@@ -2370,18 +2459,6 @@ impl Evaluador {
                     Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
                         mensaje: format!("El método 'unir_lineas' solo es válido para listas"),
-                    })
-                }
-            },
-            
-            // Métodos adicionales de cadena
-            "esta_vacia" => {
-                if let Valor::Cadena(s) = valor {
-                    Ok((Valor::Bool(s.is_empty()), ControlFlujo::Ninguno))
-                } else {
-                    Err(ErrorQuetzal::ErrorEjecucion {
-                        linea,
-                        mensaje: format!("El método 'esta_vacia' solo es válido para cadenas"),
                     })
                 }
             },
@@ -2826,12 +2903,196 @@ impl Evaluador {
                 }
             },
             
+            // Métodos específicos de listas
+            "primero" => {
+                if let Valor::Lista(lista) = valor {
+                    if lista.is_empty() {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "No se puede obtener el primer elemento de una lista vacía".to_string(),
+                        })
+                    } else {
+                        Ok((lista.first().unwrap().clone(), ControlFlujo::Ninguno))
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'primero' solo es válido para listas"),
+                    })
+                }
+            },
+            
+            "ultimo" => {
+                if let Valor::Lista(lista) = valor {
+                    if lista.is_empty() {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "No se puede obtener el último elemento de una lista vacía".to_string(),
+                        })
+                    } else {
+                        Ok((lista.last().unwrap().clone(), ControlFlujo::Ninguno))
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'ultimo' solo es válido para listas"),
+                    })
+                }
+            },
+            
+            "invertir" => {
+                if let Valor::Lista(lista) = valor {
+                    let mut lista_invertida = lista.clone();
+                    lista_invertida.reverse();
+                    Ok((Valor::Lista(lista_invertida), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'invertir' solo es válido para listas"),
+                    })
+                }
+            },
+            
+            "ordenar" => {
+                if let Valor::Lista(lista) = valor {
+                    let mut lista_ordenada = lista.clone();
+                    lista_ordenada.sort_by(|a, b| {
+                        match (a, b) {
+                            (Valor::Entero(x), Valor::Entero(y)) => x.cmp(y),
+                            (Valor::Numero(x), Valor::Numero(y)) => x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal),
+                            (Valor::Cadena(x), Valor::Cadena(y)) => x.cmp(y),
+                            _ => std::cmp::Ordering::Equal,
+                        }
+                    });
+                    Ok((Valor::Lista(lista_ordenada), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'ordenar' solo es válido para listas"),
+                    })
+                }
+            },
+            
+            "longitud" => {
+                match valor {
+                    Valor::Lista(lista) => Ok((Valor::Entero(lista.len() as i64), ControlFlujo::Ninguno)),
+                    Valor::Cadena(cadena) => Ok((Valor::Entero(cadena.chars().count() as i64), ControlFlujo::Ninguno)),
+                    _ => Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'longitud' solo es válido para cadenas y listas"),
+                    })
+                }
+            },
+            
+            "esta_vacia" => {
+                match valor {
+                    Valor::Lista(lista) => Ok((Valor::Bool(lista.is_empty()), ControlFlujo::Ninguno)),
+                    Valor::Cadena(cadena) => Ok((Valor::Bool(cadena.is_empty()), ControlFlujo::Ninguno)),
+                    _ => Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'esta_vacia' solo es válido para cadenas y listas"),
+                    })
+                }
+            },
+            
             _ => {
                 Err(ErrorQuetzal::ErrorEjecucion {
                     linea,
                     mensaje: format!("Método '{}' no reconocido para tipo {}", metodo, valor.tipo_como_cadena()),
                 })
             }
+        }
+    }
+    
+    /// Evalúa métodos que modifican la variable original (métodos mutantes)
+    fn evaluar_metodo_mutante(&mut self, nombre_var: &str, metodo: &str, argumentos: &[Valor], linea: usize, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
+        let mut entorno_ref = entorno.borrow_mut();
+        
+        if let Some(variable) = entorno_ref.variables.get_mut(nombre_var) {
+            if !variable.es_mutable() {
+                return Err(ErrorQuetzal::ErrorEjecucion {
+                    linea,
+                    mensaje: format!("No se puede modificar la variable inmutable '{}'", nombre_var),
+                });
+            }
+            
+            match (&mut variable.valor, metodo) {
+                (Valor::Lista(ref mut lista), "agregar") => {
+                    if argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'agregar' requiere un argumento".to_string(),
+                        });
+                    }
+                    
+                    let elemento = &argumentos[0];
+                    
+                    // TODO: Validación de tipos para listas tipadas se puede agregar aquí
+                    if let Valor::Vacio = elemento {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "No se puede agregar un valor vacío a la lista".to_string(),
+                        });
+                    }
+                    
+                    lista.push(elemento.clone());
+                    Ok((Valor::Entero(lista.len() as i64), ControlFlujo::Ninguno))
+                },
+                
+                (Valor::Lista(ref mut lista), "quitar") => {
+                    if argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'quitar' requiere un índice".to_string(),
+                        });
+                    }
+                    
+                    let indice = match &argumentos[0] {
+                        Valor::Entero(i) => {
+                            if *i < 0 {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: format!("Índice negativo: {}", i),
+                                });
+                            }
+                            *i as usize
+                        },
+                        _ => {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El índice debe ser un número entero".to_string(),
+                            });
+                        }
+                    };
+                    
+                    if indice >= lista.len() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: format!("Índice fuera de rango: {} (tamaño: {})", indice, lista.len()),
+                        });
+                    }
+                    
+                    let elemento_quitado = lista.remove(indice);
+                    Ok((elemento_quitado, ControlFlujo::Ninguno))
+                },
+                
+                (Valor::Lista(ref mut lista), "limpiar") => {
+                    lista.clear();
+                    Ok((Valor::Vacio, ControlFlujo::Ninguno))
+                },
+                
+                _ => {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método '{}' no está disponible para el tipo {}", metodo, variable.valor.tipo_como_cadena()),
+                    })
+                }
+            }
+        } else {
+            Err(ErrorQuetzal::VariableNoDefinida {
+                linea,
+                nombre: nombre_var.to_string(),
+            })
         }
     }
 }

@@ -14,3 +14,6 @@ pub mod conversiones;
 pub mod sintaxis_y_comentarios;
 pub mod integracion;
 pub mod funciones_cadena_avanzadas;
+pub mod metodos_listas;
+pub mod asignacion_indices;
+pub mod metodos_mutantes;

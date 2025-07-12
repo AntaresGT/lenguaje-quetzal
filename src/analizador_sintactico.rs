@@ -68,6 +68,14 @@ pub enum Nodo {
         linea: usize,
     },
     
+    // Asignación por índice (lista[indice] = valor)
+    AsignacionIndice {
+        objeto: Box<Nodo>,
+        indice: Box<Nodo>,
+        valor: Box<Nodo>,
+        linea: usize,
+    },
+    
     // Llamada a función
     LlamadaFuncion {
         nombre: String,
@@ -668,7 +676,21 @@ impl AnalizadorSintactico {
     fn asignacion(&mut self) -> ResultadoQuetzal<Nodo> {
         let mut expresion = self.operador_ternario()?;
         
-        // Verificar si es una asignación
+        // Verificar si es una asignación por índice (expresion[indice] = valor)
+        if let Nodo::AccesoIndice { objeto, indice, linea } = &expresion {
+            if self.coincidir(&TipoToken::Asignacion) {
+                let valor = Box::new(self.asignacion()?);
+                
+                return Ok(Nodo::AsignacionIndice {
+                    objeto: objeto.clone(),
+                    indice: indice.clone(),
+                    valor,
+                    linea: *linea,
+                });
+            }
+        }
+        
+        // Verificar si es una asignación de variable simple
         if let Nodo::Identificador(nombre) = &expresion {
             if self.coincidir(&TipoToken::Asignacion) {
                 // Asignación simple (=)

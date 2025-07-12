@@ -375,10 +375,21 @@ impl AnalizadorSintactico {
         }
         
         let mut parametros = Vec::new();
+        let mut nombres_parametros = std::collections::HashSet::new();
         
         if !self.verificar(&TipoToken::ParentesisCierra) {
             loop {
                 let parametro = self.parametro_funcion()?;
+                
+                // Verificar parámetros duplicados
+                if nombres_parametros.contains(&parametro.nombre) {
+                    return Err(ErrorQuetzal::ErrorSintaxis {
+                        linea: self.token_actual().linea,
+                        mensaje: format!("El parámetro '{}' está duplicado", parametro.nombre),
+                    });
+                }
+                nombres_parametros.insert(parametro.nombre.clone());
+                
                 parametros.push(parametro);
                 
                 if !self.coincidir(&TipoToken::Coma) {

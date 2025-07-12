@@ -225,7 +225,7 @@ entero resultado = sumar(5)  // Faltan parámetros
         let codigo = r#"
 vacio hacer_algo() {
     entero x = 5
-    entero y = x * 2
+    entero z = x * 2
 }
 hacer_algo()
         "#;
@@ -291,6 +291,19 @@ entero sumar(entero a, entero b = 10) {
     retornar a + b
 }
 entero resultado = sumar(5)
+        "#;
+        
+        assert!(interprete::interpretar(codigo).is_ok());
+    }
+
+    #[test]
+    fn test_funcion_con_parametros_mutables() {
+        let codigo = r#"
+entero incrementar(entero mut x) {
+    x = x + 1
+    retornar x
+}
+entero resultado = incrementar(5)
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());

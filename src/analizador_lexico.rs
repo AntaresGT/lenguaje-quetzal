@@ -379,11 +379,13 @@ impl AnalizadorLexico {
         let mut comentario = String::new();
         let linea = self.linea_actual;
         let columna = self.columna_actual - 2;
+        let mut cerrado = false;
         
         while !self.esta_al_final() {
             if self.mirar() == Some('*') && self.mirar_siguiente() == Some('/') {
                 self.avanzar(); // Saltar *
                 self.avanzar(); // Saltar /
+                cerrado = true;
                 break;
             }
             
@@ -393,6 +395,13 @@ impl AnalizadorLexico {
                 self.columna_actual = 1;
             }
             comentario.push(caracter);
+        }
+        
+        if !cerrado {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea,
+                mensaje: "Comentario de bloque sin cerrar: se esperaba '*/'".to_string(),
+            });
         }
         
         Ok(Token::nuevo(TipoToken::ComentarioBloque(comentario.clone()), format!("/*{}*/", comentario), linea, columna))

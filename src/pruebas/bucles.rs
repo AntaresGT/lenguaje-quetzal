@@ -7,8 +7,8 @@ mod tests {
     #[test]
     fn test_bucle_para_basico() {
         let codigo = r#"
-para (entero i = 0; i < 5; i = i + 1) {
-    imprimir("Iteración: " + i.cadena())
+para (entero mut i = 0; i < 5; i = i + 1) {
+    consola.imprimir("Iteración: " + i.cadena())
 }
         "#;
         
@@ -18,9 +18,9 @@ para (entero i = 0; i < 5; i = i + 1) {
     #[test]
     fn test_bucle_mientras() {
         let codigo = r#"
-entero contador = 0
+entero mut contador = 0
 mientras (contador < 3) {
-    imprimir("Contador: " + contador.cadena())
+    consola.imprimir("Contador: " + contador.cadena())
     contador = contador + 1
 }
         "#;
@@ -31,9 +31,9 @@ mientras (contador < 3) {
     #[test]
     fn test_bucle_hacer_mientras() {
         let codigo = r#"
-entero valor_numero = 1
+entero mut valor_numero = 1
 hacer {
-    imprimir("Número: " + valor_numero.cadena())
+    consola.imprimir("Número: " + valor_numero.cadena())
     valor_numero = valor_numero + 1
 } mientras (valor_numero <= 3)
         "#;
@@ -46,7 +46,7 @@ hacer {
         let codigo = r#"
 lista numeros = [1, 2, 3, 4, 5]
 para (valor_numero en numeros) {
-    imprimir("Elemento: " + valor_numero.cadena())
+    consola.imprimir("Elemento: " + valor_numero.cadena())
 }
         "#;
         
@@ -58,7 +58,7 @@ para (valor_numero en numeros) {
         let codigo = r#"
 lista<entero> enteros = [10, 20, 30]
 para (entero valor en enteros) {
-    imprimir("Valor entero: " + valor.cadena())
+    consola.imprimir("Valor entero: " + valor.cadena())
 }
         "#;
         
@@ -68,9 +68,9 @@ para (entero valor en enteros) {
     #[test]
     fn test_bucle_anidado() {
         let codigo = r#"
-para (entero i = 0; i < 3; i = i + 1) {
-    para (entero j = 0; j < 2; j = j + 1) {
-        imprimir("i: " + i.cadena() + ", j: " + j.cadena())
+para (entero mut i = 0; i < 3; i = i + 1) {
+    para (entero mut j = 0; j < 2; j = j + 1) {
+        consola.imprimir("i: " + i.cadena() + ", j: " + j.cadena())
     }
 }
         "#;
@@ -81,11 +81,11 @@ para (entero i = 0; i < 3; i = i + 1) {
     #[test]
     fn test_control_flujo_romper() {
         let codigo = r#"
-para (entero i = 0; i < 10; i = i + 1) {
+para (entero mut i = 0; i < 10; i = i + 1) {
     si (i == 5) {
         romper
     }
-    imprimir("Valor: " + i.cadena())
+    consola.imprimir("Valor: " + i.cadena())
 }
         "#;
         
@@ -95,11 +95,11 @@ para (entero i = 0; i < 10; i = i + 1) {
     #[test]
     fn test_control_flujo_continuar() {
         let codigo = r#"
-para (entero i = 0; i < 5; i = i + 1) {
+para (entero mut i = 0; i < 5; i = i + 1) {
     si (i == 2) {
         continuar
     }
-    imprimir("Valor: " + i.cadena())
+    consola.imprimir("Valor: " + i.cadena())
 }
         "#;
         
@@ -109,8 +109,8 @@ para (entero i = 0; i < 5; i = i + 1) {
     #[test]
     fn test_bucle_para_con_decimales() {
         let codigo = r#"
-para (número i = 0.0; i < 2.5; i = i + 0.5) {
-    imprimir("Decimal: " + i.cadena())
+para (número mut i = 0.0; i < 2.5; i = i + 0.5) {
+    consola.imprimir("Decimal: " + i.cadena())
 }
         "#;
         
@@ -120,10 +120,10 @@ para (número i = 0.0; i < 2.5; i = i + 0.5) {
     #[test]
     fn test_bucle_mientras_condicion_compleja() {
         let codigo = r#"
-entero a = 1
-entero b = 10
+entero mut a = 1
+entero mut b = 10
 mientras ((a < 5) && (b > 5)) {
-    imprimir("a: " + a.cadena() + ", b: " + b.cadena())
+    consola.imprimir("a: " + a.cadena() + ", b: " + b.cadena())
     a = a + 1
     b = b - 1
 }
@@ -135,7 +135,7 @@ mientras ((a < 5) && (b > 5)) {
     #[test]
     fn test_bucle_infinito_con_romper() {
         let codigo = r#"
-entero contador = 0
+entero mut contador = 0
 mientras (verdadero) {
     si (contador >= 3) {
         romper

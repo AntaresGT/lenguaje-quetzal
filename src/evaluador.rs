@@ -392,6 +392,25 @@ impl Evaluador {
                 Ok((valor_retorno.clone(), ControlFlujo::Retornar(valor_retorno)))
             },
             
+            Nodo::Asignacion { nombre, valor, linea } => {
+                // Evaluar el valor a asignar
+                let (valor_evaluado, _) = self.evaluar_con_entorno(valor, entorno.clone())?;
+                
+                // Asignar el valor a la variable (crear si no existe)
+                {
+                    let mut entorno_mut = entorno.borrow_mut();
+                    let variable = Variable::nueva(
+                        nombre.clone(),
+                        valor_evaluado.clone(),
+                        TipoVariable::Mutable,
+                        "auto".to_string()
+                    );
+                    entorno_mut.definir_variable(nombre.clone(), variable);
+                }
+                
+                Ok((valor_evaluado, ControlFlujo::Ninguno))
+            },
+            
             Nodo::AsignacionCompuesta { nombre, operador, valor, linea } => {
                 // Obtener el valor actual de la variable
                 let valor_actual = {
@@ -433,6 +452,49 @@ impl Evaluador {
                 }
                 
                 Ok((resultado, ControlFlujo::Ninguno))
+            },
+            
+            Nodo::BuclePara { inicializacion, condicion, incremento, cuerpo, linea: _ } => {
+                // Crear nuevo entorno para el bucle
+                let entorno_bucle = Rc::new(RefCell::new(Entorno::con_padre(entorno.clone())));
+                
+                // Ejecutar inicialización si existe
+                if let Some(init) = inicializacion {
+                    self.evaluar_con_entorno(init, entorno_bucle.clone())?;
+                }
+                
+                loop {
+                    // Evaluar condición si existe
+                    if let Some(cond) = condicion {
+                        let (valor_condicion, _) = self.evaluar_con_entorno(cond, entorno_bucle.clone())?;
+                        if !valor_condicion.a_bool() {
+                            break;
+                        }
+                    }
+                    
+                    // Ejecutar cuerpo del bucle
+                    let (_, control) = self.evaluar_con_entorno(cuerpo, entorno_bucle.clone())?;
+                    
+                    match control {
+                        ControlFlujo::Romper => break,
+                        ControlFlujo::Continuar => {
+                            // Ejecutar incremento antes de continuar
+                            if let Some(inc) = incremento {
+                                self.evaluar_con_entorno(inc, entorno_bucle.clone())?;
+                            }
+                            continue;
+                        },
+                        ControlFlujo::Retornar(_) => return Ok((Valor::Vacio, control)),
+                        _ => {},
+                    }
+                    
+                    // Ejecutar incremento al final de cada iteración
+                    if let Some(inc) = incremento {
+                        self.evaluar_con_entorno(inc, entorno_bucle.clone())?;
+                    }
+                }
+                
+                Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
             
             Nodo::BucleParaCada { variable, iterable, cuerpo, linea: _ } => {
@@ -493,6 +555,14 @@ impl Evaluador {
                 }
                 
                 Ok((Valor::Vacio, ControlFlujo::Ninguno))
+            },
+            
+            Nodo::Romper { linea: _ } => {
+                Ok((Valor::Vacio, ControlFlujo::Romper))
+            },
+            
+            Nodo::Continuar { linea: _ } => {
+                Ok((Valor::Vacio, ControlFlujo::Continuar))
             },
             
             _ => {

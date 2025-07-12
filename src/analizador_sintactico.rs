@@ -260,6 +260,18 @@ impl AnalizadorSintactico {
             return self.declaracion_retorno();
         }
         
+        // Verificar si es romper
+        if self.coincidir(&TipoToken::Romper) {
+            let linea = self.token_anterior().linea;
+            return Ok(Nodo::Romper { linea });
+        }
+        
+        // Verificar si es continuar
+        if self.coincidir(&TipoToken::Continuar) {
+            let linea = self.token_anterior().linea;
+            return Ok(Nodo::Continuar { linea });
+        }
+        
         // Verificar si es una declaración de retorno
         if self.coincidir(&TipoToken::Retornar) {
             return self.declaracion_retorno();
@@ -562,13 +574,24 @@ impl AnalizadorSintactico {
     fn asignacion(&mut self) -> ResultadoQuetzal<Nodo> {
         let mut expresion = self.operador_ternario()?;
         
-        // Verificar si es una asignación compuesta
+        // Verificar si es una asignación
         if let Nodo::Identificador(nombre) = &expresion {
-            if self.coincidir(&TipoToken::AsignacionSuma) ||
-               self.coincidir(&TipoToken::AsignacionResta) ||
-               self.coincidir(&TipoToken::AsignacionMult) ||
-               self.coincidir(&TipoToken::AsignacionDiv) ||
-               self.coincidir(&TipoToken::AsignacionMod) {
+            if self.coincidir(&TipoToken::Asignacion) {
+                // Asignación simple (=)
+                let valor = Box::new(self.asignacion()?);
+                let linea = self.token_anterior().linea;
+                
+                return Ok(Nodo::Asignacion {
+                    nombre: nombre.clone(),
+                    valor,
+                    linea,
+                });
+            } else if self.coincidir(&TipoToken::AsignacionSuma) ||
+                      self.coincidir(&TipoToken::AsignacionResta) ||
+                      self.coincidir(&TipoToken::AsignacionMult) ||
+                      self.coincidir(&TipoToken::AsignacionDiv) ||
+                      self.coincidir(&TipoToken::AsignacionMod) {
+                // Asignación compuesta (+=, -=, etc.)
                 let operador = self.token_anterior().lexema.clone();
                 let valor = Box::new(self.asignacion()?);
                 let linea = self.token_anterior().linea;
@@ -1167,38 +1190,98 @@ impl AnalizadorSintactico {
     fn bucle_para(&mut self) -> ResultadoQuetzal<Nodo> {
         let linea = self.token_anterior().linea;
         
-        // Variable del bucle
-        let variable = if let TipoToken::Identificador(nom) = &self.token_actual().tipo {
-            let n = nom.clone();
-            self.avanzar();
-            n
+        // Verificar si tiene paréntesis (bucle tradicional) o no (bucle para cada)
+        if self.coincidir(&TipoToken::ParentesisAbre) {
+            // Bucle tradicional: para (init; condicion; incremento)
+            
+            // Inicialización (puede ser declaración de variable o asignación)
+            let inicializacion = if self.coincidir(&TipoToken::PuntoYComa) {
+                None // Sin inicialización
+            } else {
+                Some(Box::new(self.inicializacion_bucle_para()?))
+            };
+            
+            if !self.coincidir(&TipoToken::PuntoYComa) {
+                return Err(ErrorQuetzal::ErrorSintaxis {
+                    linea: self.token_actual().linea,
+                    mensaje: "Se esperaba ';' después de la inicialización del bucle para".to_string(),
+                });
+            }
+            
+            // Condición
+            let condicion = if self.coincidir(&TipoToken::PuntoYComa) {
+                None // Sin condición (bucle infinito)
+            } else {
+                Some(Box::new(self.expresion()?))
+            };
+            
+            if !self.coincidir(&TipoToken::PuntoYComa) {
+                return Err(ErrorQuetzal::ErrorSintaxis {
+                    linea: self.token_actual().linea,
+                    mensaje: "Se esperaba ';' después de la condición del bucle para".to_string(),
+                });
+            }
+            
+            // Incremento
+            let incremento = if self.coincidir(&TipoToken::ParentesisCierra) {
+                None // Sin incremento
+            } else {
+                let inc = Some(Box::new(self.expresion()?));
+                if !self.coincidir(&TipoToken::ParentesisCierra) {
+                    return Err(ErrorQuetzal::ErrorSintaxis {
+                        linea: self.token_actual().linea,
+                        mensaje: "Se esperaba ')' después del incremento del bucle para".to_string(),
+                    });
+                }
+                inc
+            };
+            
+            // Cuerpo del bucle
+            let cuerpo = Box::new(self.bloque_o_declaracion()?);
+            
+            Ok(Nodo::BuclePara {
+                inicializacion,
+                condicion,
+                incremento,
+                cuerpo,
+                linea,
+            })
         } else {
-            return Err(ErrorQuetzal::ErrorSintaxis {
-                linea: self.token_actual().linea,
-                mensaje: "Se esperaba el nombre de la variable en bucle para".to_string(),
-            });
-        };
-        
-        // Esperar 'en' 
-        if !self.coincidir(&TipoToken::En) {
-            return Err(ErrorQuetzal::ErrorSintaxis {
-                linea: self.token_actual().linea,
-                mensaje: "Se esperaba 'en' en bucle para".to_string(),
-            });
+            // Bucle para cada: para variable en iterable
+            
+            // Variable del bucle
+            let variable = if let TipoToken::Identificador(nom) = &self.token_actual().tipo {
+                let n = nom.clone();
+                self.avanzar();
+                n
+            } else {
+                return Err(ErrorQuetzal::ErrorSintaxis {
+                    linea: self.token_actual().linea,
+                    mensaje: "Se esperaba el nombre de la variable en bucle para".to_string(),
+                });
+            };
+            
+            // Esperar 'en' 
+            if !self.coincidir(&TipoToken::En) {
+                return Err(ErrorQuetzal::ErrorSintaxis {
+                    linea: self.token_actual().linea,
+                    mensaje: "Se esperaba 'en' en bucle para".to_string(),
+                });
+            }
+            
+            // Expresión iterable (rango o lista)
+            let iterable = Box::new(self.expresion()?);
+            
+            // Cuerpo del bucle
+            let cuerpo = Box::new(self.bloque_o_declaracion()?);
+            
+            Ok(Nodo::BucleParaCada {
+                variable,
+                iterable,
+                cuerpo,
+                linea,
+            })
         }
-        
-        // Expresión iterable (rango o lista)
-        let iterable = Box::new(self.expresion()?);
-        
-        // Cuerpo del bucle
-        let cuerpo = Box::new(self.bloque_o_declaracion()?);
-        
-        Ok(Nodo::BucleParaCada {
-            variable,
-            iterable,
-            cuerpo,
-            linea,
-        })
     }
     
     /// Analiza una declaración de retorno
@@ -1218,5 +1301,16 @@ impl AnalizadorSintactico {
             valor,
             linea,
         })
+    }
+    
+    /// Analiza inicialización de bucle para (solo declaraciones de variables y asignaciones)
+    fn inicializacion_bucle_para(&mut self) -> ResultadoQuetzal<Nodo> {
+        // Verificar si es una declaración de variable con tipo
+        if self.es_tipo_dato(&self.token_actual().tipo) {
+            return self.declaracion_variable();
+        }
+        
+        // Si no, debe ser una asignación
+        self.asignacion()
     }
 }

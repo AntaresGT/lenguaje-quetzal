@@ -723,7 +723,38 @@ impl Evaluador {
         
         // Verificar si es un método encadenado de conversión (formato variable.metodo)
         if nombre.contains(".") && !nombre.starts_with("consola.") {
-            return self.evaluar_metodo_conversion(nombre, argumentos, entorno);
+            // Separar variable.metodo
+            let partes: Vec<&str> = nombre.split('.').collect();
+            if partes.len() == 2 {
+                let nombre_variable = partes[0];
+                let nombre_metodo = partes[1];
+                
+                // Obtener el valor de la variable
+                let valor_variable = {
+                    let entorno_ref = entorno.borrow();
+                    if let Some(variable) = entorno_ref.obtener_variable(nombre_variable) {
+                        variable.valor.clone()
+                    } else {
+                        return Err(ErrorQuetzal::VariableNoDefinida {
+                            linea,
+                            nombre: nombre_variable.to_string(),
+                        });
+                    }
+                };
+                
+                // Evaluar argumentos
+                let mut args_evaluados = Vec::new();
+                for arg in argumentos {
+                    let (valor_arg, _) = self.evaluar_con_entorno(arg, entorno.clone())?;
+                    args_evaluados.push(valor_arg);
+                }
+                
+                // Usar el nuevo sistema de métodos
+                return self.evaluar_metodo_en_valor(&valor_variable, nombre_metodo, &args_evaluados, linea);
+            } else {
+                // Para cadenas de métodos múltiples, usar el sistema anterior
+                return self.evaluar_metodo_conversion(nombre, argumentos, entorno);
+            }
         }
         
         // Buscar función definida por el usuario

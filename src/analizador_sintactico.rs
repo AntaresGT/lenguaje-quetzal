@@ -428,7 +428,42 @@ impl AnalizadorSintactico {
                 TipoToken::TipoNumero => { self.avanzar(); "número".to_string() },
                 TipoToken::TipoCadena => { self.avanzar(); "cadena".to_string() },
                 TipoToken::TipoBool => { self.avanzar(); "bool".to_string() },
-                TipoToken::TipoLista => { self.avanzar(); "lista".to_string() },
+                TipoToken::TipoLista => { 
+                    self.avanzar(); 
+                    // Verificar si hay un tipo genérico <tipo>
+                    if self.coincidir(&TipoToken::Menor) {
+                        // Leer el tipo interno
+                        let tipo_interno = if self.es_tipo_dato(&self.token_actual().tipo) {
+                            match &self.token_actual().tipo {
+                                TipoToken::TipoEntero => { self.avanzar(); "entero" },
+                                TipoToken::TipoNumero => { self.avanzar(); "número" },
+                                TipoToken::TipoCadena => { self.avanzar(); "cadena" },
+                                TipoToken::TipoBool => { self.avanzar(); "bool" },
+                                _ => return Err(ErrorQuetzal::ErrorSintaxis {
+                                    linea: self.token_actual().linea,
+                                    mensaje: "Tipo genérico no válido para lista en parámetro".to_string(),
+                                }),
+                            }
+                        } else {
+                            return Err(ErrorQuetzal::ErrorSintaxis {
+                                linea: self.token_actual().linea,
+                                mensaje: "Se esperaba un tipo para la lista en parámetro".to_string(),
+                            });
+                        };
+                        
+                        // Esperar el cierre >
+                        if !self.coincidir(&TipoToken::Mayor) {
+                            return Err(ErrorQuetzal::ErrorSintaxis {
+                                linea: self.token_actual().linea,
+                                mensaje: "Se esperaba '>' después del tipo de lista en parámetro".to_string(),
+                            });
+                        }
+                        
+                        format!("lista<{}>", tipo_interno)
+                    } else {
+                        "lista".to_string()
+                    }
+                },
                 TipoToken::TipoJson => { self.avanzar(); "jsn".to_string() },
                 _ => return Err(ErrorQuetzal::ErrorSintaxis {
                     linea: self.token_actual().linea,
@@ -1047,7 +1082,7 @@ impl AnalizadorSintactico {
                     
                     if !self.verificar(&TipoToken::LlaveCierra) {
                         loop {
-                            // Clave (debe ser identificador o cadena)
+                            // Clave (puede ser identificador, cadena, tipo de dato, o palabra reservada)
                             let clave = if let TipoToken::Identificador(nom) = &self.token_actual().tipo {
                                 let nombre = nom.clone();
                                 self.avanzar();
@@ -1056,6 +1091,58 @@ impl AnalizadorSintactico {
                                 let cadena = s.clone();
                                 self.avanzar();
                                 cadena
+                            } else if self.es_tipo_dato(&self.token_actual().tipo) {
+                                // Permitir tipos de datos como claves de propiedades
+                                let tipo_como_clave = match &self.token_actual().tipo {
+                                    TipoToken::TipoVacio => "vacio".to_string(),
+                                    TipoToken::TipoEntero => "entero".to_string(),
+                                    TipoToken::TipoNumero => "número".to_string(),
+                                    TipoToken::TipoCadena => "cadena".to_string(),
+                                    TipoToken::TipoBool => "bool".to_string(),
+                                    TipoToken::TipoLista => "lista".to_string(),
+                                    TipoToken::TipoJson => "jsn".to_string(),
+                                    _ => return Err(ErrorQuetzal::ErrorSintaxis {
+                                        linea: self.token_actual().linea,
+                                        mensaje: "Tipo de dato no válido como clave de propiedad".to_string(),
+                                    }),
+                                };
+                                self.avanzar();
+                                tipo_como_clave
+                            } else if matches!(&self.token_actual().tipo, TipoToken::Verdadero | TipoToken::Falso) {
+                                // Permitir valores booleanos como claves
+                                let bool_como_clave = match &self.token_actual().tipo {
+                                    TipoToken::Verdadero => "verdadero".to_string(),
+                                    TipoToken::Falso => "falso".to_string(),
+                                    _ => unreachable!(),
+                                };
+                                self.avanzar();
+                                bool_como_clave
+                            } else if matches!(&self.token_actual().tipo, 
+                                TipoToken::Objeto | TipoToken::Nuevo | TipoToken::Retornar | 
+                                TipoToken::Asincrono | TipoToken::Si | TipoToken::Sino |
+                                TipoToken::Para | TipoToken::Mientras | TipoToken::Hacer |
+                                TipoToken::Romper | TipoToken::Continuar | TipoToken::En) {
+                                // Permitir palabras reservadas como claves de propiedades
+                                let palabra_como_clave = match &self.token_actual().tipo {
+                                    TipoToken::Objeto => "objeto".to_string(),
+                                    TipoToken::Nuevo => "nuevo".to_string(),
+                                    TipoToken::Retornar => "retornar".to_string(),
+                                    TipoToken::Asincrono => "asincrono".to_string(),
+                                    TipoToken::Si => "si".to_string(),
+                                    TipoToken::Sino => "sino".to_string(),
+                                    TipoToken::Para => "para".to_string(),
+                                    TipoToken::Mientras => "mientras".to_string(),
+                                    TipoToken::Hacer => "hacer".to_string(),
+                                    TipoToken::Romper => "romper".to_string(),
+                                    TipoToken::Continuar => "continuar".to_string(),
+                                    TipoToken::En => "en".to_string(),
+                                    _ => return Err(ErrorQuetzal::ErrorSintaxis {
+                                        linea: self.token_actual().linea,
+                                        mensaje: "Palabra reservada no válida como clave de propiedad".to_string(),
+                                    }),
+                                };
+                                self.avanzar();
+                                palabra_como_clave
                             } else {
                                 return Err(ErrorQuetzal::ErrorSintaxis {
                                     linea: self.token_actual().linea,

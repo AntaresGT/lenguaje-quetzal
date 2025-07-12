@@ -50,7 +50,7 @@ lista<entero> numeros = [1, 2, 3, 4, 5]
 
 // Función para procesar la lista
 entero sumar_lista(lista<entero> lista_nums) {
-    entero suma = 0
+    entero mut suma = 0
     // Simular iteración (sin foreach implementado)
     suma = suma + 1 + 2 + 3 + 4 + 5
     retornar suma

@@ -193,6 +193,8 @@ entero funcion_problematica() {
     entero x = 5
     // No hay retorno y debería fallar
 }
+
+entero resultado = funcion_problematica()
         "#;
         
         // Esta prueba debe fallar porque la función no retorna

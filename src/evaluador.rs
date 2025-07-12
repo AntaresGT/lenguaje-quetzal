@@ -75,17 +75,13 @@ impl Entorno {
             });
         }
         
-        // Temporalmente comentado para avanzar con los tests
-        // TODO: Re-implementar validación más inteligente
-        /*
-        // Verificar si la variable ya existe en el entorno actual
+        // Solo verificar duplicados en el entorno actual (shadowing permitido)
         if self.variables.contains_key(&nombre) {
             return Err(ErrorQuetzal::ErrorSintaxis {
                 linea: 0,
                 mensaje: format!("La variable '{}' ya está declarada en este ámbito", nombre),
             });
         }
-        */
         
         self.variables.insert(nombre, variable);
         Ok(())
@@ -263,7 +259,8 @@ impl Evaluador {
                         });
                     }
                     
-                    val
+                    // Realizar conversión automática si es necesario
+                    self.convertir_tipo_automatico(val, tipo_dato)?
                 } else {
                     // Valor por defecto según el tipo
                     match tipo_dato.as_str() {
@@ -477,14 +474,14 @@ impl Evaluador {
                         });
                     }
                     
-                    // Actualizar variable existente
+                    // Actualizar variable existente directamente
                     let nueva_variable = Variable::nueva(
                         nombre.clone(),
                         valor_evaluado.clone(),
                         var_actual.tipo_variable,
                         var_actual.tipo_dato.clone(),
                     );
-                    entorno.borrow_mut().definir_variable(nombre.clone(), nueva_variable)?;
+                    entorno.borrow_mut().variables.insert(nombre.clone(), nueva_variable);
                 } else {
                     // Variable no existe - crear nueva (inmutable por defecto)
                     let variable = Variable::nueva(
@@ -588,15 +585,24 @@ impl Evaluador {
                         // Crear nuevo entorno para el bucle
                         let entorno_bucle = Rc::new(RefCell::new(Entorno::con_padre(entorno.clone())));
                         
+                        // Definir la variable del bucle una sola vez antes del bucle
+                        let variable_bucle_inicial = Variable::nueva(
+                            variable.clone(),
+                            Valor::Vacio, // Valor temporal
+                            TipoVariable::Inmutable,
+                            "auto".to_string(),
+                        );
+                        entorno_bucle.borrow_mut().definir_variable(variable.clone(), variable_bucle_inicial)?;
+                        
                         for elemento in elementos {
-                            // Definir la variable del bucle
+                            // Actualizar la variable del bucle en cada iteración
                             let variable_bucle = Variable::nueva(
                                 variable.clone(),
                                 elemento,
                                 TipoVariable::Inmutable,
                                 "auto".to_string(),
                             );
-                            entorno_bucle.borrow_mut().definir_variable(variable.clone(), variable_bucle)?;
+                            entorno_bucle.borrow_mut().variables.insert(variable.clone(), variable_bucle);
                             
                             // Ejecutar el cuerpo del bucle
                             let (_, control) = self.evaluar_con_entorno(cuerpo, entorno_bucle.clone())?;
@@ -1052,18 +1058,9 @@ impl Evaluador {
                                 Valor::Numero(n) => Valor::Numero(n),
                                 Valor::Cadena(s) => {
                                     let trimmed = s.trim();
-                                    // Verificar si es un número muy grande (más de 18 dígitos para i64)
-                                    if trimmed.len() > 18 {
-                                        return Err(ErrorQuetzal::ErrorConversion {
-                                            linea: 0,
-                                            mensaje: "Número demasiado grande para convertir a entero".to_string(),
-                                        });
-                                    }
                                     
-                                    // Intentar primero como entero
-                                    if let Ok(i) = trimmed.parse::<i64>() {
-                                        Valor::Entero(i)
-                                    } else if let Ok(f) = trimmed.parse::<f64>() {
+                                    // Intentar directamente como f64 para permitir números decimales largos
+                                    if let Ok(f) = trimmed.parse::<f64>() {
                                         Valor::Numero(f)
                                     } else {
                                         return Err(ErrorQuetzal::ErrorConversion {
@@ -1124,19 +1121,12 @@ impl Evaluador {
                             Valor::Entero(n) => Ok((Valor::Numero(n as f64), ControlFlujo::Ninguno)),
                             Valor::Numero(n) => Ok((Valor::Numero(n), ControlFlujo::Ninguno)),
                             Valor::Cadena(s) => {
-                                // Validar longitud de la cadena como proxy para números muy grandes
                                 let trimmed = s.trim();
-                                if trimmed.len() > 15 {  // Números con más de 15 dígitos son potencialmente problemáticos
-                                    return Err(ErrorQuetzal::ErrorConversion {
-                                        linea: 0,
-                                        mensaje: "Número demasiado grande para convertir".to_string(),
-                                    });
-                                }
                                 
                                 match trimmed.parse::<f64>() {
                                     Ok(n) => {
                                         // Verificar si el número es finito y está en un rango seguro
-                                        if n.is_finite() && !n.is_infinite() {
+                                        if n.is_finite() && !n.is_infinite() && !n.is_nan() {
                                             Ok((Valor::Numero(n), ControlFlujo::Ninguno))
                                         } else {
                                             Err(ErrorQuetzal::ErrorConversion {
@@ -1223,20 +1213,22 @@ impl Evaluador {
                     Valor::Numero(n) => Ok((Valor::Numero(n), ControlFlujo::Ninguno)),
                     Valor::Cadena(s) => {
                         let trimmed = s.trim();
-                        // Verificar si es un número muy grande (más de 15 dígitos)
-                        if trimmed.len() > 15 {
-                            return Err(ErrorQuetzal::ErrorConversion {
-                                linea: 0,
-                                mensaje: "Número demasiado grande para convertir".to_string(),
-                            });
-                        }
                         
-                        // Intentar primero como entero
-                        if let Ok(i) = trimmed.parse::<i64>() {
-                            Ok((Valor::Entero(i), ControlFlujo::Ninguno))
-                        } else if let Ok(f) = trimmed.parse::<f64>() {
-                            if f.is_finite() && !f.is_infinite() {
-                                Ok((Valor::Numero(f), ControlFlujo::Ninguno))
+                        // Intentar directamente como f64 para permitir números decimales largos
+                        if let Ok(f) = trimmed.parse::<f64>() {
+                            if f.is_finite() && !f.is_infinite() && !f.is_nan() {
+                                // Verificar que no hayamos perdido precisión significativa
+                                // convirtiendo de vuelta a string y comparando
+                                let back_to_string = f.to_string();
+                                let original_cleaned = trimmed.trim_start_matches("0").trim_start_matches(".");
+                                if original_cleaned.len() > 15 || (f.is_infinite() || f.abs() >= 1e15) {
+                                    Err(ErrorQuetzal::ErrorConversion {
+                                        linea: 0,
+                                        mensaje: "Número demasiado grande para representar con precisión".to_string(),
+                                    })
+                                } else {
+                                    Ok((Valor::Numero(f), ControlFlujo::Ninguno))
+                                }
                             } else {
                                 Err(ErrorQuetzal::ErrorConversion {
                                     linea: 0,
@@ -1314,17 +1306,10 @@ impl Evaluador {
                     });
                 }
                 let trimmed = cadena.trim();
-                // Verificar si es un número muy grande (más de 15 dígitos)
-                if trimmed.len() > 15 {
-                    return Err(ErrorQuetzal::ErrorConversion {
-                        linea: 0,
-                        mensaje: "Número demasiado grande para convertir".to_string(),
-                    });
-                }
                 
                 match trimmed.parse::<f64>() {
                     Ok(n) => {
-                        if n.is_finite() && !n.is_infinite() {
+                        if n.is_finite() && !n.is_infinite() && !n.is_nan() {
                             Ok((Valor::Numero(n), ControlFlujo::Ninguno))
                         } else {
                             Err(ErrorQuetzal::ErrorConversion {
@@ -1727,7 +1712,10 @@ impl Evaluador {
             (Valor::Json(_), "jsn") => true,
             // Permitir conversiones automáticas compatibles
             (Valor::Entero(_), "número") => true, // entero puede ser número
-            (Valor::Numero(_), "entero") => true, // número puede ser entero (si es entero válido)
+            (Valor::Numero(n), "entero") => {
+                // Validar que el número esté en el rango válido para i64
+                *n >= i64::MIN as f64 && *n <= i64::MAX as f64 && n.is_finite()
+            }, // número puede ser entero si está en rango válido (se truncará la parte decimal)
             // Tipo auto acepta cualquier cosa
             (_, "auto") => true,
             // Manejar listas tipadas
@@ -1737,6 +1725,39 @@ impl Evaluador {
                 elementos.iter().all(|elemento| self.validar_tipo_compatible(elemento, tipo_elemento))
             },
             _ => false,
+        }
+    }
+    
+    /// Convierte un valor al tipo especificado automáticamente cuando es compatible
+    fn convertir_tipo_automatico(&self, valor: Valor, tipo_destino: &str) -> ResultadoQuetzal<Valor> {
+        match (valor, tipo_destino) {
+            // Sin conversión necesaria
+            (val @ Valor::Vacio, "vacio") => Ok(val),
+            (val @ Valor::Entero(_), "entero") => Ok(val),
+            (val @ Valor::Numero(_), "número") => Ok(val),
+            (val @ Valor::Cadena(_), "cadena") => Ok(val),
+            (val @ Valor::Bool(_), "bool") => Ok(val),
+            (val @ Valor::Lista(_), "lista") => Ok(val),
+            (val @ Valor::Json(_), "jsn") => Ok(val),
+            
+            // Conversiones automáticas
+            (Valor::Entero(n), "número") => Ok(Valor::Numero(n as f64)),
+            (Valor::Numero(n), "entero") => {
+                if n >= i64::MIN as f64 && n <= i64::MAX as f64 && n.is_finite() {
+                    Ok(Valor::Entero(n as i64)) // Truncar la parte decimal
+                } else {
+                    Err(ErrorQuetzal::ErrorConversion {
+                        linea: 0,
+                        mensaje: "Número fuera del rango representable como entero".to_string(),
+                    })
+                }
+            },
+            
+            // Tipo auto acepta cualquier cosa sin conversión
+            (val, "auto") => Ok(val),
+            
+            // No se puede convertir
+            (val, _) => Ok(val), // No hacer nada si ya se validó la compatibilidad
         }
     }
     
@@ -2190,17 +2211,10 @@ impl Evaluador {
                     Valor::Numero(n) => Valor::Numero(*n),
                     Valor::Cadena(s) => {
                         let trimmed = s.trim();
-                        // Verificar si es un número muy grande (más de 15 dígitos)
-                        if trimmed.len() > 15 {
-                            return Err(ErrorQuetzal::ErrorEjecucion {
-                                linea,
-                                mensaje: "Número demasiado grande para convertir".to_string(),
-                            });
-                        }
                         
                         match trimmed.parse::<f64>() {
                             Ok(n) => {
-                                if n.is_finite() && !n.is_infinite() {
+                                if n.is_finite() && !n.is_infinite() && !n.is_nan() {
                                     Valor::Numero(n)
                                 } else {
                                     return Err(ErrorQuetzal::ErrorEjecucion {

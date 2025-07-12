@@ -195,6 +195,14 @@ impl Evaluador {
         }
     }
     
+    /// Redondea un número de punto flotante para evitar problemas de precisión
+    fn redondear_numero(&self, numero: f64) -> f64 {
+        // Redondear a 15 decimales para evitar problemas de precisión de punto flotante
+        // pero mantener suficiente precisión para cálculos normales
+        let factor = 1e15;
+        (numero * factor).round() / factor
+    }
+    
     /// Define funciones y objetos globales predefinidos
     fn definir_funciones_globales(entorno: &mut Entorno) {
         // Definir el objeto consola global como una variable especial
@@ -1861,9 +1869,18 @@ impl Evaluador {
             "+" => {
                 match (izquierdo, derecho) {
                     (Valor::Entero(a), Valor::Entero(b)) => Ok(Valor::Entero(a + b)),
-                    (Valor::Numero(a), Valor::Numero(b)) => Ok(Valor::Numero(a + b)),
-                    (Valor::Entero(a), Valor::Numero(b)) => Ok(Valor::Numero(*a as f64 + b)),
-                    (Valor::Numero(a), Valor::Entero(b)) => Ok(Valor::Numero(a + *b as f64)),
+                    (Valor::Numero(a), Valor::Numero(b)) => {
+                        let resultado = a + b;
+                        Ok(Valor::Numero(self.redondear_numero(resultado)))
+                    },
+                    (Valor::Entero(a), Valor::Numero(b)) => {
+                        let resultado = *a as f64 + b;
+                        Ok(Valor::Numero(self.redondear_numero(resultado)))
+                    },
+                    (Valor::Numero(a), Valor::Entero(b)) => {
+                        let resultado = a + *b as f64;
+                        Ok(Valor::Numero(self.redondear_numero(resultado)))
+                    },
                     (Valor::Cadena(a), Valor::Cadena(b)) => Ok(Valor::Cadena(format!("{}{}", a, b))),
                     (Valor::Cadena(a), b) => Ok(Valor::Cadena(format!("{}{}", a, b.a_cadena()))),
                     (a, Valor::Cadena(b)) => Ok(Valor::Cadena(format!("{}{}", a.a_cadena(), b))),
@@ -1876,9 +1893,18 @@ impl Evaluador {
             "-" => {
                 match (izquierdo, derecho) {
                     (Valor::Entero(a), Valor::Entero(b)) => Ok(Valor::Entero(a - b)),
-                    (Valor::Numero(a), Valor::Numero(b)) => Ok(Valor::Numero(a - b)),
-                    (Valor::Entero(a), Valor::Numero(b)) => Ok(Valor::Numero(*a as f64 - b)),
-                    (Valor::Numero(a), Valor::Entero(b)) => Ok(Valor::Numero(a - *b as f64)),
+                    (Valor::Numero(a), Valor::Numero(b)) => {
+                        let resultado = a - b;
+                        Ok(Valor::Numero(self.redondear_numero(resultado)))
+                    },
+                    (Valor::Entero(a), Valor::Numero(b)) => {
+                        let resultado = *a as f64 - b;
+                        Ok(Valor::Numero(self.redondear_numero(resultado)))
+                    },
+                    (Valor::Numero(a), Valor::Entero(b)) => {
+                        let resultado = a - *b as f64;
+                        Ok(Valor::Numero(self.redondear_numero(resultado)))
+                    },
                     _ => Err(ErrorQuetzal::ErrorTipo {
                         linea: 0,
                         mensaje: format!("No se puede restar {} y {}", izquierdo.tipo_como_cadena(), derecho.tipo_como_cadena()),
@@ -1888,9 +1914,18 @@ impl Evaluador {
             "*" => {
                 match (izquierdo, derecho) {
                     (Valor::Entero(a), Valor::Entero(b)) => Ok(Valor::Entero(a * b)),
-                    (Valor::Numero(a), Valor::Numero(b)) => Ok(Valor::Numero(a * b)),
-                    (Valor::Entero(a), Valor::Numero(b)) => Ok(Valor::Numero(*a as f64 * b)),
-                    (Valor::Numero(a), Valor::Entero(b)) => Ok(Valor::Numero(a * *b as f64)),
+                    (Valor::Numero(a), Valor::Numero(b)) => {
+                        let resultado = a * b;
+                        Ok(Valor::Numero(self.redondear_numero(resultado)))
+                    },
+                    (Valor::Entero(a), Valor::Numero(b)) => {
+                        let resultado = *a as f64 * b;
+                        Ok(Valor::Numero(self.redondear_numero(resultado)))
+                    },
+                    (Valor::Numero(a), Valor::Entero(b)) => {
+                        let resultado = a * *b as f64;
+                        Ok(Valor::Numero(self.redondear_numero(resultado)))
+                    },
                     _ => Err(ErrorQuetzal::ErrorTipo {
                         linea: 0,
                         mensaje: format!("No se puede multiplicar {} y {}", izquierdo.tipo_como_cadena(), derecho.tipo_como_cadena()),
@@ -1906,29 +1941,33 @@ impl Evaluador {
                             // Si la división es exacta, mantener como entero
                             Ok(Valor::Entero(a / b))
                         } else {
-                            // Si no es exacta, convertir a decimal
-                            Ok(Valor::Numero(*a as f64 / *b as f64))
+                            // Si no es exacta, convertir a decimal con redondeo
+                            let resultado = *a as f64 / *b as f64;
+                            Ok(Valor::Numero(self.redondear_numero(resultado)))
                         }
                     },
                     (Valor::Numero(a), Valor::Numero(b)) => {
                         if *b == 0.0 {
                             Err(ErrorQuetzal::DivisionPorCero { linea: 0 })
                         } else {
-                            Ok(Valor::Numero(a / b))
+                            let resultado = a / b;
+                            Ok(Valor::Numero(self.redondear_numero(resultado)))
                         }
                     },
                     (Valor::Entero(a), Valor::Numero(b)) => {
                         if *b == 0.0 {
                             Err(ErrorQuetzal::DivisionPorCero { linea: 0 })
                         } else {
-                            Ok(Valor::Numero(*a as f64 / b))
+                            let resultado = *a as f64 / b;
+                            Ok(Valor::Numero(self.redondear_numero(resultado)))
                         }
                     },
                     (Valor::Numero(a), Valor::Entero(b)) => {
                         if *b == 0 {
                             Err(ErrorQuetzal::DivisionPorCero { linea: 0 })
                         } else {
-                            Ok(Valor::Numero(a / *b as f64))
+                            let resultado = a / *b as f64;
+                            Ok(Valor::Numero(self.redondear_numero(resultado)))
                         }
                     },
                     _ => Err(ErrorQuetzal::ErrorTipo {

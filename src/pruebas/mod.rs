@@ -17,3 +17,4 @@ pub mod funciones_cadena_avanzadas;
 pub mod metodos_listas;
 pub mod asignacion_indices;
 pub mod metodos_mutantes;
+pub mod redondeo_decimales;

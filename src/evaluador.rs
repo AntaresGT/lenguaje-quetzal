@@ -2127,6 +2127,458 @@ impl Evaluador {
                 }
             },
             
+            // Métodos adicionales de cadena
+            "esta_vacia" => {
+                if let Valor::Cadena(s) = valor {
+                    Ok((Valor::Bool(s.is_empty()), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'esta_vacia' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "buscar" => {
+                if let Valor::Cadena(s) = valor {
+                    if argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'buscar' requiere un patrón como argumento".to_string(),
+                        });
+                    }
+                    
+                    if let Valor::Cadena(patron) = &argumentos[0] {
+                        match s.find(patron) {
+                            Some(pos) => Ok((Valor::Entero(pos as i64), ControlFlujo::Ninguno)),
+                            None => Ok((Valor::Entero(-1), ControlFlujo::Ninguno)),
+                        }
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El patrón para 'buscar' debe ser una cadena".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'buscar' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "contiene" => {
+                if let Valor::Cadena(s) = valor {
+                    if argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'contiene' requiere un patrón como argumento".to_string(),
+                        });
+                    }
+                    
+                    if let Valor::Cadena(patron) = &argumentos[0] {
+                        Ok((Valor::Bool(s.contains(patron)), ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El patrón para 'contiene' debe ser una cadena".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'contiene' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "empieza_con" => {
+                if let Valor::Cadena(s) = valor {
+                    if argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'empieza_con' requiere un prefijo como argumento".to_string(),
+                        });
+                    }
+                    
+                    if let Valor::Cadena(prefijo) = &argumentos[0] {
+                        Ok((Valor::Bool(s.starts_with(prefijo)), ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El prefijo para 'empieza_con' debe ser una cadena".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'empieza_con' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "termina_con" => {
+                if let Valor::Cadena(s) = valor {
+                    if argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'termina_con' requiere un sufijo como argumento".to_string(),
+                        });
+                    }
+                    
+                    if let Valor::Cadena(sufijo) = &argumentos[0] {
+                        Ok((Valor::Bool(s.ends_with(sufijo)), ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El sufijo para 'termina_con' debe ser una cadena".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'termina_con' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "contar_ocurrencias" => {
+                if let Valor::Cadena(s) = valor {
+                    if argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'contar_ocurrencias' requiere un patrón como argumento".to_string(),
+                        });
+                    }
+                    
+                    if let Valor::Cadena(patron) = &argumentos[0] {
+                        if patron.is_empty() {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El patrón no puede estar vacío".to_string(),
+                            });
+                        }
+                        let count = s.matches(patron).count() as i64;
+                        Ok((Valor::Entero(count), ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El patrón para 'contar_ocurrencias' debe ser una cadena".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'contar_ocurrencias' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "a_mayusculas" => {
+                if let Valor::Cadena(s) = valor {
+                    Ok((Valor::Cadena(s.to_uppercase()), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'a_mayusculas' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "invertir" => {
+                if let Valor::Cadena(s) = valor {
+                    let invertida = s.chars().rev().collect::<String>();
+                    Ok((Valor::Cadena(invertida), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'invertir' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "repetir" => {
+                if let Valor::Cadena(s) = valor {
+                    if argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'repetir' requiere un número como argumento".to_string(),
+                        });
+                    }
+                    
+                    let veces = match &argumentos[0] {
+                        Valor::Entero(n) => *n,
+                        Valor::Numero(n) => *n as i64,
+                        _ => return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El argumento para 'repetir' debe ser un número".to_string(),
+                        }),
+                    };
+                    
+                    if veces < 0 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El número de repeticiones no puede ser negativo".to_string(),
+                        });
+                    }
+                    
+                    Ok((Valor::Cadena(s.repeat(veces as usize)), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'repetir' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "reemplazar" => {
+                if let Valor::Cadena(s) = valor {
+                    if argumentos.len() < 2 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'reemplazar' requiere dos argumentos: buscar y reemplazar".to_string(),
+                        });
+                    }
+                    
+                    if let (Valor::Cadena(buscar), Valor::Cadena(reemplazar)) = (&argumentos[0], &argumentos[1]) {
+                        Ok((Valor::Cadena(s.replace(buscar, reemplazar)), ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "Los argumentos para 'reemplazar' deben ser cadenas".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'reemplazar' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "subcadena" => {
+                if let Valor::Cadena(s) = valor {
+                    if argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'subcadena' requiere al menos un índice".to_string(),
+                        });
+                    }
+                    
+                    let inicio = match &argumentos[0] {
+                        Valor::Entero(n) => *n as usize,
+                        Valor::Numero(n) => *n as usize,
+                        _ => return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El índice de inicio debe ser un número".to_string(),
+                        }),
+                    };
+                    
+                    let chars: Vec<char> = s.chars().collect();
+                    
+                    // Si el índice de inicio es igual o mayor que la longitud, devolver cadena vacía
+                    if inicio >= chars.len() {
+                        return Ok((Valor::Cadena(String::new()), ControlFlujo::Ninguno));
+                    }
+                    
+                    let fin = if argumentos.len() > 1 {
+                        match &argumentos[1] {
+                            Valor::Entero(n) => (*n as usize).min(chars.len()),
+                            Valor::Numero(n) => (*n as usize).min(chars.len()),
+                            _ => return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El índice de fin debe ser un número".to_string(),
+                            }),
+                        }
+                    } else {
+                        chars.len()
+                    };
+                    
+                    if inicio > fin {
+                        return Ok((Valor::Cadena(String::new()), ControlFlujo::Ninguno));
+                    }
+                    
+                    let subcadena: String = chars[inicio..fin].iter().collect();
+                    Ok((Valor::Cadena(subcadena), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'subcadena' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "dividir" => {
+                if let Valor::Cadena(s) = valor {
+                    if argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'dividir' requiere un delimitador como argumento".to_string(),
+                        });
+                    }
+                    
+                    if let Valor::Cadena(delimitador) = &argumentos[0] {
+                        if delimitador.is_empty() {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El delimitador no puede estar vacío".to_string(),
+                            });
+                        }
+                        let partes: Vec<Valor> = s.split(delimitador)
+                            .map(|parte| Valor::Cadena(parte.to_string()))
+                            .collect();
+                        Ok((Valor::Lista(partes), ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El delimitador para 'dividir' debe ser una cadena".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'dividir' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "partir_lineas" => {
+                if let Valor::Cadena(s) = valor {
+                    let lineas: Vec<Valor> = s.lines()
+                        .map(|linea| Valor::Cadena(linea.to_string()))
+                        .collect();
+                    Ok((Valor::Lista(lineas), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'partir_lineas' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "comparar" => {
+                if let Valor::Cadena(s) = valor {
+                    if argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'comparar' requiere otra cadena como argumento".to_string(),
+                        });
+                    }
+                    
+                    if let Valor::Cadena(otra) = &argumentos[0] {
+                        let resultado = if s < otra {
+                            -1
+                        } else if s > otra {
+                            1
+                        } else {
+                            0
+                        };
+                        Ok((Valor::Entero(resultado), ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El argumento para 'comparar' debe ser una cadena".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'comparar' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "igual_sin_caso" => {
+                if let Valor::Cadena(s) = valor {
+                    if argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'igual_sin_caso' requiere otra cadena como argumento".to_string(),
+                        });
+                    }
+                    
+                    if let Valor::Cadena(otra) = &argumentos[0] {
+                        Ok((Valor::Bool(s.to_lowercase() == otra.to_lowercase()), ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El argumento para 'igual_sin_caso' debe ser una cadena".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'igual_sin_caso' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "codificar_base64" => {
+                if let Valor::Cadena(s) = valor {
+                    use base64::{Engine as _, engine::general_purpose};
+                    let encoded = general_purpose::STANDARD.encode(s.as_bytes());
+                    Ok((Valor::Cadena(encoded), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'codificar_base64' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "decodificar_base64" => {
+                if let Valor::Cadena(s) = valor {
+                    use base64::{Engine as _, engine::general_purpose};
+                    match general_purpose::STANDARD.decode(s) {
+                        Ok(bytes) => match String::from_utf8(bytes) {
+                            Ok(decoded) => Ok((Valor::Cadena(decoded), ControlFlujo::Ninguno)),
+                            Err(_) => Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "Los datos decodificados no son texto UTF-8 válido".to_string(),
+                            }),
+                        },
+                        Err(_) => Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "Cadena Base64 inválida".to_string(),
+                        }),
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'decodificar_base64' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "codificar_uri" => {
+                if let Valor::Cadena(s) = valor {
+                    let encoded = urlencoding::encode(s);
+                    Ok((Valor::Cadena(encoded.to_string()), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'codificar_uri' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "decodificar_uri" => {
+                if let Valor::Cadena(s) = valor {
+                    match urlencoding::decode(s) {
+                        Ok(decoded) => Ok((Valor::Cadena(decoded.to_string()), ControlFlujo::Ninguno)),
+                        Err(_) => Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "URI inválida para decodificar".to_string(),
+                        }),
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'decodificar_uri' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
             _ => {
                 Err(ErrorQuetzal::ErrorEjecucion {
                     linea,

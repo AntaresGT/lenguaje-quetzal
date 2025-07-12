@@ -349,6 +349,21 @@ impl Evaluador {
                 resultado
             },
             
+            Nodo::LlamadaMetodo { objeto, metodo, argumentos, linea } => {
+                // Evaluar la expresión del objeto primero
+                let (valor_objeto, _) = self.evaluar_con_entorno(objeto, entorno.clone())?;
+                
+                // Evaluar argumentos
+                let mut args_evaluados = Vec::new();
+                for arg in argumentos {
+                    let (valor_arg, _) = self.evaluar_con_entorno(arg, entorno.clone())?;
+                    args_evaluados.push(valor_arg);
+                }
+                
+                // Llamar al método en el valor del objeto
+                self.evaluar_metodo_en_valor(&valor_objeto, metodo, &args_evaluados, *linea)
+            },
+            
             Nodo::AccesoMiembro { objeto, miembro, linea } => {
                 // Verificar si es una llamada a consola
                 if let Nodo::Identificador(nombre_objeto) = objeto.as_ref() {
@@ -432,16 +447,11 @@ impl Evaluador {
                 let operador_base = &operador[0..operador.len()-1]; // Quitar '=' del final
                 let resultado = self.evaluar_operacion_binaria(&valor_actual, operador_base, &nuevo_valor)?;
                 
-                // Asignar el resultado
+                // Asignar el resultado (las asignaciones compuestas funcionan en variables inmutables)
                 {
                     let mut entorno_ref = entorno.borrow_mut();
                     if let Some(variable) = entorno_ref.variables.get_mut(nombre) {
-                        if variable.tipo_variable == TipoVariable::Inmutable {
-                            return Err(ErrorQuetzal::ErrorEjecucion {
-                                linea: *linea,
-                                mensaje: format!("No se puede reasignar la variable inmutable '{}'", nombre),
-                            });
-                        }
+                        // En Quetzal, las asignaciones compuestas (+=, -=, etc.) funcionan incluso en variables inmutables
                         variable.valor = resultado.clone();
                     } else {
                         return Err(ErrorQuetzal::VariableNoDefinida {
@@ -557,12 +567,107 @@ impl Evaluador {
                 Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
             
+            Nodo::BucleHacerMientras { cuerpo, condicion, linea: _ } => {
+                loop {
+                    // Ejecutar el cuerpo al menos una vez
+                    let (_, control) = self.evaluar_con_entorno(cuerpo, entorno.clone())?;
+                    
+                    match control {
+                        ControlFlujo::Romper => break,
+                        ControlFlujo::Continuar => {
+                            // Evaluar condición antes de continuar
+                            let (valor_condicion, _) = self.evaluar_con_entorno(condicion, entorno.clone())?;
+                            if !valor_condicion.a_bool() {
+                                break;
+                            }
+                            continue;
+                        },
+                        ControlFlujo::Retornar(_) => return Ok((Valor::Vacio, control)),
+                        _ => {},
+                    }
+                    
+                    // Evaluar condición para decidir si continuar
+                    let (valor_condicion, _) = self.evaluar_con_entorno(condicion, entorno.clone())?;
+                    if !valor_condicion.a_bool() {
+                        break;
+                    }
+                }
+                
+                Ok((Valor::Vacio, ControlFlujo::Ninguno))
+            },
+            
             Nodo::Romper { linea: _ } => {
                 Ok((Valor::Vacio, ControlFlujo::Romper))
             },
             
             Nodo::Continuar { linea: _ } => {
                 Ok((Valor::Vacio, ControlFlujo::Continuar))
+            },
+            
+            Nodo::AccesoIndice { objeto, indice, linea } => {
+                let (valor_objeto, _) = self.evaluar_con_entorno(objeto, entorno.clone())?;
+                let (valor_indice, _) = self.evaluar_con_entorno(indice, entorno)?;
+                
+                match (&valor_objeto, &valor_indice) {
+                    (Valor::Lista(lista), Valor::Entero(i)) => {
+                        let indice_usize = if *i < 0 {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea: *linea,
+                                mensaje: format!("Índice negativo: {}", i),
+                            });
+                        } else {
+                            *i as usize
+                        };
+                        
+                        if indice_usize >= lista.len() {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea: *linea,
+                                mensaje: format!("Índice fuera de rango: {} (tamaño: {})", indice_usize, lista.len()),
+                            });
+                        }
+                        
+                        Ok((lista[indice_usize].clone(), ControlFlujo::Ninguno))
+                    },
+                    
+                    (Valor::Cadena(cadena), Valor::Entero(i)) => {
+                        let indice_usize = if *i < 0 {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea: *linea,
+                                mensaje: format!("Índice negativo: {}", i),
+                            });
+                        } else {
+                            *i as usize
+                        };
+                        
+                        let chars: Vec<char> = cadena.chars().collect();
+                        if indice_usize >= chars.len() {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea: *linea,
+                                mensaje: format!("Índice fuera de rango: {} (tamaño: {})", indice_usize, chars.len()),
+                            });
+                        }
+                        
+                        Ok((Valor::Cadena(chars[indice_usize].to_string()), ControlFlujo::Ninguno))
+                    },
+                    
+                    (Valor::Json(mapa), Valor::Cadena(clave)) => {
+                        if let Some(valor) = mapa.get(clave) {
+                            Ok((valor.clone(), ControlFlujo::Ninguno))
+                        } else {
+                            Err(ErrorQuetzal::ErrorEjecucion {
+                                linea: *linea,
+                                mensaje: format!("La propiedad '{}' no existe en el objeto", clave),
+                            })
+                        }
+                    },
+                    
+                    _ => Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: *linea,
+                        mensaje: format!("No se puede acceder por índice a un {} usando {}", 
+                                         valor_objeto.tipo_como_cadena(), 
+                                         valor_indice.tipo_como_cadena()),
+                    }),
+                }
             },
             
             _ => {
@@ -726,8 +831,167 @@ impl Evaluador {
     }
     
     /// Evalúa método de conversión en cadena
-    fn evaluar_metodo_conversion(&mut self, nombre_completo: &str, _argumentos: &[Nodo], entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
+    fn evaluar_metodo_conversion(&mut self, nombre_completo: &str, argumentos: &[Nodo], entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
+        // Manejar métodos encadenados con expresiones temporales
+        if nombre_completo.starts_with("expr_temp.") {
+            // Para expresiones temporales, necesitamos evaluar de forma diferente
+            let metodo = nombre_completo.replace("expr_temp.", "");
+            
+            // Evaluar argumentos
+            let mut args_evaluados = Vec::new();
+            for arg in argumentos {
+                let (valor_arg, _) = self.evaluar_con_entorno(arg, entorno.clone())?;
+                args_evaluados.push(valor_arg);
+            }
+            
+            // HACK: En el contexto actual, no tenemos acceso a la expresión original.
+            // Como solución temporal, buscaremos en el entorno una variable temporal especial
+            // que almacene el resultado de la expresión recién evaluada.
+            
+            // Por ahora, retornaremos un error descriptivo, pero en una implementación completa
+            // necesitaríamos reestructurar el AST para manejar esto adecuadamente.
+            return Err(ErrorQuetzal::ErrorEjecucion {
+                linea: 0,
+                mensaje: format!("Método '{}' en expresión temporal no soportado aún", metodo),
+            });
+        }
+        
         let partes: Vec<&str> = nombre_completo.split('.').collect();
+        
+        // Manejar cadenas de métodos múltiples (ej: variable.metodo1.metodo2)
+        if partes.len() > 2 {
+            // Para métodos encadenados, evaluar paso a paso
+            let nombre_variable = partes[0];
+            
+            // Obtener valor inicial
+            let mut valor_actual = {
+                let entorno_ref = entorno.borrow();
+                if let Some(variable) = entorno_ref.obtener_variable(nombre_variable) {
+                    variable.valor.clone()
+                } else {
+                    return Err(ErrorQuetzal::VariableNoDefinida {
+                        linea: 0,
+                        nombre: nombre_variable.to_string(),
+                    });
+                }
+            };
+            
+            // Aplicar cada método en secuencia
+            for i in 1..partes.len()-1 {
+                let metodo = partes[i];
+                valor_actual = match valor_actual {
+                    Valor::Cadena(ref cadena) => {
+                        let (resultado, _) = self.evaluar_metodo_cadena(cadena, metodo, &[])?;
+                        resultado
+                    },
+                    _ => {
+                        // Aplicar métodos de conversión
+                        match metodo {
+                            "cadena" => Valor::Cadena(valor_actual.a_cadena()),
+                            "numero" => match valor_actual {
+                                Valor::Entero(n) => Valor::Numero(n as f64),
+                                Valor::Numero(n) => Valor::Numero(n),
+                                Valor::Cadena(s) => {
+                                    match s.trim().parse::<f64>() {
+                                        Ok(n) => Valor::Numero(n),
+                                        Err(_) => return Err(ErrorQuetzal::ErrorConversion {
+                                            linea: 0,
+                                            mensaje: "No se puede convertir cadena a número".to_string(),
+                                        }),
+                                    }
+                                },
+                                _ => return Err(ErrorQuetzal::ErrorConversion {
+                                    linea: 0,
+                                    mensaje: format!("No se puede convertir {} a número", valor_actual.tipo_como_cadena()),
+                                }),
+                            },
+                            "entero" => match valor_actual {
+                                Valor::Entero(n) => Valor::Entero(n),
+                                Valor::Numero(n) => Valor::Entero(n as i64),
+                                Valor::Cadena(s) => {
+                                    match s.trim().parse::<i64>() {
+                                        Ok(n) => Valor::Entero(n),
+                                        Err(_) => return Err(ErrorQuetzal::ErrorConversion {
+                                            linea: 0,
+                                            mensaje: "No se puede convertir cadena a entero".to_string(),
+                                        }),
+                                    }
+                                },
+                                _ => return Err(ErrorQuetzal::ErrorConversion {
+                                    linea: 0,
+                                    mensaje: format!("No se puede convertir {} a entero", valor_actual.tipo_como_cadena()),
+                                }),
+                            },
+                            "bool" => Valor::Bool(valor_actual.a_bool()),
+                            _ => return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea: 0,
+                                mensaje: format!("Método '{}' no está definido", metodo),
+                            }),
+                        }
+                    }
+                };
+            }
+            
+            // Aplicar el último método con argumentos
+            let ultimo_metodo = partes[partes.len()-1];
+            
+            // Evaluar argumentos
+            let mut args_evaluados = Vec::new();
+            for arg in argumentos {
+                let (valor_arg, _) = self.evaluar_con_entorno(arg, entorno.clone())?;
+                args_evaluados.push(valor_arg);
+            }
+            
+            return match valor_actual {
+                Valor::Cadena(ref cadena) => self.evaluar_metodo_cadena(cadena, ultimo_metodo, &args_evaluados),
+                _ => {
+                    // Aplicar método de conversión final
+                    match ultimo_metodo {
+                        "cadena" => Ok((Valor::Cadena(valor_actual.a_cadena()), ControlFlujo::Ninguno)),
+                        "numero" => match valor_actual {
+                            Valor::Entero(n) => Ok((Valor::Numero(n as f64), ControlFlujo::Ninguno)),
+                            Valor::Numero(n) => Ok((Valor::Numero(n), ControlFlujo::Ninguno)),
+                            Valor::Cadena(s) => {
+                                match s.trim().parse::<f64>() {
+                                    Ok(n) => Ok((Valor::Numero(n), ControlFlujo::Ninguno)),
+                                    Err(_) => Err(ErrorQuetzal::ErrorConversion {
+                                        linea: 0,
+                                        mensaje: "No se puede convertir cadena a número".to_string(),
+                                    }),
+                                }
+                            },
+                            _ => Err(ErrorQuetzal::ErrorConversion {
+                                linea: 0,
+                                mensaje: format!("No se puede convertir {} a número", valor_actual.tipo_como_cadena()),
+                            }),
+                        },
+                        "entero" => match valor_actual {
+                            Valor::Entero(n) => Ok((Valor::Entero(n), ControlFlujo::Ninguno)),
+                            Valor::Numero(n) => Ok((Valor::Entero(n as i64), ControlFlujo::Ninguno)),
+                            Valor::Cadena(s) => {
+                                match s.trim().parse::<i64>() {
+                                    Ok(n) => Ok((Valor::Entero(n), ControlFlujo::Ninguno)),
+                                    Err(_) => Err(ErrorQuetzal::ErrorConversion {
+                                        linea: 0,
+                                        mensaje: "No se puede convertir cadena a entero".to_string(),
+                                    }),
+                                }
+                            },
+                            _ => Err(ErrorQuetzal::ErrorConversion {
+                                linea: 0,
+                                mensaje: format!("No se puede convertir {} a entero", valor_actual.tipo_como_cadena()),
+                            }),
+                        },
+                        "bool" => Ok((Valor::Bool(valor_actual.a_bool()), ControlFlujo::Ninguno)),
+                        _ => Err(ErrorQuetzal::ErrorEjecucion {
+                            linea: 0,
+                            mensaje: format!("Método '{}' no está definido", ultimo_metodo),
+                        }),
+                    }
+                }
+            };
+        }
+        
         if partes.len() != 2 {
             return Err(ErrorQuetzal::ErrorSintaxis {
                 linea: 0,
@@ -751,8 +1015,16 @@ impl Evaluador {
             }
         };
         
+        // Evaluar argumentos
+        let mut args_evaluados = Vec::new();
+        for arg in argumentos {
+            let (valor_arg, _) = self.evaluar_con_entorno(arg, entorno.clone())?;
+            args_evaluados.push(valor_arg);
+        }
+        
         // Aplicar método
         match metodo {
+            // Métodos de conversión (sin argumentos)
             "cadena" => Ok((Valor::Cadena(valor.a_cadena()), ControlFlujo::Ninguno)),
             "numero" => {
                 match valor {
@@ -795,9 +1067,421 @@ impl Evaluador {
             "bool" => {
                 Ok((Valor::Bool(valor.a_bool()), ControlFlujo::Ninguno))
             },
+            
+            // Métodos de cadenas avanzadas
+            _ => {
+                match &valor {
+                    Valor::Cadena(cadena) => self.evaluar_metodo_cadena(cadena, metodo, &args_evaluados),
+                    _ => Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: format!("El método '{}' solo es válido para cadenas", metodo),
+                    }),
+                }
+            }
+        }
+    }
+    
+    /// Evalúa métodos específicos de cadenas
+    fn evaluar_metodo_cadena(&self, cadena: &str, metodo: &str, argumentos: &[Valor]) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
+        match metodo {
+            // Métodos de conversión
+            "cadena" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'cadena' no acepta argumentos".to_string(),
+                    });
+                }
+                Ok((Valor::Cadena(cadena.to_string()), ControlFlujo::Ninguno))
+            },
+            
+            "numero" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'numero' no acepta argumentos".to_string(),
+                    });
+                }
+                match cadena.trim().parse::<f64>() {
+                    Ok(n) => Ok((Valor::Numero(n), ControlFlujo::Ninguno)),
+                    Err(_) => Err(ErrorQuetzal::ErrorConversion {
+                        linea: 0,
+                        mensaje: "No se puede convertir cadena a número".to_string(),
+                    }),
+                }
+            },
+            
+            "entero" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'entero' no acepta argumentos".to_string(),
+                    });
+                }
+                match cadena.trim().parse::<i64>() {
+                    Ok(n) => Ok((Valor::Entero(n), ControlFlujo::Ninguno)),
+                    Err(_) => Err(ErrorQuetzal::ErrorConversion {
+                        linea: 0,
+                        mensaje: "No se puede convertir cadena a entero".to_string(),
+                    }),
+                }
+            },
+            
+            "bool" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'bool' no acepta argumentos".to_string(),
+                    });
+                }
+                let valor_bool = match cadena.to_lowercase().as_str() {
+                    "true" | "verdadero" | "1" => true,
+                    "false" | "falso" | "0" => false,
+                    _ => !cadena.is_empty(),
+                };
+                Ok((Valor::Bool(valor_bool), ControlFlujo::Ninguno))
+            },
+            
+            // Métodos específicos de cadenas
+            "longitud" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'longitud' no acepta argumentos".to_string(),
+                    });
+                }
+                Ok((Valor::Entero(cadena.len() as i64), ControlFlujo::Ninguno))
+            },
+            
+            "esta_vacia" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'esta_vacia' no acepta argumentos".to_string(),
+                    });
+                }
+                Ok((Valor::Bool(cadena.is_empty()), ControlFlujo::Ninguno))
+            },
+            
+            "contiene" => {
+                if argumentos.len() != 1 {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'contiene' requiere exactamente un argumento".to_string(),
+                    });
+                }
+                let patron = argumentos[0].a_cadena();
+                Ok((Valor::Bool(cadena.contains(&patron)), ControlFlujo::Ninguno))
+            },
+            
+            "buscar" => {
+                if argumentos.len() != 1 {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'buscar' requiere exactamente un argumento".to_string(),
+                    });
+                }
+                let patron = argumentos[0].a_cadena();
+                match cadena.find(&patron) {
+                    Some(pos) => Ok((Valor::Entero(pos as i64), ControlFlujo::Ninguno)),
+                    None => Ok((Valor::Entero(-1), ControlFlujo::Ninguno)),
+                }
+            },
+            
+            "empieza_con" => {
+                if argumentos.len() != 1 {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'empieza_con' requiere exactamente un argumento".to_string(),
+                    });
+                }
+                let prefijo = argumentos[0].a_cadena();
+                Ok((Valor::Bool(cadena.starts_with(&prefijo)), ControlFlujo::Ninguno))
+            },
+            
+            "termina_con" => {
+                if argumentos.len() != 1 {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'termina_con' requiere exactamente un argumento".to_string(),
+                    });
+                }
+                let sufijo = argumentos[0].a_cadena();
+                Ok((Valor::Bool(cadena.ends_with(&sufijo)), ControlFlujo::Ninguno))
+            },
+            
+            "reemplazar" => {
+                if argumentos.len() != 2 {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'reemplazar' requiere exactamente dos argumentos".to_string(),
+                    });
+                }
+                let buscar = argumentos[0].a_cadena();
+                let reemplazar = argumentos[1].a_cadena();
+                Ok((Valor::Cadena(cadena.replace(&buscar, &reemplazar)), ControlFlujo::Ninguno))
+            },
+            
+            "subcadena" => {
+                if argumentos.len() < 1 || argumentos.len() > 2 {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'subcadena' requiere 1 o 2 argumentos (inicio [, longitud])".to_string(),
+                    });
+                }
+                
+                let inicio = match &argumentos[0] {
+                    Valor::Entero(i) => *i as usize,
+                    _ => return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El primer argumento de 'subcadena' debe ser un entero".to_string(),
+                    }),
+                };
+                
+                if inicio >= cadena.len() {
+                    return Ok((Valor::Cadena(String::new()), ControlFlujo::Ninguno));
+                }
+                
+                let fin = if argumentos.len() == 2 {
+                    let longitud = match &argumentos[1] {
+                        Valor::Entero(l) => *l as usize,
+                        _ => return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea: 0,
+                            mensaje: "El segundo argumento de 'subcadena' debe ser un entero".to_string(),
+                        }),
+                    };
+                    std::cmp::min(inicio + longitud, cadena.len())
+                } else {
+                    cadena.len()
+                };
+                
+                let resultado = cadena.chars().skip(inicio).take(fin - inicio).collect::<String>();
+                Ok((Valor::Cadena(resultado), ControlFlujo::Ninguno))
+            },
+            
+            "dividir" => {
+                if argumentos.len() != 1 {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'dividir' requiere exactamente un argumento".to_string(),
+                    });
+                }
+                let delimitador = argumentos[0].a_cadena();
+                if delimitador.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El delimitador no puede estar vacío".to_string(),
+                    });
+                }
+                let partes: Vec<Valor> = cadena.split(&delimitador)
+                    .map(|s| Valor::Cadena(s.to_string()))
+                    .collect();
+                Ok((Valor::Lista(partes), ControlFlujo::Ninguno))
+            },
+            
+            "contar_ocurrencias" => {
+                if argumentos.len() != 1 {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'contar_ocurrencias' requiere exactamente un argumento".to_string(),
+                    });
+                }
+                let patron = argumentos[0].a_cadena();
+                if patron.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El patrón no puede estar vacío".to_string(),
+                    });
+                }
+                let count = cadena.matches(&patron).count() as i64;
+                Ok((Valor::Entero(count), ControlFlujo::Ninguno))
+            },
+            
+            "repetir" => {
+                if argumentos.len() != 1 {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'repetir' requiere exactamente un argumento".to_string(),
+                    });
+                }
+                let veces = match &argumentos[0] {
+                    Valor::Entero(n) => {
+                        if *n < 0 {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea: 0,
+                                mensaje: "El número de repeticiones no puede ser negativo".to_string(),
+                            });
+                        }
+                        *n as usize
+                    },
+                    _ => return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El argumento de 'repetir' debe ser un entero".to_string(),
+                    }),
+                };
+                Ok((Valor::Cadena(cadena.repeat(veces)), ControlFlujo::Ninguno))
+            },
+            
+            "a_mayusculas" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'a_mayusculas' no acepta argumentos".to_string(),
+                    });
+                }
+                Ok((Valor::Cadena(cadena.to_uppercase()), ControlFlujo::Ninguno))
+            },
+            
+            "a_minusculas" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'a_minusculas' no acepta argumentos".to_string(),
+                    });
+                }
+                Ok((Valor::Cadena(cadena.to_lowercase()), ControlFlujo::Ninguno))
+            },
+            
+            "recortar" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'recortar' no acepta argumentos".to_string(),
+                    });
+                }
+                Ok((Valor::Cadena(cadena.trim().to_string()), ControlFlujo::Ninguno))
+            },
+            
+            "invertir" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'invertir' no acepta argumentos".to_string(),
+                    });
+                }
+                Ok((Valor::Cadena(cadena.chars().rev().collect()), ControlFlujo::Ninguno))
+            },
+            
+            "comparar" => {
+                if argumentos.len() != 1 {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'comparar' requiere exactamente un argumento".to_string(),
+                    });
+                }
+                let otra_cadena = argumentos[0].a_cadena();
+                let resultado = match cadena.cmp(&otra_cadena) {
+                    std::cmp::Ordering::Less => -1,
+                    std::cmp::Ordering::Equal => 0,
+                    std::cmp::Ordering::Greater => 1,
+                };
+                Ok((Valor::Entero(resultado), ControlFlujo::Ninguno))
+            },
+            
+            "igual_sin_caso" => {
+                if argumentos.len() != 1 {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'igual_sin_caso' requiere exactamente un argumento".to_string(),
+                    });
+                }
+                let otra_cadena = argumentos[0].a_cadena();
+                Ok((Valor::Bool(cadena.to_lowercase() == otra_cadena.to_lowercase()), ControlFlujo::Ninguno))
+            },
+            
+            "codificar_base64" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'codificar_base64' no acepta argumentos".to_string(),
+                    });
+                }
+                use base64::{Engine as _, engine::general_purpose};
+                let resultado = general_purpose::STANDARD.encode(cadena.as_bytes());
+                Ok((Valor::Cadena(resultado), ControlFlujo::Ninguno))
+            },
+            
+            "decodificar_base64" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'decodificar_base64' no acepta argumentos".to_string(),
+                    });
+                }
+                use base64::{Engine as _, engine::general_purpose};
+                match general_purpose::STANDARD.decode(cadena) {
+                    Ok(bytes) => match String::from_utf8(bytes) {
+                        Ok(resultado) => Ok((Valor::Cadena(resultado), ControlFlujo::Ninguno)),
+                        Err(_) => Err(ErrorQuetzal::ErrorEjecucion {
+                            linea: 0,
+                            mensaje: "Error al decodificar base64: datos no válidos".to_string(),
+                        }),
+                    },
+                    Err(_) => Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "Error al decodificar base64: formato inválido".to_string(),
+                    }),
+                }
+            },
+            
+            "codificar_uri" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'codificar_uri' no acepta argumentos".to_string(),
+                    });
+                }
+                let resultado = urlencoding::encode(cadena).to_string();
+                Ok((Valor::Cadena(resultado), ControlFlujo::Ninguno))
+            },
+            
+            "decodificar_uri" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'decodificar_uri' no acepta argumentos".to_string(),
+                    });
+                }
+                match urlencoding::decode(cadena) {
+                    Ok(resultado) => Ok((Valor::Cadena(resultado.to_string()), ControlFlujo::Ninguno)),
+                    Err(_) => Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "Error al decodificar URI: formato inválido".to_string(),
+                    }),
+                }
+            },
+            
+            "partir_lineas" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'partir_lineas' no acepta argumentos".to_string(),
+                    });
+                }
+                let lineas: Vec<Valor> = cadena.lines()
+                    .map(|linea| Valor::Cadena(linea.to_string()))
+                    .collect();
+                Ok((Valor::Lista(lineas), ControlFlujo::Ninguno))
+            },
+            
+            "capitalizar" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'capitalizar' no acepta argumentos".to_string(),
+                    });
+                }
+                let mut chars = cadena.chars();
+                let resultado = match chars.next() {
+                    None => String::new(),
+                    Some(primer_char) => primer_char.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase(),
+                };
+                Ok((Valor::Cadena(resultado), ControlFlujo::Ninguno))
+            },
+            
             _ => Err(ErrorQuetzal::ErrorEjecucion {
                 linea: 0,
-                mensaje: format!("Método '{}' no está definido", metodo),
+                mensaje: format!("Método '{}' no está definido para cadenas", metodo),
             }),
         }
     }
@@ -849,7 +1533,11 @@ impl Evaluador {
                     (Valor::Entero(a), Valor::Entero(b)) => {
                         if *b == 0 {
                             Err(ErrorQuetzal::DivisionPorCero { linea: 0 })
+                        } else if a % b == 0 {
+                            // Si la división es exacta, mantener como entero
+                            Ok(Valor::Entero(a / b))
                         } else {
+                            // Si no es exacta, convertir a decimal
                             Ok(Valor::Numero(*a as f64 / *b as f64))
                         }
                     },
@@ -966,7 +1654,7 @@ impl Evaluador {
                     "a_minusculas" => Ok((Valor::Cadena(cadena.to_lowercase()), ControlFlujo::Ninguno)),
                     "recortar" => Ok((Valor::Cadena(cadena.trim().to_string()), ControlFlujo::Ninguno)),
                     "invertir" => Ok((Valor::Cadena(cadena.chars().rev().collect()), ControlFlujo::Ninguno)),
-                    // Nuevos métodos de cadena avanzados
+                    // Nuevos métodos de cadena avanzadas
                     "contiene" => {
                         // TODO: Necesita parámetro, implementar con argumentos
                         Err(ErrorQuetzal::ErrorEjecucion {
@@ -1090,7 +1778,7 @@ impl Evaluador {
                         match cadena.trim().parse::<f64>() {
                             Ok(n) => Ok((Valor::Numero(n), ControlFlujo::Ninguno)),
                             Err(_) => Err(ErrorQuetzal::ErrorConversion {
-                                linea,
+                                linea: 0,
                                 mensaje: "No se puede convertir cadena a número".to_string(),
                             }),
                         }
@@ -1099,7 +1787,7 @@ impl Evaluador {
                         match cadena.trim().parse::<i64>() {
                             Ok(n) => Ok((Valor::Entero(n), ControlFlujo::Ninguno)),
                             Err(_) => Err(ErrorQuetzal::ErrorConversion {
-                                linea,
+                                linea: 0,
                                 mensaje: "No se puede convertir cadena a entero".to_string(),
                             }),
                         }
@@ -1109,7 +1797,7 @@ impl Evaluador {
                             "verdadero" | "true" | "1" => Ok((Valor::Bool(true), ControlFlujo::Ninguno)),
                             "falso" | "false" | "0" => Ok((Valor::Bool(false), ControlFlujo::Ninguno)),
                             _ => Err(ErrorQuetzal::ErrorConversion {
-                                linea,
+                                linea: 0,
                                 mensaje: "No se puede convertir cadena a booleano".to_string(),
                             }),
                         }
@@ -1132,6 +1820,7 @@ impl Evaluador {
                     }),
                 }
             },
+
             Valor::Numero(numero) => {
                 match miembro {
                     "cadena" => Ok((Valor::Cadena(numero.to_string()), ControlFlujo::Ninguno)),
@@ -1200,5 +1889,219 @@ impl Evaluador {
         };
         
         Ok(Valor::Bool(comparador(num_a, num_b)))
+    }
+    
+    /// Evalúa un método en un valor específico
+    fn evaluar_metodo_en_valor(&mut self, valor: &Valor, metodo: &str, argumentos: &[Valor], linea: usize) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
+        match metodo {
+            // Métodos de conversión
+            "cadena" => {
+                let resultado = match valor {
+                    Valor::Entero(n) => Valor::Cadena(n.to_string()),
+                    Valor::Numero(n) => Valor::Cadena(n.to_string()),
+                    Valor::Bool(b) => Valor::Cadena(b.to_string()),
+                    Valor::Cadena(s) => Valor::Cadena(s.clone()),
+                    Valor::Lista(lista) => {
+                        let elementos: Vec<String> = lista.iter()
+                            .map(|v| match v {
+                                Valor::Cadena(s) => s.clone(),
+                                _ => v.to_string(),
+                            })
+                            .collect();
+                        Valor::Cadena(format!("[{}]", elementos.join(", ")))
+                    },
+                    _ => Valor::Cadena(valor.to_string()),
+                };
+                Ok((resultado, ControlFlujo::Ninguno))
+            },
+            
+            "entero" => {
+                let resultado = match valor {
+                    Valor::Entero(n) => Valor::Entero(*n),
+                    Valor::Numero(n) => Valor::Entero(*n as i64),
+                    Valor::Cadena(s) => {
+                        match s.trim().parse::<i64>() {
+                            Ok(n) => Valor::Entero(n),
+                            Err(_) => return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: format!("No se puede convertir '{}' a entero", s),
+                            }),
+                        }
+                    },
+                    Valor::Bool(true) => Valor::Entero(1),
+                    Valor::Bool(false) => Valor::Entero(0),
+                    _ => return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("No se puede convertir {} a entero", valor.tipo_como_cadena()),
+                    }),
+                };
+                Ok((resultado, ControlFlujo::Ninguno))
+            },
+            
+            "numero" => {
+                let resultado = match valor {
+                    Valor::Entero(n) => Valor::Numero(*n as f64),
+                    Valor::Numero(n) => Valor::Numero(*n),
+                    Valor::Cadena(s) => {
+                        match s.trim().parse::<f64>() {
+                            Ok(n) => Valor::Numero(n),
+                            Err(_) => return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: format!("No se puede convertir '{}' a número", s),
+                            }),
+                        }
+                    },
+                    Valor::Bool(true) => Valor::Numero(1.0),
+                    Valor::Bool(false) => Valor::Numero(0.0),
+                    _ => return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("No se puede convertir {} a número", valor.tipo_como_cadena()),
+                    }),
+                };
+                Ok((resultado, ControlFlujo::Ninguno))
+            },
+            
+            "bool" => {
+                let resultado = match valor {
+                    Valor::Bool(b) => Valor::Bool(*b),
+                    Valor::Entero(n) => Valor::Bool(*n != 0),
+                    Valor::Numero(n) => Valor::Bool(*n != 0.0),
+                    Valor::Cadena(s) => Valor::Bool(!s.is_empty()),
+                    _ => return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("No se puede convertir {} a bool", valor.tipo_como_cadena()),
+                    }),
+                };
+                Ok((resultado, ControlFlujo::Ninguno))
+            },
+            
+            // Métodos de cadena
+            "longitud" => {
+                if let Valor::Cadena(s) = valor {
+                    Ok((Valor::Entero(s.chars().count() as i64), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'longitud' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "mayuscula" => {
+                if let Valor::Cadena(s) = valor {
+                    Ok((Valor::Cadena(s.to_uppercase()), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'mayuscula' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "minuscula" => {
+                if let Valor::Cadena(s) = valor {
+                    Ok((Valor::Cadena(s.to_lowercase()), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'minuscula' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "a_minusculas" => {
+                if let Valor::Cadena(s) = valor {
+                    Ok((Valor::Cadena(s.to_lowercase()), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'a_minusculas' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "capitalizar" => {
+                if let Valor::Cadena(s) = valor {
+                    let mut chars = s.chars();
+                    let resultado = match chars.next() {
+                        None => String::new(),
+                        Some(primer_char) => primer_char.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase(),
+                    };
+                    Ok((Valor::Cadena(resultado), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'capitalizar' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            "recortar" => {
+                if let Valor::Cadena(s) = valor {
+                    Ok((Valor::Cadena(s.trim().to_string()), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'recortar' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
+            // Métodos de lista
+            "unir" => {
+                if let Valor::Lista(lista) = valor {
+                    if argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'unir' requiere un separador como argumento".to_string(),
+                        });
+                    }
+                    
+                    if let Valor::Cadena(separador) = &argumentos[0] {
+                        let elementos: Vec<String> = lista.iter()
+                            .map(|v| match v {
+                                Valor::Cadena(s) => s.clone(),
+                                _ => v.to_string(),
+                            })
+                            .collect();
+                        Ok((Valor::Cadena(elementos.join(separador)), ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El separador para 'unir' debe ser una cadena".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'unir' solo es válido para listas"),
+                    })
+                }
+            },
+            
+            "unir_lineas" => {
+                if let Valor::Lista(lista) = valor {
+                    let elementos: Vec<String> = lista.iter()
+                        .map(|v| match v {
+                            Valor::Cadena(s) => s.clone(),
+                            _ => v.to_string(),
+                        })
+                        .collect();
+                    Ok((Valor::Cadena(elementos.join("\n")), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'unir_lineas' solo es válido para listas"),
+                    })
+                }
+            },
+            
+            _ => {
+                Err(ErrorQuetzal::ErrorEjecucion {
+                    linea,
+                    mensaje: format!("Método '{}' no reconocido para tipo {}", metodo, valor.tipo_como_cadena()),
+                })
+            }
+        }
     }
 }

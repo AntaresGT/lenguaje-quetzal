@@ -75,6 +75,14 @@ pub enum Nodo {
         linea: usize,
     },
     
+    // Llamada a método en expresión (objeto.metodo(argumentos))
+    LlamadaMetodo {
+        objeto: Box<Nodo>,
+        metodo: String,
+        argumentos: Vec<Nodo>,
+        linea: usize,
+    },
+    
     // Acceso a miembro (objeto.miembro)
     AccesoMiembro {
         objeto: Box<Nodo>,
@@ -253,6 +261,11 @@ impl AnalizadorSintactico {
         // Verificar si es un bucle para
         if self.coincidir(&TipoToken::Para) {
             return self.bucle_para();
+        }
+        
+        // Verificar si es un bucle hacer-mientras
+        if self.coincidir(&TipoToken::Hacer) {
+            return self.bucle_hacer_mientras();
         }
         
         // Verificar si es una declaración de retorno
@@ -520,7 +533,42 @@ impl AnalizadorSintactico {
                 TipoToken::TipoNumero => { self.avanzar(); "número".to_string() },
                 TipoToken::TipoCadena => { self.avanzar(); "cadena".to_string() },
                 TipoToken::TipoBool => { self.avanzar(); "bool".to_string() },
-                TipoToken::TipoLista => { self.avanzar(); "lista".to_string() },
+                TipoToken::TipoLista => { 
+                    self.avanzar(); 
+                    // Verificar si hay un tipo genérico <tipo>
+                    if self.coincidir(&TipoToken::Menor) {
+                        // Leer el tipo interno
+                        let tipo_interno = if self.es_tipo_dato(&self.token_actual().tipo) {
+                            match &self.token_actual().tipo {
+                                TipoToken::TipoEntero => { self.avanzar(); "entero" },
+                                TipoToken::TipoNumero => { self.avanzar(); "número" },
+                                TipoToken::TipoCadena => { self.avanzar(); "cadena" },
+                                TipoToken::TipoBool => { self.avanzar(); "bool" },
+                                _ => return Err(ErrorQuetzal::ErrorSintaxis {
+                                    linea: self.token_actual().linea,
+                                    mensaje: "Tipo genérico no válido para lista".to_string(),
+                                }),
+                            }
+                        } else {
+                            return Err(ErrorQuetzal::ErrorSintaxis {
+                                linea: self.token_actual().linea,
+                                mensaje: "Se esperaba un tipo para la lista".to_string(),
+                            });
+                        };
+                        
+                        // Esperar el cierre >
+                        if !self.coincidir(&TipoToken::Mayor) {
+                            return Err(ErrorQuetzal::ErrorSintaxis {
+                                linea: self.token_actual().linea,
+                                mensaje: "Se esperaba '>' después del tipo de lista".to_string(),
+                            });
+                        }
+                        
+                        format!("lista<{}>", tipo_interno)
+                    } else {
+                        "lista".to_string()
+                    }
+                },
                 TipoToken::TipoJson => { self.avanzar(); "jsn".to_string() },
                 _ => return Err(ErrorQuetzal::ErrorSintaxis {
                     linea: self.token_actual().linea,
@@ -806,16 +854,26 @@ impl AnalizadorSintactico {
                     }
                     
                     // Crear nodo de llamada a método
-                    let nombre_metodo = match &expresion {
-                        Nodo::Identificador(nom) => format!("{}.{}", nom, miembro),
-                        _ => format!("temp.{}", miembro),
-                    };
-                    
-                    expresion = Nodo::LlamadaFuncion {
-                        nombre: nombre_metodo,
-                        argumentos,
-                        linea,
-                    };
+                    match &expresion {
+                        Nodo::Identificador(var_name) => {
+                            // Para variables, usar llamada a función tradicional
+                            let nombre_metodo = format!("{}.{}", var_name, miembro);
+                            expresion = Nodo::LlamadaFuncion {
+                                nombre: nombre_metodo,
+                                argumentos,
+                                linea,
+                            };
+                        },
+                        _ => {
+                            // Para expresiones complejas, usar el nuevo nodo LlamadaMetodo
+                            expresion = Nodo::LlamadaMetodo {
+                                objeto: Box::new(expresion),
+                                metodo: miembro,
+                                argumentos,
+                                linea,
+                            };
+                        }
+                    }
                 } else {
                     // Es acceso simple a miembro
                     expresion = Nodo::AccesoMiembro {
@@ -1190,64 +1248,148 @@ impl AnalizadorSintactico {
     fn bucle_para(&mut self) -> ResultadoQuetzal<Nodo> {
         let linea = self.token_anterior().linea;
         
-        // Verificar si tiene paréntesis (bucle tradicional) o no (bucle para cada)
+        // Verificar si tiene paréntesis (bucle tradicional o foreach)
         if self.coincidir(&TipoToken::ParentesisAbre) {
-            // Bucle tradicional: para (init; condicion; incremento)
+            // Verificar si es foreach: para (variable en iterable) o para (tipo variable en iterable)
+            let pos_guardada = self.posicion_actual;
             
-            // Inicialización (puede ser declaración de variable o asignación)
-            let inicializacion = if self.coincidir(&TipoToken::PuntoYComa) {
-                None // Sin inicialización
-            } else {
-                Some(Box::new(self.inicializacion_bucle_para()?))
-            };
+            // Intentar leer variable/tipo variable
+            let mut es_foreach = false;
             
-            if !self.coincidir(&TipoToken::PuntoYComa) {
-                return Err(ErrorQuetzal::ErrorSintaxis {
-                    linea: self.token_actual().linea,
-                    mensaje: "Se esperaba ';' después de la inicialización del bucle para".to_string(),
-                });
+            // Saltar tipo si existe
+            if self.es_tipo_dato(&self.token_actual().tipo) {
+                self.avanzar();
             }
             
-            // Condición
-            let condicion = if self.coincidir(&TipoToken::PuntoYComa) {
-                None // Sin condición (bucle infinito)
-            } else {
-                Some(Box::new(self.expresion()?))
-            };
-            
-            if !self.coincidir(&TipoToken::PuntoYComa) {
-                return Err(ErrorQuetzal::ErrorSintaxis {
-                    linea: self.token_actual().linea,
-                    mensaje: "Se esperaba ';' después de la condición del bucle para".to_string(),
-                });
+            // Si hay identificador seguido de 'en', es foreach
+            if let TipoToken::Identificador(_) = &self.token_actual().tipo {
+                self.avanzar();
+                if self.verificar(&TipoToken::En) {
+                    es_foreach = true;
+                }
             }
             
-            // Incremento
-            let incremento = if self.coincidir(&TipoToken::ParentesisCierra) {
-                None // Sin incremento
-            } else {
-                let inc = Some(Box::new(self.expresion()?));
+            // Restaurar posición
+            self.posicion_actual = pos_guardada;
+            
+            if es_foreach {
+                // Bucle foreach: para (variable en iterable) o para (tipo variable en iterable)
+                
+                // Verificar si hay tipo
+                let _tipo_variable = if self.es_tipo_dato(&self.token_actual().tipo) {
+                    let tipo = match &self.token_actual().tipo {
+                        TipoToken::TipoEntero => "entero".to_string(),
+                        TipoToken::TipoNumero => "número".to_string(),
+                        TipoToken::TipoCadena => "cadena".to_string(),
+                        TipoToken::TipoBool => "bool".to_string(),
+                        TipoToken::TipoLista => "lista".to_string(),
+                        TipoToken::TipoJson => "jsn".to_string(),
+                        _ => "desconocido".to_string(),
+                    };
+                    self.avanzar();
+                    Some(tipo)
+                } else {
+                    None
+                };
+                
+                // Variable del bucle
+                let variable = if let TipoToken::Identificador(nom) = &self.token_actual().tipo {
+                    let n = nom.clone();
+                    self.avanzar();
+                    n
+                } else {
+                    return Err(ErrorQuetzal::ErrorSintaxis {
+                        linea: self.token_actual().linea,
+                        mensaje: "Se esperaba el nombre de la variable en bucle foreach".to_string(),
+                    });
+                };
+                
+                // Esperar 'en'
+                if !self.coincidir(&TipoToken::En) {
+                    return Err(ErrorQuetzal::ErrorSintaxis {
+                        linea: self.token_actual().linea,
+                        mensaje: "Se esperaba 'en' en bucle foreach".to_string(),
+                    });
+                }
+                
+                // Expresión iterable
+                let iterable = Box::new(self.expresion()?);
+                
+                // Cerrar paréntesis
                 if !self.coincidir(&TipoToken::ParentesisCierra) {
                     return Err(ErrorQuetzal::ErrorSintaxis {
                         linea: self.token_actual().linea,
-                        mensaje: "Se esperaba ')' después del incremento del bucle para".to_string(),
+                        mensaje: "Se esperaba ')' después del iterable".to_string(),
                     });
                 }
-                inc
-            };
-            
-            // Cuerpo del bucle
-            let cuerpo = Box::new(self.bloque_o_declaracion()?);
-            
-            Ok(Nodo::BuclePara {
-                inicializacion,
-                condicion,
-                incremento,
-                cuerpo,
-                linea,
-            })
+                
+                // Cuerpo del bucle
+                let cuerpo = Box::new(self.bloque_o_declaracion()?);
+                
+                Ok(Nodo::BucleParaCada {
+                    variable,
+                    iterable,
+                    cuerpo,
+                    linea,
+                })
+            } else {
+                // Bucle tradicional: para (init; condicion; incremento)
+                
+                // Inicialización (puede ser declaración de variable o asignación)
+                let inicializacion = if self.coincidir(&TipoToken::PuntoYComa) {
+                    None // Sin inicialización
+                } else {
+                    Some(Box::new(self.inicializacion_bucle_para()?))
+                };
+                
+                if !self.coincidir(&TipoToken::PuntoYComa) {
+                    return Err(ErrorQuetzal::ErrorSintaxis {
+                        linea: self.token_actual().linea,
+                        mensaje: "Se esperaba ';' después de la inicialización del bucle para".to_string(),
+                    });
+                }
+                
+                // Condición
+                let condicion = if self.coincidir(&TipoToken::PuntoYComa) {
+                    None // Sin condición (bucle infinito)
+                } else {
+                    Some(Box::new(self.expresion()?))
+                };
+                
+                if !self.coincidir(&TipoToken::PuntoYComa) {
+                    return Err(ErrorQuetzal::ErrorSintaxis {
+                        linea: self.token_actual().linea,
+                        mensaje: "Se esperaba ';' después de la condición del bucle para".to_string(),
+                    });
+                }
+                
+                // Incremento
+                let incremento = if self.coincidir(&TipoToken::ParentesisCierra) {
+                    None // Sin incremento
+                } else {
+                    let inc = Some(Box::new(self.expresion()?));
+                    if !self.coincidir(&TipoToken::ParentesisCierra) {
+                        return Err(ErrorQuetzal::ErrorSintaxis {
+                            linea: self.token_actual().linea,
+                            mensaje: "Se esperaba ')' después del incremento del bucle para".to_string(),
+                        });
+                    }
+                    inc
+                };
+                
+                // Cuerpo del bucle
+                let cuerpo = Box::new(self.bloque_o_declaracion()?);
+                
+                Ok(Nodo::BuclePara {
+                    inicializacion,
+                    condicion,
+                    incremento,
+                    cuerpo,
+                    linea,
+                })
+            }
         } else {
-            // Bucle para cada: para variable en iterable
+            // Bucle para cada sin paréntesis: para variable en iterable
             
             // Variable del bucle
             let variable = if let TipoToken::Identificador(nom) = &self.token_actual().tipo {
@@ -1282,6 +1424,45 @@ impl AnalizadorSintactico {
                 linea,
             })
         }
+    }
+    
+    /// Analiza un bucle hacer-mientras
+    fn bucle_hacer_mientras(&mut self) -> ResultadoQuetzal<Nodo> {
+        let linea = self.token_anterior().linea;
+        
+        // Cuerpo del bucle (debe ser un bloque)
+        let cuerpo = Box::new(self.bloque_o_declaracion()?);
+        
+        // Esperar la palabra 'mientras'
+        if !self.coincidir(&TipoToken::Mientras) {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Se esperaba 'mientras' después del bloque en bucle hacer-mientras".to_string(),
+            });
+        }
+        
+        // Expresión de condición entre paréntesis
+        if !self.coincidir(&TipoToken::ParentesisAbre) {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Se esperaba '(' después de 'mientras'".to_string(),
+            });
+        }
+        
+        let condicion = Box::new(self.expresion()?);
+        
+        if !self.coincidir(&TipoToken::ParentesisCierra) {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Se esperaba ')' después de la condición".to_string(),
+            });
+        }
+        
+        Ok(Nodo::BucleHacerMientras {
+            cuerpo,
+            condicion,
+            linea,
+        })
     }
     
     /// Analiza una declaración de retorno

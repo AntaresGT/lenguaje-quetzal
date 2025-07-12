@@ -1,0 +1,23 @@
+// Matriz 3x3
+
+lista mut matriz_3x3 = [
+    [1, 2, 3],
+    [4, 5, 6],
+    [7, 8, 9]
+]
+
+consola.imprimir("Matriz 3x3 original:" + matriz_3x3.cadena())
+
+// Modificar un elemento
+matriz_3x3[1][1] = 10
+consola.imprimir("Matriz 3x3 modificada:" + matriz_3x3.cadena())
+
+// Agregar una fila
+matriz_3x3.agregar([10, 11, 12])
+consola.imprimir("Matriz 3x3 después de agregar una fila:" + matriz_3x3.cadena())
+
+// Agregar una columna
+para (entero mut i = 0; i < matriz_3x3.longitud(); i++) {
+    matriz_3x3[i].agregar(i + 1)  // Agregar un elemento al final de cada fila
+}
+consola.imprimir("Matriz 3x3 después de agregar una columna:" + matriz_3x3.cadena())

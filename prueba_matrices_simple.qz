@@ -1,0 +1,21 @@
+// Prueba simple de matrices
+lista mut matriz = [
+    [1, 2],
+    [3, 4]
+]
+
+consola.imprimir("Matriz original: " + matriz.cadena())
+
+// Modificar elemento
+matriz[0][1] = 99
+consola.imprimir("Después de modificar [0][1]: " + matriz.cadena())
+
+// Agregar elemento a primera fila
+matriz[0].agregar(100)
+consola.imprimir("Después de agregar a fila 0: " + matriz.cadena())
+
+// Bucle simple
+consola.imprimir("Longitud de matriz: " + matriz.longitud().cadena())
+para (entero mut i = 0; i < 2; i++) {
+    consola.imprimir("Fila " + i.cadena() + ": " + matriz[i].cadena())
+}

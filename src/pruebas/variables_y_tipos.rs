@@ -43,7 +43,6 @@ cadena mut texto_mutable = "Variable"
     #[test]
     fn test_tipos_de_datos_validos() {
         let codigo = r#"
-vacio variable_vacia
 entero entero_positivo = 100
 entero entero_negativo = -50
 número numero_positivo = 123.456

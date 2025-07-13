@@ -47,6 +47,7 @@ impl Valor {
     }
     
     /// Convierte el valor a número entero
+    #[allow(dead_code)]
     pub fn a_entero(&self) -> Result<i64, String> {
         match self {
             Valor::Entero(n) => Ok(*n),
@@ -59,6 +60,7 @@ impl Valor {
     }
     
     /// Convierte el valor a número decimal
+    #[allow(dead_code)]
     pub fn a_numero(&self) -> Result<f64, String> {
         match self {
             Valor::Entero(n) => Ok(*n as f64),
@@ -113,6 +115,7 @@ pub enum TipoVariable {
 /// Información sobre una variable
 #[derive(Debug, Clone)]
 pub struct Variable {
+    #[allow(dead_code)]
     pub nombre: String,
     pub valor: Valor,
     pub tipo_variable: TipoVariable,

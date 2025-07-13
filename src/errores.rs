@@ -23,15 +23,18 @@ pub enum ErrorQuetzal {
     FuncionNoDefinida { linea: usize, nombre: String },
     
     #[error("Intento de asignación a variable inmutable en línea {linea}: '{nombre}'")]
+    #[allow(dead_code)]
     VariableInmutable { linea: usize, nombre: String },
     
     #[error("División por cero en línea {linea}")]
     DivisionPorCero { linea: usize },
     
     #[error("Índice fuera de rango en línea {linea}: índice {indice} en lista de tamaño {tamanio}")]
+    #[allow(dead_code)]
     IndiceFueraDeRango { linea: usize, indice: usize, tamanio: usize },
     
     #[error("Conversión de tipo inválida en línea {linea}: no se puede convertir {tipo_origen} a {tipo_destino}")]
+    #[allow(dead_code)]
     ConversionInvalida { linea: usize, tipo_origen: String, tipo_destino: String },
     
     #[error("Error de conversión en línea {linea}: {mensaje}")]
@@ -44,12 +47,15 @@ pub enum ErrorQuetzal {
     TokenInesperado { linea: usize, token: String },
     
     #[error("Fin de archivo inesperado")]
+    #[allow(dead_code)]
     FinArchivoInesperado,
     
     #[error("Error de importación: {mensaje}")]
+    #[allow(dead_code)]
     ErrorImportacion { mensaje: String },
     
     #[error("Error interno del intérprete: {mensaje}")]
+    #[allow(dead_code)]
     ErrorInterno { mensaje: String },
 }
 

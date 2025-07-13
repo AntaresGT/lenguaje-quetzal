@@ -134,6 +134,7 @@ pub struct Token {
     pub tipo: TipoToken,
     pub lexema: String,
     pub linea: usize,
+    #[allow(dead_code)]
     pub columna: usize,
 }
 

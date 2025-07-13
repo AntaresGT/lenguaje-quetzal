@@ -75,6 +75,7 @@ pub fn interpretar(codigo: &str) -> ResultadoQuetzal<Valor> {
 /// Interpreta código Quetzal desde un archivo
 /// 
 /// Esta es una función de conveniencia que lee un archivo y lo interpreta
+#[allow(dead_code)]
 pub fn interpretar_archivo(ruta: &str) -> ResultadoQuetzal<Valor> {
     use std::fs;
     
@@ -90,6 +91,7 @@ pub fn interpretar_archivo(ruta: &str) -> ResultadoQuetzal<Valor> {
 /// 
 /// Permite al usuario escribir código Quetzal línea por línea
 /// y ver los resultados inmediatamente
+#[allow(dead_code)]
 pub fn modo_interactivo() {
     use colored::Colorize;
     
@@ -148,6 +150,7 @@ pub fn modo_interactivo() {
 /// Interpreta una línea en modo interactivo
 /// 
 /// Reutiliza el evaluador existente para mantener el estado entre líneas
+#[allow(dead_code)]
 fn interpretar_linea_interactiva(codigo: &str, evaluador: &mut Evaluador) -> ResultadoQuetzal<Valor> {
     // Análisis léxico
     let mut analizador_lexico = AnalizadorLexico::nuevo(codigo);
@@ -172,6 +175,7 @@ fn interpretar_linea_interactiva(codigo: &str, evaluador: &mut Evaluador) -> Res
 /// Verifica la sintaxis de código Quetzal sin ejecutarlo
 /// 
 /// Útil para validación y herramientas de desarrollo
+#[allow(dead_code)]
 pub fn verificar_sintaxis(codigo: &str) -> ResultadoQuetzal<()> {
     // Solo análisis léxico y sintáctico, sin evaluación
     let mut analizador_lexico = AnalizadorLexico::nuevo(codigo);
@@ -191,6 +195,7 @@ pub fn verificar_sintaxis(codigo: &str) -> ResultadoQuetzal<()> {
 /// Obtiene información detallada sobre un error de Quetzal
 /// 
 /// Proporciona información adicional para ayudar en la depuración
+#[allow(dead_code)]
 pub fn analizar_error(error: &ErrorQuetzal) -> String {
     match error {
         ErrorQuetzal::ErrorSintaxis { linea, mensaje } => {

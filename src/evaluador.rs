@@ -26,6 +26,7 @@ pub struct FuncionDefinida {
     pub parametros: Vec<Parametro>,
     pub tipo_retorno: String,
     pub cuerpo: Nodo,
+    #[allow(dead_code)]
     pub es_asincrona: bool,
 }
 
@@ -150,6 +151,7 @@ impl Entorno {
     }
     
     /// Asigna un valor a una variable existente
+    #[allow(dead_code)]
     pub fn asignar_variable(&mut self, nombre: &str, valor: Valor, linea: usize) -> ResultadoQuetzal<()> {
         if let Some(variable) = self.variables.get_mut(nombre) {
             if variable.tipo_variable == TipoVariable::Inmutable {
@@ -225,7 +227,7 @@ impl Evaluador {
     /// Evalúa un nodo con un entorno específico
     fn evaluar_con_entorno(&mut self, nodo: &Nodo, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
         // Verificar si estamos en una llamada a función para controlar recursión
-        if let Nodo::LlamadaFuncion { nombre, .. } = nodo {
+        if let Nodo::LlamadaFuncion { .. } = nodo {
             // Verificar recursión infinita para llamadas a funciones
             if self.profundidad_recursion >= self.max_profundidad_recursion {
                 return Err(ErrorQuetzal::ErrorEjecucion {
@@ -1343,7 +1345,7 @@ impl Evaluador {
                             if f.is_finite() && !f.is_infinite() && !f.is_nan() {
                                 // Verificar que no hayamos perdido precisión significativa
                                 // convirtiendo de vuelta a string y comparando
-                                let back_to_string = f.to_string();
+                                let _back_to_string = f.to_string();
                                 let original_cleaned = trimmed.trim_start_matches("0").trim_start_matches(".");
                                 if original_cleaned.len() > 15 || (f.is_infinite() || f.abs() >= 1e15) {
                                     Err(ErrorQuetzal::ErrorConversion {
@@ -2684,14 +2686,22 @@ impl Evaluador {
             },
             
             "invertir" => {
-                if let Valor::Cadena(s) = valor {
-                    let invertida = s.chars().rev().collect::<String>();
-                    Ok((Valor::Cadena(invertida), ControlFlujo::Ninguno))
-                } else {
-                    Err(ErrorQuetzal::ErrorEjecucion {
-                        linea,
-                        mensaje: format!("El método 'invertir' solo es válido para cadenas"),
-                    })
+                match valor {
+                    Valor::Cadena(s) => {
+                        let invertida = s.chars().rev().collect::<String>();
+                        Ok((Valor::Cadena(invertida), ControlFlujo::Ninguno))
+                    },
+                    Valor::Lista(lista) => {
+                        let mut lista_invertida = lista.clone();
+                        lista_invertida.reverse();
+                        Ok((Valor::Lista(lista_invertida), ControlFlujo::Ninguno))
+                    },
+                    _ => {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: format!("El método 'invertir' solo es válido para cadenas y listas"),
+                        })
+                    }
                 }
             },
             
@@ -3010,19 +3020,6 @@ impl Evaluador {
                     Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
                         mensaje: format!("El método 'ultimo' solo es válido para listas"),
-                    })
-                }
-            },
-            
-            "invertir" => {
-                if let Valor::Lista(lista) = valor {
-                    let mut lista_invertida = lista.clone();
-                    lista_invertida.reverse();
-                    Ok((Valor::Lista(lista_invertida), ControlFlujo::Ninguno))
-                } else {
-                    Err(ErrorQuetzal::ErrorEjecucion {
-                        linea,
-                        mensaje: format!("El método 'invertir' solo es válido para listas"),
                     })
                 }
             },

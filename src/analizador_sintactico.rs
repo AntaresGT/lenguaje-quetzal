@@ -159,6 +159,7 @@ pub enum Nodo {
     ObjetoJson(HashMap<String, Nodo>),
     
     // Conversión de tipos encadenada
+    #[allow(dead_code)]
     ConversionTipo {
         expresion: Box<Nodo>,
         tipo_destino: String,
@@ -173,6 +174,7 @@ pub enum Nodo {
     },
     
     // Manejo de excepciones
+    #[allow(dead_code)]
     BloqueIntentar {
         bloque_intentar: Box<Nodo>,
         bloques_atrapar: Vec<BloqueAtrapar>,
@@ -180,12 +182,14 @@ pub enum Nodo {
         linea: usize,
     },
     
+    #[allow(dead_code)]
     Lanzar {
         excepcion: Box<Nodo>,
         linea: usize,
     },
     
     // Concatenación de cadenas con variables
+    #[allow(dead_code)]
     ConcatenacionVariable {
         plantilla: String,
         variables: Vec<Nodo>,
@@ -674,7 +678,7 @@ impl AnalizadorSintactico {
     
     /// Analiza asignaciones (simples y compuestas)
     fn asignacion(&mut self) -> ResultadoQuetzal<Nodo> {
-        let mut expresion = self.operador_ternario()?;
+        let expresion = self.operador_ternario()?;
         
         // Verificar si es una asignación por índice (expresion[indice] = valor)
         if let Nodo::AccesoIndice { objeto, indice, linea } = &expresion {

@@ -30,7 +30,6 @@ fn main() {
     {
         // Habilitar soporte UTF-8 en la consola de Windows
         unsafe {
-            use std::ffi::c_void;
             extern "system" {
                 fn SetConsoleOutputCP(wCodePageID: u32) -> i32;
                 fn SetConsoleCP(wCodePageID: u32) -> i32;

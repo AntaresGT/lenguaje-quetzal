@@ -15,6 +15,7 @@ impl Consola {
     }
     
     /// Imprime un valor de Quetzal en la consola
+    #[allow(dead_code)]
     pub fn imprimir_valor(&self, valor: &Valor) {
         println!("{}", valor.a_cadena());
     }

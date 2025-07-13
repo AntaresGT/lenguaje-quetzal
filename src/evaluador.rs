@@ -1008,38 +1008,107 @@ impl Evaluador {
     
     /// Evalúa funciones de consola
     fn evaluar_funcion_consola(&mut self, nombre: &str, argumentos: &[Nodo], entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
-        // Evaluar primer argumento (mensaje)
-        let mensaje = if !argumentos.is_empty() {
-            let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
-            valor.a_cadena()
-        } else {
-            String::new()
-        };
-        
         match nombre {
             "consola.imprimir" => {
+                // Evaluar primer argumento (mensaje)
+                let mensaje = if !argumentos.is_empty() {
+                    let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
+                    valor.a_cadena()
+                } else {
+                    String::new()
+                };
                 CONSOLA_GLOBAL.imprimir(&mensaje);
+                Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
             "consola.imprimir_error" => {
+                let mensaje = if !argumentos.is_empty() {
+                    let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
+                    valor.a_cadena()
+                } else {
+                    String::new()
+                };
                 CONSOLA_GLOBAL.imprimir_error(&mensaje);
+                Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
             "consola.imprimir_advertencia" => {
+                let mensaje = if !argumentos.is_empty() {
+                    let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
+                    valor.a_cadena()
+                } else {
+                    String::new()
+                };
                 CONSOLA_GLOBAL.imprimir_advertencia(&mensaje);
+                Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
             "consola.imprimir_informacion" => {
+                let mensaje = if !argumentos.is_empty() {
+                    let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
+                    valor.a_cadena()
+                } else {
+                    String::new()
+                };
                 CONSOLA_GLOBAL.imprimir_informacion(&mensaje);
+                Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
             "consola.imprimir_depurar" => {
+                let mensaje = if !argumentos.is_empty() {
+                    let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
+                    valor.a_cadena()
+                } else {
+                    String::new()
+                };
                 CONSOLA_GLOBAL.imprimir_depurar(&mensaje);
+                Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
             "consola.imprimir_exito" => {
+                let mensaje = if !argumentos.is_empty() {
+                    let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
+                    valor.a_cadena()
+                } else {
+                    String::new()
+                };
                 CONSOLA_GLOBAL.imprimir_exito(&mensaje);
+                Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
             "consola.imprimir_alerta" => {
+                let mensaje = if !argumentos.is_empty() {
+                    let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
+                    valor.a_cadena()
+                } else {
+                    String::new()
+                };
                 CONSOLA_GLOBAL.imprimir_alerta(&mensaje);
+                Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
             "consola.imprimir_confirmacion" => {
+                let mensaje = if !argumentos.is_empty() {
+                    let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
+                    valor.a_cadena()
+                } else {
+                    String::new()
+                };
                 CONSOLA_GLOBAL.imprimir_confirmacion(&mensaje);
+                Ok((Valor::Vacio, ControlFlujo::Ninguno))
+            },
+            "consola.pedir" => {
+                let mensaje = if !argumentos.is_empty() {
+                    let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
+                    valor.a_cadena()
+                } else {
+                    String::new()
+                };
+                let entrada = CONSOLA_GLOBAL.pedir(&mensaje);
+                Ok((Valor::Cadena(entrada), ControlFlujo::Ninguno))
+            },
+            "consola.pedir_secreto" => {
+                let mensaje = if !argumentos.is_empty() {
+                    let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
+                    valor.a_cadena()
+                } else {
+                    String::new()
+                };
+                let entrada_secreta = CONSOLA_GLOBAL.pedir_secreto(&mensaje);
+                Ok((Valor::Cadena(entrada_secreta), ControlFlujo::Ninguno))
             },
             _ => {
                 return Err(ErrorQuetzal::FuncionNoDefinida {
@@ -1048,8 +1117,6 @@ impl Evaluador {
                 });
             }
         }
-        
-        Ok((Valor::Vacio, ControlFlujo::Ninguno))
     }
     
     /// Evalúa método de conversión en cadena

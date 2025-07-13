@@ -25,6 +25,21 @@ const VERSION: &str = "0.0.2";
 
 /// Función principal del intérprete Quetzal
 fn main() {
+    // Configurar codificación UTF-8 en Windows
+    #[cfg(windows)]
+    {
+        // Habilitar soporte UTF-8 en la consola de Windows
+        unsafe {
+            use std::ffi::c_void;
+            extern "system" {
+                fn SetConsoleOutputCP(wCodePageID: u32) -> i32;
+                fn SetConsoleCP(wCodePageID: u32) -> i32;
+            }
+            SetConsoleOutputCP(65001); // UTF-8
+            SetConsoleCP(65001); // UTF-8
+        }
+    }
+    
     let argumentos: Vec<String> = env::args().collect();
     
     // Si no hay argumentos o se pide ayuda

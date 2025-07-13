@@ -3,6 +3,7 @@
 
 use colored::Colorize;
 use crate::tipos_datos::Valor;
+use inquire::{Text, Password};
 
 /// Objeto global de consola disponible en Quetzal
 pub struct Consola;
@@ -51,6 +52,28 @@ impl Consola {
     /// Imprime un mensaje de confirmación en verde con fondo
     pub fn imprimir_confirmacion(&self, mensaje: &str) {
         println!("{}", mensaje.on_green().black().bold());
+    }
+    
+    /// Pide entrada al usuario mostrando un mensaje
+    pub fn pedir(&self, mensaje: &str) -> String {
+        match Text::new(mensaje).prompt() {
+            Ok(entrada) => entrada,
+            Err(_) => {
+                self.imprimir_error("Error al leer la entrada del usuario.");
+                String::new()
+            }
+        }
+    }
+    
+    /// Pide entrada secreta al usuario (contraseña) sin mostrar el texto ingresado
+    pub fn pedir_secreto(&self, mensaje: &str) -> String {
+        match Password::new(mensaje).prompt() {
+            Ok(secreto_entrada) => secreto_entrada,
+            Err(_) => {
+                self.imprimir_error("Error al leer la entrada del usuario.");
+                String::new()
+            }
+        }
     }
 }
 

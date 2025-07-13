@@ -12,6 +12,8 @@ colored = "2.0"
 regex = "1.0"
 base64 = "0.21"
 urlencoding = "2.1"
+rpassword = "7.0"
+inquire = "0.7.5"
 
 [[bin]]
 name = "quetzal"

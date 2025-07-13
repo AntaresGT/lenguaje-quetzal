@@ -591,6 +591,60 @@ impl Evaluador {
                 Ok((nuevo_valor, ControlFlujo::Ninguno))
             },
             
+            Nodo::AsignacionPropiedad { objeto, propiedad, valor, linea } => {
+                // Evaluar el valor que se va a asignar
+                let (nuevo_valor, _) = self.evaluar_con_entorno(valor, entorno.clone())?;
+                
+                // Verificar que el objeto sea un identificador (variable)
+                if let Nodo::Identificador(nombre_objeto) = objeto.as_ref() {
+                    // Obtener la variable del entorno
+                    let entorno_ref = entorno.borrow();
+                    if let Some(variable) = entorno_ref.obtener_variable(nombre_objeto) {
+                        // Verificar que la variable sea mutable
+                        if matches!(variable.tipo_variable, TipoVariable::Inmutable) {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea: *linea,
+                                mensaje: format!("No se puede modificar propiedades del objeto inmutable '{}'", nombre_objeto),
+                            });
+                        }
+                        
+                        // Verificar que la variable sea un objeto JSON
+                        if let Valor::Json(mut mapa) = variable.valor.clone() {
+                            // Asignar la nueva propiedad
+                            mapa.insert(propiedad.clone(), nuevo_valor.clone());
+                            
+                            // Actualizar la variable en el entorno
+                            drop(entorno_ref); // Liberar la referencia inmutable
+                            let nueva_variable = Variable::nueva(
+                                nombre_objeto.clone(),
+                                Valor::Json(mapa),
+                                variable.tipo_variable,
+                                variable.tipo_dato.clone(),
+                            );
+                            entorno.borrow_mut().variables.insert(nombre_objeto.clone(), nueva_variable);
+                            
+                            Ok((nuevo_valor, ControlFlujo::Ninguno))
+                        } else {
+                            Err(ErrorQuetzal::ErrorEjecucion {
+                                linea: *linea,
+                                mensaje: format!("No se puede asignar propiedades a una variable de tipo '{}', debe ser un objeto JSON", 
+                                    self.obtener_nombre_tipo(&variable.valor)),
+                            })
+                        }
+                    } else {
+                        Err(ErrorQuetzal::VariableNoDefinida {
+                            linea: *linea,
+                            nombre: nombre_objeto.clone(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: *linea,
+                        mensaje: "Solo se pueden asignar propiedades a variables, no a expresiones complejas".to_string(),
+                    })
+                }
+            },
+            
             Nodo::BuclePara { inicializacion, condicion, incremento, cuerpo, linea: _ } => {
                 // Crear nuevo entorno para el bucle
                 let entorno_bucle = Rc::new(RefCell::new(Entorno::con_padre(entorno.clone())));

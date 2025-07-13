@@ -76,6 +76,14 @@ pub enum Nodo {
         linea: usize,
     },
     
+    // Asignación a propiedad (objeto.propiedad = valor)
+    AsignacionPropiedad {
+        objeto: Box<Nodo>,
+        propiedad: String,
+        valor: Box<Nodo>,
+        linea: usize,
+    },
+    
     // Llamada a función
     LlamadaFuncion {
         nombre: String,
@@ -688,6 +696,20 @@ impl AnalizadorSintactico {
                 return Ok(Nodo::AsignacionIndice {
                     objeto: objeto.clone(),
                     indice: indice.clone(),
+                    valor,
+                    linea: *linea,
+                });
+            }
+        }
+        
+        // Verificar si es una asignación a propiedad (objeto.propiedad = valor)
+        if let Nodo::AccesoMiembro { objeto, miembro, linea } = &expresion {
+            if self.coincidir(&TipoToken::Asignacion) {
+                let valor = Box::new(self.asignacion()?);
+                
+                return Ok(Nodo::AsignacionPropiedad {
+                    objeto: objeto.clone(),
+                    propiedad: miembro.clone(),
                     valor,
                     linea: *linea,
                 });

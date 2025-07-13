@@ -607,8 +607,11 @@ impl Evaluador {
                         }
                     }
                     
-                    // Ejecutar cuerpo del bucle
-                    let (_, control) = self.evaluar_con_entorno(cuerpo, entorno_bucle.clone())?;
+                    // Crear nuevo entorno para cada iteración del bucle
+                    let entorno_iteracion = Rc::new(RefCell::new(Entorno::con_padre(entorno_bucle.clone())));
+                    
+                    // Ejecutar cuerpo del bucle en el entorno de iteración
+                    let (_, control) = self.evaluar_con_entorno(cuerpo, entorno_iteracion)?;
                     
                     match control {
                         ControlFlujo::Romper => break,
@@ -640,27 +643,21 @@ impl Evaluador {
                         // Crear nuevo entorno para el bucle
                         let entorno_bucle = Rc::new(RefCell::new(Entorno::con_padre(entorno.clone())));
                         
-                        // Definir la variable del bucle una sola vez antes del bucle
-                        let variable_bucle_inicial = Variable::nueva(
-                            variable.clone(),
-                            Valor::Vacio, // Valor temporal
-                            TipoVariable::Inmutable,
-                            "auto".to_string(),
-                        );
-                        entorno_bucle.borrow_mut().definir_variable(variable.clone(), variable_bucle_inicial)?;
-                        
                         for elemento in elementos {
-                            // Actualizar la variable del bucle en cada iteración
+                            // Crear nuevo entorno para cada iteración del bucle para_cada
+                            let entorno_iteracion = Rc::new(RefCell::new(Entorno::con_padre(entorno_bucle.clone())));
+                            
+                            // Definir la variable del bucle en cada iteración
                             let variable_bucle = Variable::nueva(
                                 variable.clone(),
                                 elemento,
                                 TipoVariable::Inmutable,
                                 "auto".to_string(),
                             );
-                            entorno_bucle.borrow_mut().variables.insert(variable.clone(), variable_bucle);
+                            entorno_iteracion.borrow_mut().definir_variable(variable.clone(), variable_bucle)?;
                             
-                            // Ejecutar el cuerpo del bucle
-                            let (_, control) = self.evaluar_con_entorno(cuerpo, entorno_bucle.clone())?;
+                            // Ejecutar el cuerpo del bucle en el entorno de iteración
+                            let (_, control) = self.evaluar_con_entorno(cuerpo, entorno_iteracion)?;
                             
                             match control {
                                 ControlFlujo::Romper => break,
@@ -3243,10 +3240,238 @@ impl Evaluador {
                 }
             },
             
-            // Para casos más anidados, se podría extender recursivamente
+            // Para casos más anidados, implementar recursivamente
+            Nodo::AccesoIndice { objeto: objeto_sub_padre, indice: indice_sub_padre, linea: _ } => {
+                // Evaluar el índice del sub-padre
+                let (valor_indice_sub_padre, _) = self.evaluar_con_entorno(indice_sub_padre, entorno.clone())?;
+                let indice_sub_padre_usize = match valor_indice_sub_padre {
+                    Valor::Entero(i) => {
+                        if i < 0 {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: format!("Índice negativo: {}", i),
+                            });
+                        }
+                        i as usize
+                    },
+                    _ => {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El índice debe ser un número entero".to_string(),
+                        });
+                    }
+                };
+                
+                // Recursión para manejar niveles más profundos
+                self.asignar_indice_triple_anidado(objeto_sub_padre, indice_sub_padre_usize, indice_padre, indice_hijo, nuevo_valor, entorno, linea)
+            },
+            
             _ => Err(ErrorQuetzal::ErrorEjecucion {
                 linea,
-                mensaje: "Acceso a índices muy anidado no soportado actualmente".to_string(),
+                mensaje: "Tipo de objeto no soportado para asignación anidada".to_string(),
+            })
+        }
+    }
+    
+    /// Función auxiliar para manejar asignaciones de 3 o más niveles de profundidad
+    fn asignar_indice_triple_anidado(
+        &mut self,
+        objeto_abuelo: &Nodo,
+        indice_abuelo: usize,
+        indice_padre: usize,
+        indice_hijo: usize,
+        nuevo_valor: Valor,
+        entorno: Rc<RefCell<Entorno>>,
+        linea: usize,
+    ) -> ResultadoQuetzal<()> {
+        match objeto_abuelo {
+            Nodo::Identificador(nombre_var) => {
+                let mut entorno_ref = entorno.borrow_mut();
+                if let Some(variable) = entorno_ref.variables.get_mut(nombre_var) {
+                    if !variable.es_mutable() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: format!("No se puede modificar la matriz inmutable '{}'", nombre_var),
+                        });
+                    }
+                    
+                    if let Valor::Lista(ref mut lista_abuelo) = variable.valor {
+                        if indice_abuelo >= lista_abuelo.len() {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: format!("Índice fuera de rango en nivel 1: {} (tamaño: {})", indice_abuelo, lista_abuelo.len()),
+                            });
+                        }
+                        
+                        if let Valor::Lista(ref mut lista_padre) = lista_abuelo[indice_abuelo] {
+                            if indice_padre >= lista_padre.len() {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: format!("Índice fuera de rango en nivel 2: {} (tamaño: {})", indice_padre, lista_padre.len()),
+                                });
+                            }
+                            
+                            if let Valor::Lista(ref mut lista_hijo) = lista_padre[indice_padre] {
+                                if indice_hijo >= lista_hijo.len() {
+                                    return Err(ErrorQuetzal::ErrorEjecucion {
+                                        linea,
+                                        mensaje: format!("Índice fuera de rango en nivel 3: {} (tamaño: {})", indice_hijo, lista_hijo.len()),
+                                    });
+                                }
+                                
+                                lista_hijo[indice_hijo] = nuevo_valor;
+                                Ok(())
+                            } else {
+                                Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: "El elemento en nivel 2 no es una lista".to_string(),
+                                })
+                            }
+                        } else {
+                            Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El elemento en nivel 1 no es una lista".to_string(),
+                            })
+                        }
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: format!("'{}' no es una lista", nombre_var),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::VariableNoDefinida {
+                        linea,
+                        nombre: nombre_var.clone(),
+                    })
+                }
+            },
+            
+            // Aquí se puede extender para manejar casos aún más anidados si es necesario
+            Nodo::AccesoIndice { objeto: objeto_bis_abuelo, indice: indice_bis_abuelo, linea: _ } => {
+                // Para matrices 4D, 5D, etc. - se puede implementar de manera similar
+                let (valor_indice_bis_abuelo, _) = self.evaluar_con_entorno(indice_bis_abuelo, entorno.clone())?;
+                let indice_bis_abuelo_usize = match valor_indice_bis_abuelo {
+                    Valor::Entero(i) => {
+                        if i < 0 {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: format!("Índice negativo: {}", i),
+                            });
+                        }
+                        i as usize
+                    },
+                    _ => {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El índice debe ser un número entero".to_string(),
+                        });
+                    }
+                };
+                
+                // Implementar recursión para matrices 4D
+                self.asignar_indice_cuadruple_anidado(objeto_bis_abuelo, indice_bis_abuelo_usize, indice_abuelo, indice_padre, indice_hijo, nuevo_valor, entorno, linea)
+            },
+            
+            _ => Err(ErrorQuetzal::ErrorEjecucion {
+                linea,
+                mensaje: "Tipo de objeto no soportado para asignación triple anidada".to_string(),
+            })
+        }
+    }
+    
+    /// Función auxiliar para manejar asignaciones de 4 niveles de profundidad (matrices 4D)
+    fn asignar_indice_cuadruple_anidado(
+        &mut self,
+        objeto_bis_abuelo: &Nodo,
+        indice_bis_abuelo: usize,
+        indice_abuelo: usize,
+        indice_padre: usize,
+        indice_hijo: usize,
+        nuevo_valor: Valor,
+        entorno: Rc<RefCell<Entorno>>,
+        linea: usize,
+    ) -> ResultadoQuetzal<()> {
+        match objeto_bis_abuelo {
+            Nodo::Identificador(nombre_var) => {
+                let mut entorno_ref = entorno.borrow_mut();
+                if let Some(variable) = entorno_ref.variables.get_mut(nombre_var) {
+                    if !variable.es_mutable() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: format!("No se puede modificar la matriz 4D inmutable '{}'", nombre_var),
+                        });
+                    }
+                    
+                    if let Valor::Lista(ref mut lista_nivel_0) = variable.valor {
+                        if indice_bis_abuelo >= lista_nivel_0.len() {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: format!("Índice fuera de rango en nivel 0: {} (tamaño: {})", indice_bis_abuelo, lista_nivel_0.len()),
+                            });
+                        }
+                        
+                        if let Valor::Lista(ref mut lista_nivel_1) = lista_nivel_0[indice_bis_abuelo] {
+                            if indice_abuelo >= lista_nivel_1.len() {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: format!("Índice fuera de rango en nivel 1: {} (tamaño: {})", indice_abuelo, lista_nivel_1.len()),
+                                });
+                            }
+                            
+                            if let Valor::Lista(ref mut lista_nivel_2) = lista_nivel_1[indice_abuelo] {
+                                if indice_padre >= lista_nivel_2.len() {
+                                    return Err(ErrorQuetzal::ErrorEjecucion {
+                                        linea,
+                                        mensaje: format!("Índice fuera de rango en nivel 2: {} (tamaño: {})", indice_padre, lista_nivel_2.len()),
+                                    });
+                                }
+                                
+                                if let Valor::Lista(ref mut lista_nivel_3) = lista_nivel_2[indice_padre] {
+                                    if indice_hijo >= lista_nivel_3.len() {
+                                        return Err(ErrorQuetzal::ErrorEjecucion {
+                                            linea,
+                                            mensaje: format!("Índice fuera de rango en nivel 3: {} (tamaño: {})", indice_hijo, lista_nivel_3.len()),
+                                        });
+                                    }
+                                    
+                                    lista_nivel_3[indice_hijo] = nuevo_valor;
+                                    Ok(())
+                                } else {
+                                    Err(ErrorQuetzal::ErrorEjecucion {
+                                        linea,
+                                        mensaje: "El elemento en nivel 2 no es una lista".to_string(),
+                                    })
+                                }
+                            } else {
+                                Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: "El elemento en nivel 1 no es una lista".to_string(),
+                                })
+                            }
+                        } else {
+                            Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El elemento en nivel 0 no es una lista".to_string(),
+                            })
+                        }
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: format!("'{}' no es una lista", nombre_var),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::VariableNoDefinida {
+                        linea,
+                        nombre: nombre_var.clone(),
+                    })
+                }
+            },
+            
+            _ => Err(ErrorQuetzal::ErrorEjecucion {
+                linea,
+                mensaje: "Matrices de más de 4 dimensiones no están soportadas actualmente".to_string(),
             })
         }
     }

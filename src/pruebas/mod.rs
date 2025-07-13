@@ -18,3 +18,11 @@ pub mod metodos_listas;
 pub mod asignacion_indices;
 pub mod metodos_mutantes;
 pub mod redondeo_decimales;
+
+// Nuevos módulos para funcionalidades avanzadas
+pub mod matrices_multidimensionales;
+pub mod algoritmos_recursivos;
+pub mod procesamiento_cadenas_avanzado;
+
+// Módulos para tests de correcciones específicas
+pub mod ambito_variables;

@@ -7,7 +7,7 @@ mod tests {
     #[test]
     fn test_asignacion_indice_simple() {
         let codigo = r#"
-lista mut numeros = [1, 2, 3]
+lista var numeros = [1, 2, 3]
 numeros[0] = 10
 numeros[1] = 20
 numeros[2] = 30
@@ -20,7 +20,7 @@ numeros[2] = 30
     #[test]
     fn test_asignacion_indice_tipos_diferentes() {
         let codigo = r#"
-lista mut valores = [1, 2, 3]
+lista var valores = [1, 2, 3]
 valores[0] = "texto"
 valores[1] = verdadero
 valores[2] = 3.14
@@ -33,7 +33,7 @@ valores[2] = 3.14
     #[test]
     fn test_asignacion_indice_negativo() {
         let codigo = r#"
-lista mut numeros = [1, 2, 3]
+lista var numeros = [1, 2, 3]
 numeros[-1] = 100
         "#;
         
@@ -44,7 +44,7 @@ numeros[-1] = 100
     #[test]
     fn test_asignacion_indice_muy_grande() {
         let codigo = r#"
-lista mut numeros = [1, 2, 3]
+lista var numeros = [1, 2, 3]
 numeros[1000] = 100
         "#;
         
@@ -55,7 +55,7 @@ numeros[1000] = 100
     #[test]
     fn test_asignacion_indice_con_expresiones() {
         let codigo = r#"
-lista mut numeros = [10, 20, 30, 40, 50]
+lista var numeros = [10, 20, 30, 40, 50]
 entero indice = 2
 numeros[indice] = 999
 numeros[indice + 1] = 888
@@ -68,7 +68,7 @@ numeros[indice + 1] = 888
     #[test]
     fn test_asignacion_indice_en_bucle() {
         let codigo = r#"
-lista mut datos = [1, 2, 3, 4, 5]
+lista var datos = [1, 2, 3, 4, 5]
 entero i = 0
 mientras (i < datos.longitud()) {
     datos[i] = datos[i] * 2
@@ -83,7 +83,7 @@ mientras (i < datos.longitud()) {
     #[test]
     fn test_lectura_despues_asignacion() {
         let codigo = r#"
-lista mut numeros = [1, 2, 3]
+lista var numeros = [1, 2, 3]
 numeros[1] = 100
 entero valor = numeros[1]
         "#;
@@ -106,7 +106,7 @@ vacia[0] = 10
     #[test]
     fn test_asignacion_con_metodos() {
         let codigo = r#"
-lista mut numeros = [1, 2, 3]
+lista var numeros = [1, 2, 3]
 numeros[0] = numeros.longitud()
 numeros[1] = numeros.primero()
         "#;
@@ -118,7 +118,7 @@ numeros[1] = numeros.primero()
     #[test]
     fn test_asignacion_multiple_mismo_indice() {
         let codigo = r#"
-lista mut datos = [1, 2, 3]
+lista var datos = [1, 2, 3]
 datos[1] = 10
 datos[1] = 20
 datos[1] = 30

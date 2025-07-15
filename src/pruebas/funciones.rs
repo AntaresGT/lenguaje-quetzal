@@ -65,10 +65,10 @@ entero numero_valor = obtener_numero()
     #[test]
     fn test_funcion_retorno_cadena() {
         let codigo = r#"
-cadena obtener_saludo() {
+texto obtener_saludo() {
     retornar "Hola mundo"
 }
-cadena saludo = obtener_saludo()
+texto saludo = obtener_saludo()
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -77,10 +77,10 @@ cadena saludo = obtener_saludo()
     #[test]
     fn test_funcion_retorno_booleano() {
         let codigo = r#"
-bool es_verdadero() {
+log es_verdadero() {
     retornar verdadero
 }
-bool resultado = es_verdadero()
+log resultado = es_verdadero()
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -89,10 +89,10 @@ bool resultado = es_verdadero()
     #[test]
     fn test_funcion_con_multiples_parametros() {
         let codigo = r#"
-cadena concatenar(cadena a, cadena b, cadena c) {
+texto concatenar(texto a, texto b, texto c) {
     retornar a + b + c
 }
-cadena resultado = concatenar("Hola", " ", "mundo")
+texto resultado = concatenar("Hola", " ", "mundo")
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -177,10 +177,10 @@ entero resultado = duplicar(triplicar(5))
     #[test]
     fn test_funcion_con_tipos_mixtos() {
         let codigo = r#"
-cadena formatear(entero numero, cadena texto) {
-    retornar "Número: " + numero.cadena() + ", Texto: " + texto
+texto formatear(entero numero, texto mensaje) {
+    retornar "Número: " + numero.texto() + ", Texto: " + mensaje
 }
-cadena resultado = formatear(42, "prueba")
+texto resultado = formatear(42, "prueba")
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -301,7 +301,7 @@ entero resultado = sumar(5)
     #[test]
     fn test_funcion_con_parametros_mutables() {
         let codigo = r#"
-entero incrementar(entero mut x) {
+entero incrementar(entero var x) {
     x = x + 1
     retornar x
 }

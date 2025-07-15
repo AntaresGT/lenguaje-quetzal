@@ -80,8 +80,8 @@ si ((a > b) && (c > a)) {
     #[test]
     fn test_condiciones_con_operadores_espanol() {
         let codigo = r#"
-bool verdad = verdadero
-bool mentira = falso
+log verdad = verdadero
+log mentira = falso
 si (verdad y !mentira) {
     consola.imprimir("Condición en español verdadera")
 }
@@ -93,8 +93,8 @@ si (verdad y !mentira) {
     #[test]
     fn test_comparacion_cadenas() {
         let codigo = r#"
-cadena texto1 = "Hola"
-cadena texto2 = "Hola"
+texto texto1 = "Hola"
+texto texto2 = "Hola"
 si (texto1 == texto2) {
     consola.imprimir("Las cadenas son iguales")
 }
@@ -106,8 +106,8 @@ si (texto1 == texto2) {
     #[test]
     fn test_comparacion_booleanos() {
         let codigo = r#"
-bool valor1 = verdadero
-bool valor2 = falso
+log valor1 = verdadero
+log valor2 = falso
 si (valor1 != valor2) {
     consola.imprimir("Los valores booleanos son diferentes")
 }

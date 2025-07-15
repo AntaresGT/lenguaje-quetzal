@@ -9,9 +9,9 @@ mod tests {
         let codigo = r#"
 entero numero_entero = 42
 número numero_decimal = 3.14
-cadena texto = "Hola mundo"
-bool verdad = verdadero
-bool mentira = falso
+texto mi_texto = "Hola mundo"
+log verdad = verdadero
+log mentira = falso
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -22,8 +22,8 @@ bool mentira = falso
         let codigo = r#"
 entero numero_vacio
 número decimal_vacio
-cadena texto_vacio
-bool booleano_vacio
+texto texto_vacio
+log booleano_vacio
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -32,9 +32,9 @@ bool booleano_vacio
     #[test]
     fn test_declaracion_variables_mutables() {
         let codigo = r#"
-entero mut numero_mutable = 10
-número mut decimal_mutable = 5.5
-cadena mut texto_mutable = "Variable"
+entero var numero_mutable = 10
+número var decimal_mutable = 5.5
+texto var texto_mutable = "Variable"
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -47,10 +47,10 @@ entero entero_positivo = 100
 entero entero_negativo = -50
 número numero_positivo = 123.456
 número numero_negativo = -789.012
-cadena cadena_simple = "Texto simple"
-cadena cadena_vacia = ""
-bool verdadero_explicito = verdadero
-bool falso_explicito = falso
+texto cadena_simple = "Texto simple"
+texto cadena_vacia = ""
+log verdadero_explicito = verdadero
+log falso_explicito = falso
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());

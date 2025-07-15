@@ -7,9 +7,9 @@ mod tests {
     #[test]
     fn test_concatenacion_basica() {
         let codigo = r#"
-cadena saludo = "Hola"
-cadena nombre = "Mundo"
-cadena mensaje = saludo + " " + nombre
+texto saludo = "Hola"
+texto nombre = "Mundo"
+texto mensaje = saludo + " " + nombre
 imprimir(mensaje)
         "#;
         
@@ -20,8 +20,8 @@ imprimir(mensaje)
     fn test_concatenacion_con_numeros() {
         let codigo = r#"
 entero valor_numero = 42
-cadena texto = "El número es: " + valor_numero.cadena()
-imprimir(texto)
+texto mi_texto = "El número es: " + valor_numero.texto()
+consola.imprimir(mi_texto)
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -30,10 +30,10 @@ imprimir(texto)
     #[test]
     fn test_concatenacion_multiple() {
         let codigo = r#"
-cadena parte1 = "Primera"
-cadena parte2 = "Segunda"
-cadena parte3 = "Tercera"
-cadena resultado = parte1 + " - " + parte2 + " - " + parte3
+texto parte1 = "Primera"
+texto parte2 = "Segunda"
+texto parte3 = "Tercera"
+texto resultado = parte1 + " - " + parte2 + " - " + parte3
 imprimir(resultado)
         "#;
         
@@ -45,7 +45,7 @@ imprimir(resultado)
         let codigo = r#"
 entero a = 10
 entero b = 5
-cadena resultado = "La suma de " + a.cadena() + " y " + b.cadena() + " es " + (a + b).cadena()
+texto resultado = "La suma de " + a.texto() + " y " + b.texto() + " es " + (a + b).texto()
 imprimir(resultado)
         "#;
         
@@ -55,9 +55,9 @@ imprimir(resultado)
     #[test]
     fn test_interpolacion_simple() {
         let codigo = r#"
-cadena nombre = "Juan"
+texto nombre = "Juan"
 entero edad = 25
-cadena mensaje = "Hola, soy " + nombre + " y tengo " + edad.cadena() + " años"
+texto mensaje = "Hola, soy " + nombre + " y tengo " + edad.texto() + " años"
 imprimir(mensaje)
         "#;
         
@@ -69,10 +69,10 @@ imprimir(mensaje)
         let codigo = r#"
 entero entero_val = 100
 número decimal_val = 3.14159
-bool booleano_val = verdadero
-cadena resultado = "Entero: " + entero_val.cadena() + 
-                   ", Decimal: " + decimal_val.cadena() + 
-                   ", Booleano: " + booleano_val.cadena()
+log booleano_val = verdadero
+texto resultado = "Entero: " + entero_val.texto() + 
+                   ", Decimal: " + decimal_val.texto() + 
+                   ", Booleano: " + booleano_val.texto()
 imprimir(resultado)
         "#;
         
@@ -82,8 +82,8 @@ imprimir(resultado)
     #[test]
     fn test_cadenas_vacias() {
         let codigo = r#"
-cadena vacia = ""
-cadena resultado = "Inicio" + vacia + "Final"
+texto vacia = ""
+texto resultado = "Inicio" + vacia + "Final"
 imprimir(resultado)
         "#;
         
@@ -93,9 +93,9 @@ imprimir(resultado)
     #[test]
     fn test_concatenacion_en_impresion() {
         let codigo = r#"
-cadena nombre = "Quetzal"
+texto nombre = "Quetzal"
 número version = 0.1
-imprimir("Lenguaje: " + nombre + ", Versión: " + version.cadena())
+imprimir("Lenguaje: " + nombre + ", Versión: " + version.texto())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -104,9 +104,9 @@ imprimir("Lenguaje: " + nombre + ", Versión: " + version.cadena())
     #[test]
     fn test_cadenas_con_espacios() {
         let codigo = r#"
-cadena palabra1 = "Hola"
-cadena palabra2 = "mundo"
-cadena con_espacios = palabra1 + " " + palabra2 + " desde Quetzal"
+texto palabra1 = "Hola"
+texto palabra2 = "mundo"
+texto con_espacios = palabra1 + " " + palabra2 + " desde Quetzal"
 imprimir(con_espacios)
         "#;
         
@@ -116,10 +116,10 @@ imprimir(con_espacios)
     #[test]
     fn test_cadenas_largas() {
         let codigo = r#"
-cadena parte1 = "Esta es una cadena muy larga que se compone"
-cadena parte2 = "de múltiples partes concatenadas para formar"
-cadena parte3 = "un mensaje completo y coherente"
-cadena mensaje_completo = parte1 + " " + parte2 + " " + parte3
+texto parte1 = "Esta es una texto muy larga que se compone"
+texto parte2 = "de múltiples partes concatenadas para formar"
+texto parte3 = "un mensaje completo y coherente"
+texto mensaje_completo = parte1 + " " + parte2 + " " + parte3
 imprimir(mensaje_completo)
         "#;
         
@@ -131,8 +131,8 @@ imprimir(mensaje_completo)
         let codigo = r#"
 entero base = 10
 entero exponente = 2
-cadena resultado = base.cadena() + " elevado a " + exponente.cadena() + 
-                   " es igual a " + (base * base).cadena()
+texto resultado = base.texto() + " elevado a " + exponente.texto() + 
+                   " es igual a " + (base * base).texto()
 imprimir(resultado)
         "#;
         

@@ -18,7 +18,7 @@ entero numero = 42
     fn test_comentario_al_final_linea() {
         let codigo = r#"
 entero numero = 42  // Comentario al final
-cadena texto = "hola"  // Otro comentario
+texto mi_texto = "hola"  // Otro comentario
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -78,7 +78,7 @@ entero calcular(entero x) {
 entero numero_entero = 42
 
 
-cadena texto = "hola"
+texto mi_texto = "hola"
 
         "#;
         
@@ -89,8 +89,8 @@ cadena texto = "hola"
     fn test_espacios_y_tabs() {
         let codigo = r#"
     entero numero_entero = 42
-	cadena texto = "hola"
-        bool estado = verdadero
+	texto mi_texto = "hola"
+        log estado = verdadero
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -142,8 +142,8 @@ entero numero_entero = 42
     fn test_codigo_sin_comentarios() {
         let codigo = r#"
 entero numero_entero = 42
-cadena texto = "hola"
-bool estado = verdadero
+texto mi_texto = "hola"
+log estado = verdadero
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -165,10 +165,10 @@ bool estado = verdadero
         let codigo = r#"
 entero numero = 42
 // entero otro_numero = 100
-cadena texto = "hola"
+texto mi_texto = "hola"
 /* 
 entero variable_comentada = 50
-cadena otra_variable = "comentada"
+texto otra_variable = "comentada"
 */
         "#;
         

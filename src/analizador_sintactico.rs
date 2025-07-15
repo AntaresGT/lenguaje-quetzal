@@ -16,7 +16,7 @@ pub enum Nodo {
     DeclaracionVariable {
         nombre: String,
         tipo_dato: String,
-        es_mutable: bool,
+        es_variable: bool,
         valor: Option<Box<Nodo>>,
         linea: usize,
     },
@@ -210,7 +210,7 @@ pub enum Nodo {
 pub struct Parametro {
     pub nombre: String,
     pub tipo_dato: String,
-    pub es_mutable: bool,
+    pub es_variable: bool,
     pub valor_defecto: Option<Valor>,
 }
 
@@ -358,8 +358,8 @@ impl AnalizadorSintactico {
                 TipoToken::TipoVacio => { self.avanzar(); "vacio".to_string() },
                 TipoToken::TipoEntero => { self.avanzar(); "entero".to_string() },
                 TipoToken::TipoNumero => { self.avanzar(); "número".to_string() },
-                TipoToken::TipoCadena => { self.avanzar(); "cadena".to_string() },
-                TipoToken::TipoBool => { self.avanzar(); "bool".to_string() },
+                TipoToken::TipoTexto => { self.avanzar(); "texto".to_string() },
+                TipoToken::TipoLog => { self.avanzar(); "log".to_string() },
                 TipoToken::TipoLista => { self.avanzar(); "lista".to_string() },
                 TipoToken::TipoJson => { self.avanzar(); "jsn".to_string() },
                 _ => return Err(ErrorQuetzal::ErrorSintaxis {
@@ -446,8 +446,8 @@ impl AnalizadorSintactico {
                 TipoToken::TipoVacio => { self.avanzar(); "vacio".to_string() },
                 TipoToken::TipoEntero => { self.avanzar(); "entero".to_string() },
                 TipoToken::TipoNumero => { self.avanzar(); "número".to_string() },
-                TipoToken::TipoCadena => { self.avanzar(); "cadena".to_string() },
-                TipoToken::TipoBool => { self.avanzar(); "bool".to_string() },
+                TipoToken::TipoTexto => { self.avanzar(); "texto".to_string() },
+                TipoToken::TipoLog => { self.avanzar(); "log".to_string() },
                 TipoToken::TipoLista => { 
                     self.avanzar(); 
                     // Verificar si hay un tipo genérico <tipo>
@@ -457,8 +457,8 @@ impl AnalizadorSintactico {
                             match &self.token_actual().tipo {
                                 TipoToken::TipoEntero => { self.avanzar(); "entero" },
                                 TipoToken::TipoNumero => { self.avanzar(); "número" },
-                                TipoToken::TipoCadena => { self.avanzar(); "cadena" },
-                                TipoToken::TipoBool => { self.avanzar(); "bool" },
+                                TipoToken::TipoTexto => { self.avanzar(); "texto" },
+                                TipoToken::TipoLog => { self.avanzar(); "log" },
                                 _ => return Err(ErrorQuetzal::ErrorSintaxis {
                                     linea: self.token_actual().linea,
                                     mensaje: "Tipo genérico no válido para lista en parámetro".to_string(),
@@ -497,8 +497,8 @@ impl AnalizadorSintactico {
             });
         };
         
-        // Verificar si es mutable
-        let es_mutable = self.coincidir(&TipoToken::Mut);
+        // Verificar si es variable (antes era mutable)
+        let es_variable = self.coincidir(&TipoToken::Var);
         
         // Nombre del parámetro
         let nombre = if let TipoToken::Identificador(nom) = &self.token_actual().tipo {
@@ -522,7 +522,7 @@ impl AnalizadorSintactico {
         Ok(Parametro {
             nombre,
             tipo_dato,
-            es_mutable,
+            es_variable,
             valor_defecto,
         })
     }
@@ -597,8 +597,8 @@ impl AnalizadorSintactico {
                 TipoToken::TipoVacio => { self.avanzar(); "vacio".to_string() },
                 TipoToken::TipoEntero => { self.avanzar(); "entero".to_string() },
                 TipoToken::TipoNumero => { self.avanzar(); "número".to_string() },
-                TipoToken::TipoCadena => { self.avanzar(); "cadena".to_string() },
-                TipoToken::TipoBool => { self.avanzar(); "bool".to_string() },
+                TipoToken::TipoTexto => { self.avanzar(); "texto".to_string() },
+                TipoToken::TipoLog => { self.avanzar(); "log".to_string() },
                 TipoToken::TipoLista => { 
                     self.avanzar(); 
                     // Verificar si hay un tipo genérico <tipo>
@@ -608,8 +608,8 @@ impl AnalizadorSintactico {
                             match &self.token_actual().tipo {
                                 TipoToken::TipoEntero => { self.avanzar(); "entero" },
                                 TipoToken::TipoNumero => { self.avanzar(); "número" },
-                                TipoToken::TipoCadena => { self.avanzar(); "cadena" },
-                                TipoToken::TipoBool => { self.avanzar(); "bool" },
+                                TipoToken::TipoTexto => { self.avanzar(); "texto" },
+                                TipoToken::TipoLog => { self.avanzar(); "log" },
                                 _ => return Err(ErrorQuetzal::ErrorSintaxis {
                                     linea: self.token_actual().linea,
                                     mensaje: "Tipo genérico no válido para lista".to_string(),
@@ -648,8 +648,8 @@ impl AnalizadorSintactico {
             });
         };
         
-        // Verificar si es mutable
-        let es_mutable = self.coincidir(&TipoToken::Mut);
+        // Verificar si es variable
+        let es_variable = self.coincidir(&TipoToken::Var);
         
         // Nombre de la variable
         let nombre = if let TipoToken::Identificador(nom) = &self.token_actual().tipo {
@@ -673,7 +673,7 @@ impl AnalizadorSintactico {
         Ok(Nodo::DeclaracionVariable {
             nombre,
             tipo_dato,
-            es_mutable,
+            es_variable,
             valor,
             linea,
         })
@@ -906,10 +906,10 @@ impl AnalizadorSintactico {
                 } else if self.es_tipo_dato(&self.token_actual().tipo) {
                     // Permitir tipos de datos como nombres de método (para conversiones)
                     let m = match &self.token_actual().tipo {
-                        TipoToken::TipoCadena => "cadena".to_string(),
+                        TipoToken::TipoTexto => "texto".to_string(),
                         TipoToken::TipoEntero => "entero".to_string(),
                         TipoToken::TipoNumero => "numero".to_string(),
-                        TipoToken::TipoBool => "bool".to_string(),
+                        TipoToken::TipoLog => "log".to_string(),
                         TipoToken::TipoLista => "lista".to_string(),
                         TipoToken::TipoJson => "jsn".to_string(),
                         _ => "desconocido".to_string(),
@@ -1059,11 +1059,11 @@ impl AnalizadorSintactico {
     fn primario(&mut self) -> ResultadoQuetzal<Nodo> {
         // Literales booleanos
         if self.coincidir(&TipoToken::Verdadero) {
-            return Ok(Nodo::Literal(Valor::Bool(true)));
+            return Ok(Nodo::Literal(Valor::Log(true)));
         }
         
         if self.coincidir(&TipoToken::Falso) {
-            return Ok(Nodo::Literal(Valor::Bool(false)));
+            return Ok(Nodo::Literal(Valor::Log(false)));
         }
         
         // Literales numéricos y de cadena
@@ -1081,7 +1081,7 @@ impl AnalizadorSintactico {
             TipoToken::LiteralCadena(s) => {
                 let valor = s.clone();
                 self.avanzar();
-                Ok(Nodo::Literal(Valor::Cadena(valor)))
+                Ok(Nodo::Literal(Valor::Texto(valor)))
             },
             TipoToken::Identificador(nombre) => {
                 let nom = nombre.clone();
@@ -1145,8 +1145,8 @@ impl AnalizadorSintactico {
                                     TipoToken::TipoVacio => "vacio".to_string(),
                                     TipoToken::TipoEntero => "entero".to_string(),
                                     TipoToken::TipoNumero => "número".to_string(),
-                                    TipoToken::TipoCadena => "cadena".to_string(),
-                                    TipoToken::TipoBool => "bool".to_string(),
+                                    TipoToken::TipoTexto => "texto".to_string(),
+                                    TipoToken::TipoLog => "log".to_string(),
                                     TipoToken::TipoLista => "lista".to_string(),
                                     TipoToken::TipoJson => "jsn".to_string(),
                                     _ => return Err(ErrorQuetzal::ErrorSintaxis {
@@ -1169,7 +1169,7 @@ impl AnalizadorSintactico {
                                 TipoToken::Objeto | TipoToken::Nuevo | TipoToken::Retornar | 
                                 TipoToken::Asincrono | TipoToken::Si | TipoToken::Sino |
                                 TipoToken::Para | TipoToken::Mientras | TipoToken::Hacer |
-                                TipoToken::Romper | TipoToken::Continuar | TipoToken::En) {
+                                TipoToken::Romper | TipoToken::Continuar | TipoToken::En | TipoToken::Cada) {
                                 // Permitir palabras reservadas como claves de propiedades
                                 let palabra_como_clave = match &self.token_actual().tipo {
                                     TipoToken::Objeto => "objeto".to_string(),
@@ -1184,6 +1184,7 @@ impl AnalizadorSintactico {
                                     TipoToken::Romper => "romper".to_string(),
                                     TipoToken::Continuar => "continuar".to_string(),
                                     TipoToken::En => "en".to_string(),
+                                    TipoToken::Cada => "cada".to_string(),
                                     _ => return Err(ErrorQuetzal::ErrorSintaxis {
                                         linea: self.token_actual().linea,
                                         mensaje: "Palabra reservada no válida como clave de propiedad".to_string(),
@@ -1277,15 +1278,15 @@ impl AnalizadorSintactico {
             TipoToken::LiteralCadena(s) => {
                 let valor = s.clone();
                 self.avanzar();
-                Ok(Valor::Cadena(valor))
+                Ok(Valor::Texto(valor))
             },
             TipoToken::Verdadero => {
                 self.avanzar();
-                Ok(Valor::Bool(true))
+                Ok(Valor::Log(true))
             },
             TipoToken::Falso => {
                 self.avanzar();
-                Ok(Valor::Bool(false))
+                Ok(Valor::Log(false))
             },
             _ => Err(ErrorQuetzal::ErrorSintaxis {
                 linea: self.token_actual().linea,
@@ -1298,7 +1299,7 @@ impl AnalizadorSintactico {
     fn es_tipo_dato(&self, tipo: &TipoToken) -> bool {
         matches!(tipo, 
             TipoToken::TipoVacio | TipoToken::TipoEntero | TipoToken::TipoNumero |
-            TipoToken::TipoCadena | TipoToken::TipoBool | TipoToken::TipoLista |
+            TipoToken::TipoTexto | TipoToken::TipoLog | TipoToken::TipoLista |
             TipoToken::TipoJson
         )
     }
@@ -1427,10 +1428,10 @@ impl AnalizadorSintactico {
                 self.avanzar();
             }
             
-            // Si hay identificador seguido de 'en', es foreach
+            // Si hay identificador seguido de 'cada', es foreach
             if let TipoToken::Identificador(_) = &self.token_actual().tipo {
                 self.avanzar();
-                if self.verificar(&TipoToken::En) {
+                if self.verificar(&TipoToken::Cada) || self.verificar(&TipoToken::En) {
                     es_foreach = true;
                 }
             }
@@ -1446,8 +1447,8 @@ impl AnalizadorSintactico {
                     let tipo = match &self.token_actual().tipo {
                         TipoToken::TipoEntero => "entero".to_string(),
                         TipoToken::TipoNumero => "número".to_string(),
-                        TipoToken::TipoCadena => "cadena".to_string(),
-                        TipoToken::TipoBool => "bool".to_string(),
+                        TipoToken::TipoTexto => "texto".to_string(),
+                        TipoToken::TipoLog => "log".to_string(),
                         TipoToken::TipoLista => "lista".to_string(),
                         TipoToken::TipoJson => "jsn".to_string(),
                         _ => "desconocido".to_string(),
@@ -1470,11 +1471,11 @@ impl AnalizadorSintactico {
                     });
                 };
                 
-                // Esperar 'en'
-                if !self.coincidir(&TipoToken::En) {
+                // Esperar 'cada' o 'en' (mantener compatibilidad)
+                if !self.coincidir(&TipoToken::Cada) && !self.coincidir(&TipoToken::En) {
                     return Err(ErrorQuetzal::ErrorSintaxis {
                         linea: self.token_actual().linea,
-                        mensaje: "Se esperaba 'en' en bucle foreach".to_string(),
+                        mensaje: "Se esperaba 'cada' en bucle foreach".to_string(),
                     });
                 }
                 
@@ -1569,11 +1570,11 @@ impl AnalizadorSintactico {
                 });
             };
             
-            // Esperar 'en' 
-            if !self.coincidir(&TipoToken::En) {
+            // Esperar 'cada' o 'en' (mantener compatibilidad) 
+            if !self.coincidir(&TipoToken::Cada) && !self.coincidir(&TipoToken::En) {
                 return Err(ErrorQuetzal::ErrorSintaxis {
                     linea: self.token_actual().linea,
-                    mensaje: "Se esperaba 'en' en bucle para".to_string(),
+                    mensaje: "Se esperaba 'cada' en bucle para".to_string(),
                 });
             }
             
@@ -1670,8 +1671,8 @@ impl AnalizadorSintactico {
             TipoToken::TipoVacio => { self.avanzar(); "vacio".to_string() },
             TipoToken::TipoEntero => { self.avanzar(); "entero".to_string() },
             TipoToken::TipoNumero => { self.avanzar(); "número".to_string() },
-            TipoToken::TipoCadena => { self.avanzar(); "cadena".to_string() },
-            TipoToken::TipoBool => { self.avanzar(); "bool".to_string() },
+            TipoToken::TipoTexto => { self.avanzar(); "texto".to_string() },
+            TipoToken::TipoLog => { self.avanzar(); "log".to_string() },
             TipoToken::TipoLista => { self.avanzar(); "lista".to_string() },
             TipoToken::TipoJson => { self.avanzar(); "jsn".to_string() },
             _ => return Err(ErrorQuetzal::ErrorSintaxis {
@@ -1680,12 +1681,10 @@ impl AnalizadorSintactico {
             }),
         };
         
-        // En bucles, las variables son mutables por defecto (a menos que se especifique explícitamente)
-        let es_mutable = if self.coincidir(&TipoToken::Mut) {
-            true
-        } else {
-            true // Por defecto mutable en bucles
-        };
+        // En bucles, las variables son variables por defecto
+        let es_variable = true;
+        // Consumir 'var' opcional si está presente
+        self.coincidir(&TipoToken::Var);
         
         // Nombre de la variable
         let nombre = if let TipoToken::Identificador(nom) = &self.token_actual().tipo {
@@ -1709,7 +1708,7 @@ impl AnalizadorSintactico {
         Ok(Nodo::DeclaracionVariable {
             nombre,
             tipo_dato,
-            es_mutable,
+            es_variable,
             valor,
             linea,
         })

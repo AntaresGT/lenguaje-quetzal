@@ -18,9 +18,8 @@ pub fn interpretar(codigo: &str) -> ResultadoQuetzal<Valor> {
     // Etapa 1: Análisis léxico
     // Convierte el código fuente en una secuencia de tokens
     let mut analizador_lexico = AnalizadorLexico::nuevo(codigo);
-    let tokens = analizador_lexico.analizar().map_err(|error| {
+    let tokens = analizador_lexico.analizar().inspect_err(|error| {
         error.mostrar_error();
-        error
     })?;
     
     // Filtrar tokens de nueva línea para simplificar el análisis sintáctico
@@ -41,9 +40,8 @@ pub fn interpretar(codigo: &str) -> ResultadoQuetzal<Valor> {
     // Etapa 2: Análisis sintáctico
     // Convierte los tokens en un Árbol de Sintaxis Abstracta (AST)
     let mut analizador_sintactico = AnalizadorSintactico::nuevo(tokens_filtrados);
-    let ast = analizador_sintactico.analizar().map_err(|error| {
+    let ast = analizador_sintactico.analizar().inspect_err(|error| {
         error.mostrar_error();
-        error
     })?;
     
     // Debug: mostrar AST si hay una variable de entorno activada
@@ -56,9 +54,8 @@ pub fn interpretar(codigo: &str) -> ResultadoQuetzal<Valor> {
     // Etapa 3: Evaluación
     // Ejecuta el AST y produce el resultado final
     let mut evaluador = Evaluador::nuevo();
-    let (resultado, control_flujo) = evaluador.evaluar(&ast).map_err(|error| {
+    let (resultado, control_flujo) = evaluador.evaluar(&ast).inspect_err(|error| {
         error.mostrar_error();
-        error
     })?;
     
     // Debug: mostrar resultado si hay una variable de entorno activada
@@ -249,7 +246,7 @@ mod tests {
     fn test_interpretar_basico() {
         let codigo = r#"
             entero numero = 42
-            consola.imprimir("El número es: " + numero.cadena())
+            consola.imprimir("El número es: " + numero.texto())
         "#;
         
         let resultado = interpretar(codigo);
@@ -259,7 +256,7 @@ mod tests {
     #[test]
     fn test_verificar_sintaxis() {
         let codigo = r#"
-            entero mut contador = 0
+            entero var contador = 0
             para (entero i = 0; i < 10; i++) {
                 contador = contador + 1
             }

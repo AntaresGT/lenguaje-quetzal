@@ -7,8 +7,8 @@ mod tests {
     #[test]
     fn test_bucle_para_basico() {
         let codigo = r#"
-para (entero mut i = 0; i < 5; i = i + 1) {
-    consola.imprimir("Iteración: " + i.cadena())
+para (entero var i = 0; i < 5; i = i + 1) {
+    consola.imprimir("Iteración: " + i.texto())
 }
         "#;
         
@@ -18,9 +18,9 @@ para (entero mut i = 0; i < 5; i = i + 1) {
     #[test]
     fn test_bucle_mientras() {
         let codigo = r#"
-entero mut contador = 0
+entero var contador = 0
 mientras (contador < 3) {
-    consola.imprimir("Contador: " + contador.cadena())
+    consola.imprimir("Contador: " + contador.texto())
     contador = contador + 1
 }
         "#;
@@ -31,9 +31,9 @@ mientras (contador < 3) {
     #[test]
     fn test_bucle_hacer_mientras() {
         let codigo = r#"
-entero mut valor_numero = 1
+entero var valor_numero = 1
 hacer {
-    consola.imprimir("Número: " + valor_numero.cadena())
+    consola.imprimir("Número: " + valor_numero.texto())
     valor_numero = valor_numero + 1
 } mientras (valor_numero <= 3)
         "#;
@@ -45,8 +45,8 @@ hacer {
     fn test_bucle_foreach_lista() {
         let codigo = r#"
 lista numeros = [1, 2, 3, 4, 5]
-para (valor_numero en numeros) {
-    consola.imprimir("Elemento: " + valor_numero.cadena())
+para (valor_numero cada numeros) {
+    consola.imprimir("Elemento: " + valor_numero.texto())
 }
         "#;
         
@@ -57,8 +57,8 @@ para (valor_numero en numeros) {
     fn test_bucle_foreach_con_tipo() {
         let codigo = r#"
 lista<entero> enteros = [10, 20, 30]
-para (entero valor en enteros) {
-    consola.imprimir("Valor entero: " + valor.cadena())
+para (entero valor cada enteros) {
+    consola.imprimir("Valor entero: " + valor.texto())
 }
         "#;
         
@@ -68,9 +68,9 @@ para (entero valor en enteros) {
     #[test]
     fn test_bucle_anidado() {
         let codigo = r#"
-para (entero mut i = 0; i < 3; i = i + 1) {
-    para (entero mut j = 0; j < 2; j = j + 1) {
-        consola.imprimir("i: " + i.cadena() + ", j: " + j.cadena())
+para (entero var i = 0; i < 3; i = i + 1) {
+    para (entero var j = 0; j < 2; j = j + 1) {
+        consola.imprimir("i: " + i.texto() + ", j: " + j.texto())
     }
 }
         "#;
@@ -81,11 +81,11 @@ para (entero mut i = 0; i < 3; i = i + 1) {
     #[test]
     fn test_control_flujo_romper() {
         let codigo = r#"
-para (entero mut i = 0; i < 10; i = i + 1) {
+para (entero var i = 0; i < 10; i = i + 1) {
     si (i == 5) {
         romper
     }
-    consola.imprimir("Valor: " + i.cadena())
+    consola.imprimir("Valor: " + i.texto())
 }
         "#;
         
@@ -95,11 +95,11 @@ para (entero mut i = 0; i < 10; i = i + 1) {
     #[test]
     fn test_control_flujo_continuar() {
         let codigo = r#"
-para (entero mut i = 0; i < 5; i = i + 1) {
+para (entero var i = 0; i < 5; i = i + 1) {
     si (i == 2) {
         continuar
     }
-    consola.imprimir("Valor: " + i.cadena())
+    consola.imprimir("Valor: " + i.texto())
 }
         "#;
         
@@ -109,8 +109,8 @@ para (entero mut i = 0; i < 5; i = i + 1) {
     #[test]
     fn test_bucle_para_con_decimales() {
         let codigo = r#"
-para (número mut i = 0.0; i < 2.5; i = i + 0.5) {
-    consola.imprimir("Decimal: " + i.cadena())
+para (número var i = 0.0; i < 2.5; i = i + 0.5) {
+    consola.imprimir("Decimal: " + i.texto())
 }
         "#;
         
@@ -120,10 +120,10 @@ para (número mut i = 0.0; i < 2.5; i = i + 0.5) {
     #[test]
     fn test_bucle_mientras_condicion_compleja() {
         let codigo = r#"
-entero mut a = 1
-entero mut b = 10
+entero var a = 1
+entero var b = 10
 mientras ((a < 5) && (b > 5)) {
-    consola.imprimir("a: " + a.cadena() + ", b: " + b.cadena())
+    consola.imprimir("a: " + a.texto() + ", b: " + b.texto())
     a = a + 1
     b = b - 1
 }
@@ -135,7 +135,7 @@ mientras ((a < 5) && (b > 5)) {
     #[test]
     fn test_bucle_infinito_con_romper() {
         let codigo = r#"
-entero mut contador = 0
+entero var contador = 0
 mientras (verdadero) {
     si (contador >= 3) {
         romper
@@ -154,8 +154,8 @@ mientras (verdadero) {
         // Este test verifica que se puede usar el mismo nombre de variable
         // en diferentes iteraciones del mismo bucle sin conflictos de ámbito
         let codigo = r#"
-para (entero mut i = 0; i < 3; i = i + 1) {
-    cadena palabra = "test_" + i.cadena()
+para (entero var i = 0; i < 3; i = i + 1) {
+    texto palabra = "test_" + i.texto()
     consola.imprimir(palabra)
 }
         "#;
@@ -169,12 +169,12 @@ para (entero mut i = 0; i < 3; i = i + 1) {
         // Test para verificar que variables con el mismo nombre en bucles anidados
         // no causan conflictos de ámbito
         let codigo = r#"
-para (entero mut i = 0; i < 2; i = i + 1) {
-    cadena palabra = "exterior_" + i.cadena()
+para (entero var i = 0; i < 2; i = i + 1) {
+    texto palabra = "exterior_" + i.texto()
     consola.imprimir(palabra)
     
-    para (entero mut j = 0; j < 2; j = j + 1) {
-        cadena palabra = "interior_" + j.cadena()
+    para (entero var j = 0; j < 2; j = j + 1) {
+        texto palabra = "interior_" + j.texto()
         consola.imprimir(palabra)
     }
 }
@@ -190,15 +190,15 @@ para (entero mut i = 0; i < 2; i = i + 1) {
         // variables con el mismo nombre en funciones diferentes que contienen bucles
         let codigo = r#"
 vacio funcion1() {
-    para (entero mut i = 0; i < 2; i = i + 1) {
-        cadena palabra = "funcion1_" + i.cadena()
+    para (entero var i = 0; i < 2; i = i + 1) {
+        texto palabra = "funcion1_" + i.texto()
         consola.imprimir(palabra)
     }
 }
 
 vacio funcion2() {
-    para (entero mut j = 0; j < 2; j = j + 1) {
-        cadena palabra = "funcion2_" + j.cadena()
+    para (entero var j = 0; j < 2; j = j + 1) {
+        texto palabra = "funcion2_" + j.texto()
         consola.imprimir(palabra)
     }
 }
@@ -218,13 +218,13 @@ funcion2()
 lista numeros1 = [1, 2]
 lista numeros2 = [3, 4]
 
-para (elemento en numeros1) {
-    cadena mensaje = "lista1: " + elemento.cadena()
+para (elemento cada numeros1) {
+    texto mensaje = "lista1: " + elemento.texto()
     consola.imprimir(mensaje)
 }
 
-para (elemento en numeros2) {
-    cadena mensaje = "lista2: " + elemento.cadena()
+para (elemento cada numeros2) {
+    texto mensaje = "lista2: " + elemento.texto()
     consola.imprimir(mensaje)
 }
         "#;
@@ -238,20 +238,20 @@ para (elemento en numeros2) {
         // Test con múltiples bucles consecutivos usando variables con el mismo nombre
         let codigo = r#"
 // Primer bucle
-para (entero mut i = 0; i < 2; i = i + 1) {
-    cadena resultado = "primer_" + i.cadena()
+para (entero var i = 0; i < 2; i = i + 1) {
+    texto resultado = "primer_" + i.texto()
     consola.imprimir(resultado)
 }
 
 // Segundo bucle
-para (entero mut k = 0; k < 2; k = k + 1) {
-    cadena resultado = "segundo_" + k.cadena()
+para (entero var k = 0; k < 2; k = k + 1) {
+    texto resultado = "segundo_" + k.texto()
     consola.imprimir(resultado)
 }
 
 // Tercer bucle
-para (entero mut m = 0; m < 2; m = m + 1) {
-    cadena resultado = "tercer_" + m.cadena()
+para (entero var m = 0; m < 2; m = m + 1) {
+    texto resultado = "tercer_" + m.texto()
     consola.imprimir(resultado)
 }
         "#;
@@ -265,9 +265,9 @@ para (entero mut m = 0; m < 2; m = m + 1) {
         // Test más complejo: función con parámetros que contiene bucle con variables locales
         let codigo = r#"
 vacio procesar_lista(lista elementos) {
-    para (entero mut i = 0; i < elementos.longitud(); i = i + 1) {
-        cadena elemento_actual = elementos[i].cadena()
-        cadena mensaje = "Procesando: " + elemento_actual
+    para (entero var i = 0; i < elementos.longitud(); i = i + 1) {
+        texto elemento_actual = elementos[i].texto()
+        texto mensaje = "Procesando: " + elemento_actual
         consola.imprimir(mensaje)
     }
 }
@@ -287,15 +287,15 @@ procesar_lista(datos2)
     fn test_ambito_variables_bucle_tres_niveles_anidacion() {
         // Test con tres niveles de anidación de bucles
         let codigo = r#"
-para (entero mut i = 0; i < 2; i = i + 1) {
-    cadena nivel1 = "nivel1_" + i.cadena()
+para (entero var i = 0; i < 2; i = i + 1) {
+    texto nivel1 = "nivel1_" + i.texto()
     
-    para (entero mut j = 0; j < 2; j = j + 1) {
-        cadena nivel2 = "nivel2_" + j.cadena()
+    para (entero var j = 0; j < 2; j = j + 1) {
+        texto nivel2 = "nivel2_" + j.texto()
         
-        para (entero mut k = 0; k < 2; k = k + 1) {
-            cadena nivel3 = "nivel3_" + k.cadena()
-            cadena combinado = nivel1 + "_" + nivel2 + "_" + nivel3
+        para (entero var k = 0; k < 2; k = k + 1) {
+            texto nivel3 = "nivel3_" + k.texto()
+            texto combinado = nivel1 + "_" + nivel2 + "_" + nivel3
             consola.imprimir(combinado)
         }
     }
@@ -310,10 +310,10 @@ para (entero mut i = 0; i < 2; i = i + 1) {
     fn test_ambito_variables_bucle_con_shadowing() {
         // Test para verificar que el shadowing (ocultación de variables) funciona correctamente
         let codigo = r#"
-cadena variable_global = "global"
+texto variable_global = "global"
 
-para (entero mut i = 0; i < 2; i = i + 1) {
-    cadena variable_global = "local_" + i.cadena()
+para (entero var i = 0; i < 2; i = i + 1) {
+    texto variable_global = "local_" + i.texto()
     consola.imprimir("Dentro del bucle: " + variable_global)
 }
 

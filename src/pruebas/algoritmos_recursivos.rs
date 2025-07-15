@@ -14,7 +14,7 @@ mod tests {
             }
             
             entero resultado = factorial(5)
-            consola.imprimir("Factorial de 5: " + resultado.cadena())
+            consola.imprimir("Factorial de 5: " + resultado.texto())
         "#;
         
         let resultado = interpretar(codigo);
@@ -33,7 +33,7 @@ mod tests {
             }
             
             entero resultado = fibonacci(6)
-            consola.imprimir("Fibonacci de 6: " + resultado.cadena())
+            consola.imprimir("Fibonacci de 6: " + resultado.texto())
         "#;
         
         let resultado = interpretar(codigo);
@@ -54,7 +54,7 @@ mod tests {
             
             lista numeros = [1, 2, 3, 4, 5]
             entero total = suma_lista(numeros, 0)
-            consola.imprimir("Suma total: " + total.cadena())
+            consola.imprimir("Suma total: " + total.texto())
         "#;
         
         let resultado = interpretar(codigo);
@@ -77,7 +77,7 @@ mod tests {
             }
             
             entero resultado = potencia(2, 4)
-            consola.imprimir("2 elevado a la 4: " + resultado.cadena())
+            consola.imprimir("2 elevado a la 4: " + resultado.texto())
         "#;
         
         let resultado = interpretar(codigo);
@@ -87,7 +87,7 @@ mod tests {
     #[test]
     fn test_es_primo_iterativo() {
         let codigo = r#"
-            bool es_primo(entero num) {
+            log es_primo(entero num) {
                 si (num < 2) {
                     retornar falso
                 }
@@ -98,7 +98,7 @@ mod tests {
                     retornar falso
                 }
                 
-                entero mut i = 3
+                entero var i = 3
                 mientras (i * i <= num) {
                     si (num % i == 0) {
                         retornar falso
@@ -108,8 +108,8 @@ mod tests {
                 retornar verdadero
             }
             
-            bool resultado = es_primo(17)
-            consola.imprimir("17 es primo: " + resultado.cadena())
+            log resultado = es_primo(17)
+            consola.imprimir("17 es primo: " + resultado.texto())
         "#;
         
         let resultado = interpretar(codigo);

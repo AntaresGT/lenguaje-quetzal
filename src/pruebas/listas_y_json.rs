@@ -9,7 +9,7 @@ mod tests {
         let codigo = r#"
 lista numeros = [1, 2, 3, 4, 5]
 lista<entero> enteros = [10, 20, 30]
-lista<cadena> textos = ["hola", "mundo", "quetzal"]
+lista<texto> textos = ["hola", "mundo", "quetzal"]
 lista mixta = [1, "texto", verdadero, 3.14]
         "#;
         
@@ -100,7 +100,7 @@ jsn datos = {
     fn test_json_con_diferentes_tipos() {
         let codigo = r#"
 jsn completo = {
-    cadena: "texto",
+    texto: "texto",
     entero: 42,
     decimal: 3.14159,
     booleano: verdadero,
@@ -126,7 +126,7 @@ jsn json_vacio = {}
     #[test]
     fn test_json_con_variables() {
         let codigo = r#"
-cadena nombre = "Ana"
+texto nombre = "Ana"
 entero edad = 25
 jsn usuario = {
     nombre: nombre,
@@ -153,8 +153,8 @@ lista numeros = [a, b, c]
     #[test]
     fn test_tipos_complejos_mutables() {
         let codigo = r#"
-lista mut numeros_mutables = [1, 2, 3]
-jsn mut configuracion_mutable = {
+lista var numeros_mutables = [1, 2, 3]
+jsn var configuracion_mutable = {
     debug: verdadero,
     version: "1.0"
 }

@@ -10,13 +10,13 @@ pub enum TipoToken {
     TipoVacio,          // vacio
     TipoEntero,         // entero
     TipoNumero,         // número
-    TipoCadena,         // cadena
-    TipoBool,           // bool
+    TipoTexto,          // texto
+    TipoLog,            // log
     TipoLista,          // lista
     TipoJson,           // jsn
     
     // Modificadores
-    Mut,                // mut
+    Var,                // var
     Publico,            // publico
     Privado,            // privado
     Libre,              // libre
@@ -119,7 +119,8 @@ pub enum TipoToken {
     ComentarioBloque(String),
     
     // En
-    En,                 // en
+    En,                 // en (obsoleto - usar Cada)
+    Cada,               // cada
     
     // Final de archivo
     FinArchivo,
@@ -518,7 +519,7 @@ impl AnalizadorLexico {
         }
         
         // Verificar si es decimal
-        if self.mirar() == Some('.') && self.mirar_siguiente().map_or(false, |c| c.is_ascii_digit()) {
+        if self.mirar() == Some('.') && self.mirar_siguiente().is_some_and(|c| c.is_ascii_digit()) {
             numero.push(self.avanzar()); // Agregar el punto
             
             // Leer la parte decimal
@@ -572,13 +573,13 @@ impl AnalizadorLexico {
             "vacio" => TipoToken::TipoVacio,
             "entero" => TipoToken::TipoEntero,
             "número" => TipoToken::TipoNumero,
-            "cadena" => TipoToken::TipoCadena,
-            "bool" => TipoToken::TipoBool,
+            "texto" => TipoToken::TipoTexto,
+            "log" => TipoToken::TipoLog,
             "lista" => TipoToken::TipoLista,
             "jsn" => TipoToken::TipoJson,
             
             // Modificadores
-            "mut" => TipoToken::Mut,
+            "var" => TipoToken::Var,
             "publico" => TipoToken::Publico,
             "privado" => TipoToken::Privado,
             "libre" => TipoToken::Libre,
@@ -591,7 +592,8 @@ impl AnalizadorLexico {
             "hacer" => TipoToken::Hacer,
             "romper" => TipoToken::Romper,
             "continuar" => TipoToken::Continuar,
-            "en" => TipoToken::En,
+            "en" => TipoToken::En,        // Mantener para compatibilidad
+            "cada" => TipoToken::Cada,    // Nueva sintaxis preferida
             
             // Funciones y objetos
             "retornar" => TipoToken::Retornar,
@@ -685,3 +687,9 @@ impl AnalizadorLexico {
         }
     }
 }
+
+// === COMPATIBILIDAD HACIA ATRÁS ===
+// Palabras reservadas anteriores que mapean a las nuevas
+// "cadena" => TipoToken::TipoTexto,  // cadena -> texto
+// "bool" => TipoToken::TipoLog,      // bool -> log
+// "mut" => TipoToken::Var,           // mut -> var

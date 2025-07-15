@@ -68,7 +68,7 @@ entero numero_entero = "texto"
     #[test]
     fn test_operacion_tipos_incompatibles() {
         let codigo = r#"
-cadena texto = "hola"
+texto mi_texto = "hola"
 entero numero = 5
 entero resultado = texto + numero
         "#;
@@ -106,7 +106,7 @@ entero resultado = (5 + 3
     #[test]
     fn test_cadena_sin_cerrar() {
         let codigo = r#"
-cadena texto = "texto sin cerrar
+texto mi_texto = "texto sin cerrar
         "#;
         
         assert!(interprete::interpretar(codigo).is_err());
@@ -115,8 +115,8 @@ cadena texto = "texto sin cerrar
     #[test]
     fn test_conversion_invalida_numero() {
         let codigo = r#"
-cadena texto = "no_es_numero"
-entero numero = texto.numero()
+texto mi_texto = "no_es_numero"
+entero numero = mi_texto.numero()
         "#;
         
         assert!(interprete::interpretar(codigo).is_err());
@@ -265,7 +265,7 @@ entero funcion_invalida(entero a, entero a) {
     #[test]
     fn test_cadena_con_escape_invalido() {
         let codigo = r#"
-cadena texto = "texto con \z escape inválido"
+texto mi_texto = "texto con \z escape inválido"
         "#;
         
         // Dependiendo de la implementación, esto podría ser válido o no

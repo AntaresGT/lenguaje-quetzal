@@ -11,7 +11,7 @@ mod tests {
 entero numero1 = 10
 entero numero2 = 20
 entero suma = numero1 + numero2
-consola.imprimir("Suma: " + suma.cadena())
+consola.imprimir("Suma: " + suma.texto())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -29,7 +29,7 @@ número calcular_area(número radio) {
 // Variables principales
 número radio_circulo = 5.0
 número area = calcular_area(radio_circulo)
-consola.imprimir("Área del círculo: " + area.cadena())
+consola.imprimir("Área del círculo: " + area.texto())
 
 // Condicional
 si (area > 50.0) {
@@ -50,14 +50,14 @@ lista<entero> numeros = [1, 2, 3, 4, 5]
 
 // Función para procesar la lista
 entero sumar_lista(lista<entero> lista_nums) {
-    entero mut suma = 0
+    entero var suma = 0
     // Simular iteración (sin foreach implementado)
     suma = suma + 1 + 2 + 3 + 4 + 5
     retornar suma
 }
 
 entero total = sumar_lista(numeros)
-consola.imprimir("Total: " + total.cadena())
+consola.imprimir("Total: " + total.texto())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -69,17 +69,17 @@ consola.imprimir("Total: " + total.cadena())
 // Prueba de conversiones encadenadas
 entero numero_entero = 42
 número numero_decimal = 3.14159
-bool estado = verdadero
+log estado = verdadero
 
-// Conversiones a cadena
-cadena texto_numero = numero_entero.cadena()
-cadena texto_decimal = numero_decimal.cadena()
-cadena texto_estado = estado.cadena()
+// Conversiones a texto
+texto texto_numero = numero_entero.texto()
+texto texto_decimal = numero_decimal.texto()
+texto texto_estado = estado.texto()
 
 // Concatenación con conversiones en línea
-cadena mensaje_completo = "Número: " + numero_entero.cadena() + 
-                         ", Decimal: " + numero_decimal.cadena() + 
-                         ", Estado: " + estado.cadena()
+texto mensaje_completo = "Número: " + numero_entero.texto() + 
+                         ", Decimal: " + numero_decimal.texto() + 
+                         ", Estado: " + estado.texto()
 
 consola.imprimir(mensaje_completo)
         "#;
@@ -106,9 +106,9 @@ b *= c
 c -= 1
 
 // Comparaciones
-bool mayor = resultado1 > resultado2
-bool menor_igual = resultado3 <= resultado4
-bool igual = a == b
+log mayor = resultado1 > resultado2
+log menor_igual = resultado3 <= resultado4
+log igual = a == b
 
 consola.imprimir("Operaciones completadas")
         "#;
@@ -136,7 +136,7 @@ entero procesar_numero(entero num) {
 
 entero numero_inicial = 10
 entero resultado_final = procesar_numero(numero_inicial)
-consola.imprimir("Resultado: " + resultado_final.cadena())
+consola.imprimir("Resultado: " + resultado_final.texto())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -191,8 +191,8 @@ consola.imprimir("Objeto JSON complejo creado")
         let codigo = r#"
 // Condicionales anidados y complejos
 entero edad = 25
-bool es_estudiante = verdadero
-bool tiene_trabajo = falso
+log es_estudiante = verdadero
+log tiene_trabajo = falso
 
 si (edad >= 18) {
     si (es_estudiante y !tiene_trabajo) {
@@ -214,15 +214,15 @@ si (edad >= 18) {
     fn test_programa_con_variables_mutables() {
         let codigo = r#"
 // Variables mutables
-entero mut contador = 0
-cadena mut mensaje = "Inicial"
+entero var contador = 0
+texto var mensaje = "Inicial"
 
 // Modificar variables
 contador += 5
 contador *= 2
 mensaje = "Modificado"
 
-consola.imprimir("Contador: " + contador.cadena())
+consola.imprimir("Contador: " + contador.texto())
 consola.imprimir("Mensaje: " + mensaje)
         "#;
         
@@ -235,20 +235,20 @@ consola.imprimir("Mensaje: " + mensaje)
 // Programa complejo que combina varias funcionalidades
 
 // Función para validar número
-bool es_par(entero num) {
+log es_par(entero num) {
     retornar (num % 2) == 0
 }
 
 // Función para formatear resultado
-cadena formatear_resultado(entero num, bool par) {
-    cadena tipo = par ? "par" : "impar"
-    retornar "El número " + num.cadena() + " es " + tipo
+texto formatear_resultado(entero num, log par) {
+    texto tipo = par ? "par" : "impar"
+    retornar "El número " + num.texto() + " es " + tipo
 }
 
 // Variables principales
 entero numero_prueba = 42
-bool resultado_par = es_par(numero_prueba)
-cadena mensaje_final = formatear_resultado(numero_prueba, resultado_par)
+log resultado_par = es_par(numero_prueba)
+texto mensaje_final = formatear_resultado(numero_prueba, resultado_par)
 
 // consola.Imprimir resultado
 consola.imprimir(mensaje_final)
@@ -270,19 +270,19 @@ consola.imprimir("Procesando números...")
 vacio variable_vacia
 entero numero_entero = 100
 número numero_decimal = 99.99
-cadena texto = "Prueba"
-bool estado_activo = verdadero
+texto mi_texto = "Prueba"
+log estado_activo = verdadero
 
 // Función que trabaja con múltiples tipos
-cadena crear_reporte(entero num, número dec, cadena txt, bool activo) {
-    cadena estado_texto = activo ? "Activo" : "Inactivo"
+texto crear_reporte(entero num, número dec, texto txt, log activo) {
+    texto estado_texto = activo ? "Activo" : "Inactivo"
     retornar "Reporte: " + txt + 
-             ", Entero: " + num.cadena() + 
-             ", Decimal: " + dec.cadena() + 
+             ", Entero: " + num.texto() + 
+             ", Decimal: " + dec.texto() + 
              ", Estado: " + estado_texto
 }
 
-cadena reporte = crear_reporte(numero_entero, numero_decimal, texto, estado_activo)
+texto reporte = crear_reporte(numero_entero, numero_decimal, mi_texto, estado_activo)
 consola.imprimir(reporte)
         "#;
         

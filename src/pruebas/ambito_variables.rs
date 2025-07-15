@@ -21,7 +21,7 @@ entero funcion2() {
 }
 
 entero suma = funcion1() + funcion2()
-consola.imprimir("Suma: " + suma.cadena())
+consola.imprimir("Suma: " + suma.texto())
         "#;
         
         let resultado = interprete::interpretar(codigo);
@@ -33,25 +33,25 @@ consola.imprimir("Suma: " + suma.cadena())
         // Test del problema original: mismo nombre de variable en bucles de diferentes funciones
         let codigo = r#"
 entero contar_elementos() {
-    entero mut total = 0
-    para (entero mut i = 0; i < 3; i = i + 1) {
-        cadena palabra = "elemento_" + i.cadena()
+    entero var total = 0
+    para (entero var i = 0; i < 3; i = i + 1) {
+        texto palabra = "elemento_" + i.texto()
         total = total + 1
     }
     retornar total
 }
 
-cadena procesar_texto() {
-    cadena mut resultado = ""
-    para (entero mut j = 1; j <= 2; j = j + 1) {
-        cadena palabra = "texto_" + j.cadena()
+texto procesar_texto() {
+    texto var resultado = ""
+    para (entero var j = 1; j <= 2; j = j + 1) {
+        texto palabra = "texto_" + j.texto()
         resultado = resultado + palabra + " "
     }
     retornar resultado.recortar()
 }
 
 entero conteo = contar_elementos()
-cadena texto = procesar_texto()
+texto mi_texto = procesar_texto()
         "#;
         
         let resultado = interprete::interpretar(codigo);
@@ -62,10 +62,10 @@ cadena texto = procesar_texto()
     fn test_ambito_bucle_variables_iteracion() {
         // Test que verifica que cada iteración tiene su propio ámbito
         let codigo = r#"
-para (entero mut iteracion = 0; iteracion < 4; iteracion = iteracion + 1) {
-    cadena mensaje_iteracion = "Iteración número: " + iteracion.cadena()
+para (entero var iteracion = 0; iteracion < 4; iteracion = iteracion + 1) {
+    texto mensaje_iteracion = "Iteración número: " + iteracion.texto()
     entero valor_local = iteracion * 2
-    cadena resultado_local = mensaje_iteracion + ", valor: " + valor_local.cadena()
+    texto resultado_local = mensaje_iteracion + ", valor: " + valor_local.texto()
     consola.imprimir(resultado_local)
 }
         "#;
@@ -78,14 +78,14 @@ para (entero mut iteracion = 0; iteracion < 4; iteracion = iteracion + 1) {
     fn test_ambito_shadowing_variables() {
         // Test de shadowing (ocultación) de variables
         let codigo = r#"
-cadena nombre = "global"
+texto nombre = "global"
 
 vacio funcion_con_shadowing() {
-    cadena nombre = "local_funcion"
+    texto nombre = "local_funcion"
     consola.imprimir("En función: " + nombre)
     
-    para (entero mut i = 0; i < 2; i = i + 1) {
-        cadena nombre = "local_bucle_" + i.cadena()
+    para (entero var i = 0; i < 2; i = i + 1) {
+        texto nombre = "local_bucle_" + i.texto()
         consola.imprimir("En bucle: " + nombre)
     }
     
@@ -105,15 +105,15 @@ consola.imprimir("En global: " + nombre)
         // Test con múltiples niveles de anidación
         let codigo = r#"
 vacio test_anidacion() {
-    para (entero mut nivel1 = 0; nivel1 < 2; nivel1 = nivel1 + 1) {
-        cadena var1 = "n1_" + nivel1.cadena()
+    para (entero var nivel1 = 0; nivel1 < 2; nivel1 = nivel1 + 1) {
+        texto var1 = "n1_" + nivel1.texto()
         
-        para (entero mut nivel2 = 0; nivel2 < 2; nivel2 = nivel2 + 1) {
-            cadena var2 = "n2_" + nivel2.cadena()
+        para (entero var nivel2 = 0; nivel2 < 2; nivel2 = nivel2 + 1) {
+            texto var2 = "n2_" + nivel2.texto()
             
-            para (entero mut nivel3 = 0; nivel3 < 2; nivel3 = nivel3 + 1) {
-                cadena var3 = "n3_" + nivel3.cadena()
-                cadena completo = var1 + "_" + var2 + "_" + var3
+            para (entero var nivel3 = 0; nivel3 < 2; nivel3 = nivel3 + 1) {
+                texto var3 = "n3_" + nivel3.texto()
+                texto completo = var1 + "_" + var2 + "_" + var3
                 consola.imprimir(completo)
             }
         }
@@ -131,19 +131,19 @@ test_anidacion()
     fn test_ambito_parametros_funcion() {
         // Test de ámbito de parámetros de función
         let codigo = r#"
-cadena procesar_con_bucle(cadena entrada, entero repeticiones) {
-    cadena mut resultado = ""
+texto procesar_con_bucle(texto entrada, entero repeticiones) {
+    texto var resultado = ""
     
-    para (entero mut i = 0; i < repeticiones; i = i + 1) {
-        cadena iteracion_actual = entrada + "_" + i.cadena()
+    para (entero var i = 0; i < repeticiones; i = i + 1) {
+        texto iteracion_actual = entrada + "_" + i.texto()
         resultado = resultado + iteracion_actual + " "
     }
     
     retornar resultado.recortar()
 }
 
-cadena resultado1 = procesar_con_bucle("test", 3)
-cadena resultado2 = procesar_con_bucle("otro", 2)
+texto resultado1 = procesar_con_bucle("test", 3)
+texto resultado2 = procesar_con_bucle("otro", 2)
 
 consola.imprimir("Resultado 1: " + resultado1)
 consola.imprimir("Resultado 2: " + resultado2)
@@ -158,15 +158,15 @@ consola.imprimir("Resultado 2: " + resultado2)
         // Test con estructuras de datos más complejas en ámbitos locales
         let codigo = r#"
 vacio procesar_listas() {
-    lista mut datos_locales = []
+    lista var datos_locales = []
     
-    para (entero mut indice = 0; indice < 3; indice = indice + 1) {
+    para (entero var indice = 0; indice < 3; indice = indice + 1) {
         lista elementos_iteracion = [indice, indice * 2, indice * 3]
-        cadena descripcion = "Lista en iteración " + indice.cadena()
+        texto descripcion = "Lista en iteración " + indice.texto()
         
-        para (entero mut j = 0; j < elementos_iteracion.longitud(); j = j + 1) {
-            cadena elemento_str = elementos_iteracion[j].cadena()
-            cadena mensaje_elemento = descripcion + ": " + elemento_str
+        para (entero var j = 0; j < elementos_iteracion.longitud(); j = j + 1) {
+            texto elemento_str = elementos_iteracion[j].texto()
+            texto mensaje_elemento = descripcion + ": " + elemento_str
             consola.imprimir(mensaje_elemento)
         }
     }
@@ -183,21 +183,21 @@ procesar_listas()
     fn test_ambito_variables_entre_bloques_condicionales() {
         // Test de ámbito entre bloques condicionales y bucles
         let codigo = r#"
-vacio test_bloques_mixtos(bool condicion) {
+vacio test_bloques_mixtos(log condicion) {
     si (condicion) {
-        cadena mensaje_condicional = "En bloque verdadero"
+        texto mensaje_condicional = "En bloque verdadero"
         consola.imprimir(mensaje_condicional)
         
-        para (entero mut i = 0; i < 2; i = i + 1) {
-            cadena mensaje_bucle = "Bucle en verdadero: " + i.cadena()
+        para (entero var i = 0; i < 2; i = i + 1) {
+            texto mensaje_bucle = "Bucle en verdadero: " + i.texto()
             consola.imprimir(mensaje_bucle)
         }
     } sino {
-        cadena mensaje_condicional = "En bloque falso"
+        texto mensaje_condicional = "En bloque falso"
         consola.imprimir(mensaje_condicional)
         
-        para (entero mut i = 0; i < 2; i = i + 1) {
-            cadena mensaje_bucle = "Bucle en falso: " + i.cadena()
+        para (entero var i = 0; i < 2; i = i + 1) {
+            texto mensaje_bucle = "Bucle en falso: " + i.texto()
             consola.imprimir(mensaje_bucle)
         }
     }
@@ -217,24 +217,24 @@ test_bloques_mixtos(falso)
         let codigo = r#"
 vacio funcion_reutilizacion() {
     // Primer contexto
-    para (entero mut contador = 0; contador < 2; contador = contador + 1) {
-        cadena dato = "primer_contexto_" + contador.cadena()
+    para (entero var contador = 0; contador < 2; contador = contador + 1) {
+        texto dato = "primer_contexto_" + contador.texto()
         consola.imprimir(dato)
     }
     
     // Segundo contexto (mismo nombre de variable)
-    para (entero mut contador = 10; contador < 12; contador = contador + 1) {
-        cadena dato = "segundo_contexto_" + contador.cadena()
+    para (entero var contador = 10; contador < 12; contador = contador + 1) {
+        texto dato = "segundo_contexto_" + contador.texto()
         consola.imprimir(dato)
     }
     
     // Tercer contexto en un bloque condicional
     si (verdadero) {
-        cadena dato = "contexto_condicional"
+        texto dato = "contexto_condicional"
         consola.imprimir(dato)
         
-        para (entero mut contador = 20; contador < 22; contador = contador + 1) {
-            cadena dato = "contexto_bucle_condicional_" + contador.cadena()
+        para (entero var contador = 20; contador < 22; contador = contador + 1) {
+            texto dato = "contexto_bucle_condicional_" + contador.texto()
             consola.imprimir(dato)
         }
     }
@@ -252,7 +252,7 @@ funcion_reutilizacion()
         // Test que verifica que las variables locales no son accesibles fuera de su ámbito
         let codigo = r#"
 vacio funcion_con_variable_local() {
-    cadena variable_local = "solo_local"
+    texto variable_local = "solo_local"
 }
 
 funcion_con_variable_local()
@@ -267,8 +267,8 @@ consola.imprimir(variable_local)  // Esto debería fallar
     fn test_ambito_variable_bucle_no_accesible_fuera() {
         // Test que verifica que las variables del bucle no son accesibles fuera
         let codigo = r#"
-para (entero mut i = 0; i < 3; i = i + 1) {
-    cadena variable_bucle = "en_bucle_" + i.cadena()
+para (entero var i = 0; i < 3; i = i + 1) {
+    texto variable_bucle = "en_bucle_" + i.texto()
 }
 
 consola.imprimir(variable_bucle)  // Esto debería fallar

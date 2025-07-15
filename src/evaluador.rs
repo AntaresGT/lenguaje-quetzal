@@ -130,7 +130,7 @@ impl Entorno {
         }
         
         let palabras_reservadas = [
-            "vacio", "entero", "cadena", "bool", "lista", "jsn",
+            "vacio", "entero", "texto", "log", "lista", "jsn",
             "si", "sino", "para", "mientras", "hacer", "romper", "continuar",
             "retornar", "objeto", "nuevo", "ambiente", "asincrono", "esperar",
             "intentar", "atrapar", "finalmente", "lanzar", "excepcion",
@@ -255,7 +255,7 @@ impl Evaluador {
                 Ok((ultimo_valor, ControlFlujo::Ninguno))
             },
             
-            Nodo::DeclaracionVariable { nombre, tipo_dato, es_mutable, valor, linea } => {
+            Nodo::DeclaracionVariable { nombre, tipo_dato, es_variable, valor, linea } => {
                 // Evaluar el valor inicial si existe
                 let valor_inicial = if let Some(expr_valor) = valor {
                     let (val, _) = self.evaluar_con_entorno(expr_valor, entorno.clone())?;
@@ -277,17 +277,17 @@ impl Evaluador {
                         "vacio" => Valor::Vacio,
                         "entero" => Valor::Entero(0),
                         "número" => Valor::Numero(0.0),
-                        "cadena" => Valor::Cadena(String::new()),
-                        "bool" => Valor::Bool(false),
+                        "texto" => Valor::Texto(String::new()),
+                        "log" => Valor::Log(false),
                         "lista" => Valor::Lista(Vec::new()),
                         "jsn" => Valor::Json(HashMap::new()),
                         _ => Valor::Vacio,
                     }
                 };
                 
-                // En Quetzal, las variables son inmutables por defecto a menos que se especifique explícitamente como mutable
-                let tipo_variable = if *es_mutable {
-                    TipoVariable::Mutable
+                // En Quetzal, las variables son inmutables por defecto a menos que se especifique explícitamente como variables
+                let tipo_variable = if *es_variable {
+                    TipoVariable::Variable
                 } else {
                     TipoVariable::Inmutable  // Por defecto inmutable
                 };
@@ -816,7 +816,7 @@ impl Evaluador {
                         Ok((lista[indice_usize].clone(), ControlFlujo::Ninguno))
                     },
                     
-                    (Valor::Cadena(cadena), Valor::Entero(i)) => {
+                    (Valor::Texto(cadena), Valor::Entero(i)) => {
                         let indice_usize = if *i < 0 {
                             return Err(ErrorQuetzal::ErrorEjecucion {
                                 linea: *linea,
@@ -834,10 +834,10 @@ impl Evaluador {
                             });
                         }
                         
-                        Ok((Valor::Cadena(chars[indice_usize].to_string()), ControlFlujo::Ninguno))
+                        Ok((Valor::Texto(chars[indice_usize].to_string()), ControlFlujo::Ninguno))
                     },
                     
-                    (Valor::Json(mapa), Valor::Cadena(clave)) => {
+                    (Valor::Json(mapa), Valor::Texto(clave)) => {
                         if let Some(valor) = mapa.get(clave) {
                             Ok((valor.clone(), ControlFlujo::Ninguno))
                         } else {
@@ -862,10 +862,10 @@ impl Evaluador {
                 
                 // Verificar si la condición es verdadera
                 let es_verdadero = match cond_evaluada {
-                    Valor::Bool(b) => b,
+                    Valor::Log(b) => b,
                     Valor::Entero(n) => n != 0,
                     Valor::Numero(n) => n != 0.0,
-                    Valor::Cadena(s) => !s.is_empty(),
+                    Valor::Texto(s) => !s.is_empty(),
                     Valor::Lista(lista) => !lista.is_empty(),
                     Valor::Vacio => false,
                     _ => true,
@@ -1002,8 +1002,8 @@ impl Evaluador {
             
             // Asignar parámetros
             for (i, parametro) in funcion.parametros.iter().enumerate() {
-                let tipo_variable = if parametro.es_mutable {
-                    TipoVariable::Mutable
+                let tipo_variable = if parametro.es_variable {
+                    TipoVariable::Variable
                 } else {
                     TipoVariable::Inmutable
                 };
@@ -1154,7 +1154,7 @@ impl Evaluador {
                     String::new()
                 };
                 let entrada = CONSOLA_GLOBAL.pedir(&mensaje);
-                Ok((Valor::Cadena(entrada), ControlFlujo::Ninguno))
+                Ok((Valor::Texto(entrada), ControlFlujo::Ninguno))
             },
             "consola.pedir_secreto" => {
                 let mensaje = if !argumentos.is_empty() {
@@ -1164,7 +1164,7 @@ impl Evaluador {
                     String::new()
                 };
                 let entrada_secreta = CONSOLA_GLOBAL.pedir_secreto(&mensaje);
-                Ok((Valor::Cadena(entrada_secreta), ControlFlujo::Ninguno))
+                Ok((Valor::Texto(entrada_secreta), ControlFlujo::Ninguno))
             },
             _ => {
                 return Err(ErrorQuetzal::FuncionNoDefinida {
@@ -1225,18 +1225,18 @@ impl Evaluador {
             for i in 1..partes.len()-1 {
                 let metodo = partes[i];
                 valor_actual = match valor_actual {
-                    Valor::Cadena(ref cadena) => {
+                    Valor::Texto(ref cadena) => {
                         let (resultado, _) = self.evaluar_metodo_cadena(cadena, metodo, &[])?;
                         resultado
                     },
                     _ => {
                         // Aplicar métodos de conversión
                         match metodo {
-                            "cadena" => Valor::Cadena(valor_actual.a_cadena()),
+                            "texto" => Valor::Texto(valor_actual.a_cadena()),
                             "numero" => match valor_actual {
                                 Valor::Entero(n) => Valor::Numero(n as f64),
                                 Valor::Numero(n) => Valor::Numero(n),
-                                Valor::Cadena(s) => {
+                                Valor::Texto(s) => {
                                     let trimmed = s.trim();
                                     
                                     // Intentar directamente como f64 para permitir números decimales largos
@@ -1257,7 +1257,7 @@ impl Evaluador {
                             "entero" => match valor_actual {
                                 Valor::Entero(n) => Valor::Entero(n),
                                 Valor::Numero(n) => Valor::Entero(n as i64),
-                                Valor::Cadena(s) => {
+                                Valor::Texto(s) => {
                                     match s.trim().parse::<i64>() {
                                         Ok(n) => Valor::Entero(n),
                                         Err(_) => return Err(ErrorQuetzal::ErrorConversion {
@@ -1271,7 +1271,7 @@ impl Evaluador {
                                     mensaje: format!("No se puede convertir {} a entero", valor_actual.tipo_como_cadena()),
                                 }),
                             },
-                            "bool" => Valor::Bool(valor_actual.a_bool()),
+                            "log" => Valor::Log(valor_actual.a_bool()),
                             _ => return Err(ErrorQuetzal::ErrorEjecucion {
                                 linea: 0,
                                 mensaje: format!("Método '{}' no está definido", metodo),
@@ -1292,15 +1292,15 @@ impl Evaluador {
             }
             
             return match valor_actual {
-                Valor::Cadena(ref cadena) => self.evaluar_metodo_cadena(cadena, ultimo_metodo, &args_evaluados),
+                Valor::Texto(ref cadena) => self.evaluar_metodo_cadena(cadena, ultimo_metodo, &args_evaluados),
                 _ => {
                     // Aplicar método de conversión final
                     match ultimo_metodo {
-                        "cadena" => Ok((Valor::Cadena(valor_actual.a_cadena()), ControlFlujo::Ninguno)),
+                        "texto" => Ok((Valor::Texto(valor_actual.a_cadena()), ControlFlujo::Ninguno)),
                         "numero" => match valor_actual {
                             Valor::Entero(n) => Ok((Valor::Numero(n as f64), ControlFlujo::Ninguno)),
                             Valor::Numero(n) => Ok((Valor::Numero(n), ControlFlujo::Ninguno)),
-                            Valor::Cadena(s) => {
+                            Valor::Texto(s) => {
                                 let trimmed = s.trim();
                                 
                                 match trimmed.parse::<f64>() {
@@ -1329,7 +1329,7 @@ impl Evaluador {
                         "entero" => match valor_actual {
                             Valor::Entero(n) => Ok((Valor::Entero(n), ControlFlujo::Ninguno)),
                             Valor::Numero(n) => Ok((Valor::Entero(n as i64), ControlFlujo::Ninguno)),
-                            Valor::Cadena(s) => {
+                            Valor::Texto(s) => {
                                 match s.trim().parse::<i64>() {
                                     Ok(n) => Ok((Valor::Entero(n), ControlFlujo::Ninguno)),
                                     Err(_) => Err(ErrorQuetzal::ErrorConversion {
@@ -1343,7 +1343,7 @@ impl Evaluador {
                                 mensaje: format!("No se puede convertir {} a entero", valor_actual.tipo_como_cadena()),
                             }),
                         },
-                        "bool" => Ok((Valor::Bool(valor_actual.a_bool()), ControlFlujo::Ninguno)),
+                        "log" => Ok((Valor::Log(valor_actual.a_bool()), ControlFlujo::Ninguno)),
                         _ => Err(ErrorQuetzal::ErrorEjecucion {
                             linea: 0,
                             mensaje: format!("Método '{}' no está definido", ultimo_metodo),
@@ -1386,12 +1386,12 @@ impl Evaluador {
         // Aplicar método
         match metodo {
             // Métodos de conversión (sin argumentos)
-            "cadena" => Ok((Valor::Cadena(valor.a_cadena()), ControlFlujo::Ninguno)),
+            "texto" => Ok((Valor::Texto(valor.a_cadena()), ControlFlujo::Ninguno)),
             "numero" => {
                 match valor {
                     Valor::Entero(n) => Ok((Valor::Numero(n as f64), ControlFlujo::Ninguno)),
                     Valor::Numero(n) => Ok((Valor::Numero(n), ControlFlujo::Ninguno)),
-                    Valor::Cadena(s) => {
+                    Valor::Texto(s) => {
                         let trimmed = s.trim();
                         
                         // Intentar directamente como f64 para permitir números decimales largos
@@ -1432,7 +1432,7 @@ impl Evaluador {
                 match valor {
                     Valor::Entero(n) => Ok((Valor::Entero(n), ControlFlujo::Ninguno)),
                     Valor::Numero(n) => Ok((Valor::Entero(n as i64), ControlFlujo::Ninguno)),
-                    Valor::Cadena(s) => {
+                    Valor::Texto(s) => {
                         match s.trim().parse::<i64>() {
                             Ok(n) => Ok((Valor::Entero(n), ControlFlujo::Ninguno)),
                             Err(_) => Err(ErrorQuetzal::ErrorConversion {
@@ -1447,14 +1447,14 @@ impl Evaluador {
                     }),
                 }
             },
-            "bool" => {
-                Ok((Valor::Bool(valor.a_bool()), ControlFlujo::Ninguno))
+            "log" => {
+                Ok((Valor::Log(valor.a_bool()), ControlFlujo::Ninguno))
             },
             
             // Métodos de cadenas avanzadas
             _ => {
                 match &valor {
-                    Valor::Cadena(cadena) => self.evaluar_metodo_cadena(cadena, metodo, &args_evaluados),
+                    Valor::Texto(cadena) => self.evaluar_metodo_cadena(cadena, metodo, &args_evaluados),
                     _ => Err(ErrorQuetzal::ErrorEjecucion {
                         linea: 0,
                         mensaje: format!("El método '{}' solo es válido para cadenas", metodo),
@@ -1468,14 +1468,14 @@ impl Evaluador {
     fn evaluar_metodo_cadena(&self, cadena: &str, metodo: &str, argumentos: &[Valor]) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
         match metodo {
             // Métodos de conversión
-            "cadena" => {
+            "texto" => {
                 if !argumentos.is_empty() {
                     return Err(ErrorQuetzal::ErrorEjecucion {
                         linea: 0,
                         mensaje: "El método 'cadena' no acepta argumentos".to_string(),
                     });
                 }
-                Ok((Valor::Cadena(cadena.to_string()), ControlFlujo::Ninguno))
+                Ok((Valor::Texto(cadena.to_string()), ControlFlujo::Ninguno))
             },
             
             "numero" => {
@@ -1521,7 +1521,7 @@ impl Evaluador {
                 }
             },
             
-            "bool" => {
+            "log" => {
                 if !argumentos.is_empty() {
                     return Err(ErrorQuetzal::ErrorEjecucion {
                         linea: 0,
@@ -1533,7 +1533,7 @@ impl Evaluador {
                     "false" | "falso" | "0" => false,
                     _ => !cadena.is_empty(),
                 };
-                Ok((Valor::Bool(valor_bool), ControlFlujo::Ninguno))
+                Ok((Valor::Log(valor_bool), ControlFlujo::Ninguno))
             },
             
             // Métodos específicos de cadenas
@@ -1554,7 +1554,7 @@ impl Evaluador {
                         mensaje: "El método 'esta_vacia' no acepta argumentos".to_string(),
                     });
                 }
-                Ok((Valor::Bool(cadena.is_empty()), ControlFlujo::Ninguno))
+                Ok((Valor::Log(cadena.is_empty()), ControlFlujo::Ninguno))
             },
             
             "contiene" => {
@@ -1565,7 +1565,7 @@ impl Evaluador {
                     });
                 }
                 let patron = argumentos[0].a_cadena();
-                Ok((Valor::Bool(cadena.contains(&patron)), ControlFlujo::Ninguno))
+                Ok((Valor::Log(cadena.contains(&patron)), ControlFlujo::Ninguno))
             },
             
             "buscar" => {
@@ -1590,7 +1590,7 @@ impl Evaluador {
                     });
                 }
                 let prefijo = argumentos[0].a_cadena();
-                Ok((Valor::Bool(cadena.starts_with(&prefijo)), ControlFlujo::Ninguno))
+                Ok((Valor::Log(cadena.starts_with(&prefijo)), ControlFlujo::Ninguno))
             },
             
             "termina_con" => {
@@ -1601,7 +1601,7 @@ impl Evaluador {
                     });
                 }
                 let sufijo = argumentos[0].a_cadena();
-                Ok((Valor::Bool(cadena.ends_with(&sufijo)), ControlFlujo::Ninguno))
+                Ok((Valor::Log(cadena.ends_with(&sufijo)), ControlFlujo::Ninguno))
             },
             
             "reemplazar" => {
@@ -1613,7 +1613,7 @@ impl Evaluador {
                 }
                 let buscar = argumentos[0].a_cadena();
                 let reemplazar = argumentos[1].a_cadena();
-                Ok((Valor::Cadena(cadena.replace(&buscar, &reemplazar)), ControlFlujo::Ninguno))
+                Ok((Valor::Texto(cadena.replace(&buscar, &reemplazar)), ControlFlujo::Ninguno))
             },
             
             "subcadena" => {
@@ -1633,7 +1633,7 @@ impl Evaluador {
                 };
                 
                 if inicio >= cadena.len() {
-                    return Ok((Valor::Cadena(String::new()), ControlFlujo::Ninguno));
+                    return Ok((Valor::Texto(String::new()), ControlFlujo::Ninguno));
                 }
                 
                 let fin = if argumentos.len() == 2 {
@@ -1650,7 +1650,7 @@ impl Evaluador {
                 };
                 
                 let resultado = cadena.chars().skip(inicio).take(fin - inicio).collect::<String>();
-                Ok((Valor::Cadena(resultado), ControlFlujo::Ninguno))
+                Ok((Valor::Texto(resultado), ControlFlujo::Ninguno))
             },
             
             "dividir" => {
@@ -1668,7 +1668,7 @@ impl Evaluador {
                     });
                 }
                 let partes: Vec<Valor> = cadena.split(&delimitador)
-                    .map(|s| Valor::Cadena(s.to_string()))
+                    .map(|s| Valor::Texto(s.to_string()))
                     .collect();
                 Ok((Valor::Lista(partes), ControlFlujo::Ninguno))
             },
@@ -1713,7 +1713,7 @@ impl Evaluador {
                         mensaje: "El argumento de 'repetir' debe ser un entero".to_string(),
                     }),
                 };
-                Ok((Valor::Cadena(cadena.repeat(veces)), ControlFlujo::Ninguno))
+                Ok((Valor::Texto(cadena.repeat(veces)), ControlFlujo::Ninguno))
             },
             
             "a_mayusculas" => {
@@ -1723,7 +1723,7 @@ impl Evaluador {
                         mensaje: "El método 'a_mayusculas' no acepta argumentos".to_string(),
                     });
                 }
-                Ok((Valor::Cadena(cadena.to_uppercase()), ControlFlujo::Ninguno))
+                Ok((Valor::Texto(cadena.to_uppercase()), ControlFlujo::Ninguno))
             },
             
             "a_minusculas" => {
@@ -1733,7 +1733,7 @@ impl Evaluador {
                         mensaje: "El método 'a_minusculas' no acepta argumentos".to_string(),
                     });
                 }
-                Ok((Valor::Cadena(cadena.to_lowercase()), ControlFlujo::Ninguno))
+                Ok((Valor::Texto(cadena.to_lowercase()), ControlFlujo::Ninguno))
             },
             
             "recortar" => {
@@ -1743,7 +1743,7 @@ impl Evaluador {
                         mensaje: "El método 'recortar' no acepta argumentos".to_string(),
                     });
                 }
-                Ok((Valor::Cadena(cadena.trim().to_string()), ControlFlujo::Ninguno))
+                Ok((Valor::Texto(cadena.trim().to_string()), ControlFlujo::Ninguno))
             },
             
             "invertir" => {
@@ -1753,7 +1753,7 @@ impl Evaluador {
                         mensaje: "El método 'invertir' no acepta argumentos".to_string(),
                     });
                 }
-                Ok((Valor::Cadena(cadena.chars().rev().collect()), ControlFlujo::Ninguno))
+                Ok((Valor::Texto(cadena.chars().rev().collect()), ControlFlujo::Ninguno))
             },
             
             "comparar" => {
@@ -1780,7 +1780,7 @@ impl Evaluador {
                     });
                 }
                 let otra_cadena = argumentos[0].a_cadena();
-                Ok((Valor::Bool(cadena.to_lowercase() == otra_cadena.to_lowercase()), ControlFlujo::Ninguno))
+                Ok((Valor::Log(cadena.to_lowercase() == otra_cadena.to_lowercase()), ControlFlujo::Ninguno))
             },
             
             "codificar_base64" => {
@@ -1792,7 +1792,7 @@ impl Evaluador {
                 }
                 use base64::{Engine as _, engine::general_purpose};
                 let resultado = general_purpose::STANDARD.encode(cadena.as_bytes());
-                Ok((Valor::Cadena(resultado), ControlFlujo::Ninguno))
+                Ok((Valor::Texto(resultado), ControlFlujo::Ninguno))
             },
             
             "decodificar_base64" => {
@@ -1805,7 +1805,7 @@ impl Evaluador {
                 use base64::{Engine as _, engine::general_purpose};
                 match general_purpose::STANDARD.decode(cadena) {
                     Ok(bytes) => match String::from_utf8(bytes) {
-                        Ok(resultado) => Ok((Valor::Cadena(resultado), ControlFlujo::Ninguno)),
+                        Ok(resultado) => Ok((Valor::Texto(resultado), ControlFlujo::Ninguno)),
                         Err(_) => Err(ErrorQuetzal::ErrorEjecucion {
                             linea: 0,
                             mensaje: "Error al decodificar base64: datos no válidos".to_string(),
@@ -1826,7 +1826,7 @@ impl Evaluador {
                     });
                 }
                 let resultado = urlencoding::encode(cadena).to_string();
-                Ok((Valor::Cadena(resultado), ControlFlujo::Ninguno))
+                Ok((Valor::Texto(resultado), ControlFlujo::Ninguno))
             },
             
             "decodificar_uri" => {
@@ -1837,7 +1837,7 @@ impl Evaluador {
                     });
                 }
                 match urlencoding::decode(cadena) {
-                    Ok(resultado) => Ok((Valor::Cadena(resultado.to_string()), ControlFlujo::Ninguno)),
+                    Ok(resultado) => Ok((Valor::Texto(resultado.to_string()), ControlFlujo::Ninguno)),
                     Err(_) => Err(ErrorQuetzal::ErrorEjecucion {
                         linea: 0,
                         mensaje: "Error al decodificar URI: formato inválido".to_string(),
@@ -1853,7 +1853,7 @@ impl Evaluador {
                     });
                 }
                 let lineas: Vec<Valor> = cadena.lines()
-                    .map(|linea| Valor::Cadena(linea.to_string()))
+                    .map(|linea| Valor::Texto(linea.to_string()))
                     .collect();
                 Ok((Valor::Lista(lineas), ControlFlujo::Ninguno))
             },
@@ -1870,7 +1870,7 @@ impl Evaluador {
                     None => String::new(),
                     Some(primer_char) => primer_char.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase(),
                 };
-                Ok((Valor::Cadena(resultado), ControlFlujo::Ninguno))
+                Ok((Valor::Texto(resultado), ControlFlujo::Ninguno))
             },
             
             _ => Err(ErrorQuetzal::ErrorEjecucion {
@@ -1886,8 +1886,8 @@ impl Evaluador {
             (Valor::Vacio, "vacio") => true,
             (Valor::Entero(_), "entero") => true,
             (Valor::Numero(_), "número") => true,
-            (Valor::Cadena(_), "cadena") => true,
-            (Valor::Bool(_), "bool") => true,
+            (Valor::Texto(_), "texto") => true,
+            (Valor::Log(_), "log") => true,
             (Valor::Lista(_), "lista") => true,
             (Valor::Json(_), "jsn") => true,
             // Permitir conversiones automáticas compatibles
@@ -1915,8 +1915,8 @@ impl Evaluador {
             (val @ Valor::Vacio, "vacio") => Ok(val),
             (val @ Valor::Entero(_), "entero") => Ok(val),
             (val @ Valor::Numero(_), "número") => Ok(val),
-            (val @ Valor::Cadena(_), "cadena") => Ok(val),
-            (val @ Valor::Bool(_), "bool") => Ok(val),
+            (val @ Valor::Texto(_), "texto") => Ok(val),
+            (val @ Valor::Log(_), "log") => Ok(val),
             (val @ Valor::Lista(_), "lista") => Ok(val),
             (val @ Valor::Json(_), "jsn") => Ok(val),
             
@@ -1947,8 +1947,8 @@ impl Evaluador {
             Valor::Vacio => "vacio",
             Valor::Entero(_) => "entero",
             Valor::Numero(_) => "número",
-            Valor::Cadena(_) => "cadena",
-            Valor::Bool(_) => "bool",
+            Valor::Texto(_) => "texto",
+            Valor::Log(_) => "log",
             Valor::Lista(_) => "lista",
             Valor::Json(_) => "jsn",
         }
@@ -1972,9 +1972,9 @@ impl Evaluador {
                         let resultado = a + *b as f64;
                         Ok(Valor::Numero(self.redondear_numero(resultado)))
                     },
-                    (Valor::Cadena(a), Valor::Cadena(b)) => Ok(Valor::Cadena(format!("{}{}", a, b))),
-                    (Valor::Cadena(a), b) => Ok(Valor::Cadena(format!("{}{}", a, b.a_cadena()))),
-                    (a, Valor::Cadena(b)) => Ok(Valor::Cadena(format!("{}{}", a.a_cadena(), b))),
+                    (Valor::Texto(a), Valor::Texto(b)) => Ok(Valor::Texto(format!("{}{}", a, b))),
+                    (Valor::Texto(a), b) => Ok(Valor::Texto(format!("{}{}", a, b.a_cadena()))),
+                    (a, Valor::Texto(b)) => Ok(Valor::Texto(format!("{}{}", a.a_cadena(), b))),
                     _ => Err(ErrorQuetzal::ErrorTipo {
                         linea: 0,
                         mensaje: format!("No se puede sumar {} y {}", izquierdo.tipo_como_cadena(), derecho.tipo_como_cadena()),
@@ -2082,14 +2082,14 @@ impl Evaluador {
                     }),
                 }
             },
-            "==" => Ok(Valor::Bool(self.valores_iguales(izquierdo, derecho))),
-            "!=" => Ok(Valor::Bool(!self.valores_iguales(izquierdo, derecho))),
+            "==" => Ok(Valor::Log(self.valores_iguales(izquierdo, derecho))),
+            "!=" => Ok(Valor::Log(!self.valores_iguales(izquierdo, derecho))),
             ">" => self.comparar_valores(izquierdo, derecho, |a, b| a > b),
             "<" => self.comparar_valores(izquierdo, derecho, |a, b| a < b),
             ">=" => self.comparar_valores(izquierdo, derecho, |a, b| a >= b),
             "<=" => self.comparar_valores(izquierdo, derecho, |a, b| a <= b),
-            "&&" | "y" => Ok(Valor::Bool(izquierdo.a_bool() && derecho.a_bool())),
-            "||" | "o" => Ok(Valor::Bool(izquierdo.a_bool() || derecho.a_bool())),
+            "&&" | "y" => Ok(Valor::Log(izquierdo.a_bool() && derecho.a_bool())),
+            "||" | "o" => Ok(Valor::Log(izquierdo.a_bool() || derecho.a_bool())),
             _ => Err(ErrorQuetzal::ErrorEjecucion {
                 linea: 0,
                 mensaje: format!("Operador binario no soportado: {}", operador),
@@ -2100,7 +2100,7 @@ impl Evaluador {
     /// Evalúa una operación unaria
     fn evaluar_operacion_unaria(&self, operador: &str, operando: &Valor) -> ResultadoQuetzal<Valor> {
         match operador {
-            "!" => Ok(Valor::Bool(!operando.a_bool())),
+            "!" => Ok(Valor::Log(!operando.a_bool())),
             "-" => {
                 match operando {
                     Valor::Entero(n) => Ok(Valor::Entero(-n)),
@@ -2126,8 +2126,8 @@ impl Evaluador {
             (Valor::Numero(a), Valor::Numero(b)) => (a - b).abs() < f64::EPSILON,
             (Valor::Entero(a), Valor::Numero(b)) => (*a as f64 - b).abs() < f64::EPSILON,
             (Valor::Numero(a), Valor::Entero(b)) => (a - *b as f64).abs() < f64::EPSILON,
-            (Valor::Cadena(a), Valor::Cadena(b)) => a == b,
-            (Valor::Bool(a), Valor::Bool(b)) => a == b,
+            (Valor::Texto(a), Valor::Texto(b)) => a == b,
+            (Valor::Log(a), Valor::Log(b)) => a == b,
             _ => false,
         }
     }
@@ -2145,14 +2145,14 @@ impl Evaluador {
                     })
                 }
             },
-            Valor::Cadena(cadena) => {
+            Valor::Texto(cadena) => {
                 match miembro {
                     "longitud" => Ok((Valor::Entero(cadena.len() as i64), ControlFlujo::Ninguno)),
-                    "esta_vacia" => Ok((Valor::Bool(cadena.is_empty()), ControlFlujo::Ninguno)),
-                    "a_mayusculas" => Ok((Valor::Cadena(cadena.to_uppercase()), ControlFlujo::Ninguno)),
-                    "a_minusculas" => Ok((Valor::Cadena(cadena.to_lowercase()), ControlFlujo::Ninguno)),
-                    "recortar" => Ok((Valor::Cadena(cadena.trim().to_string()), ControlFlujo::Ninguno)),
-                    "invertir" => Ok((Valor::Cadena(cadena.chars().rev().collect()), ControlFlujo::Ninguno)),
+                    "esta_vacia" => Ok((Valor::Log(cadena.is_empty()), ControlFlujo::Ninguno)),
+                    "a_mayusculas" => Ok((Valor::Texto(cadena.to_uppercase()), ControlFlujo::Ninguno)),
+                    "a_minusculas" => Ok((Valor::Texto(cadena.to_lowercase()), ControlFlujo::Ninguno)),
+                    "recortar" => Ok((Valor::Texto(cadena.trim().to_string()), ControlFlujo::Ninguno)),
+                    "invertir" => Ok((Valor::Texto(cadena.chars().rev().collect()), ControlFlujo::Ninguno)),
                     // Nuevos métodos de cadena avanzadas
                     "contiene" => {
                         // TODO: Necesita parámetro, implementar con argumentos
@@ -2235,7 +2235,7 @@ impl Evaluador {
                         // Implementación básica de base64
                         use base64::Engine;
                         let encoded = base64::engine::general_purpose::STANDARD.encode(cadena.as_bytes());
-                        Ok((Valor::Cadena(encoded), ControlFlujo::Ninguno))
+                        Ok((Valor::Texto(encoded), ControlFlujo::Ninguno))
                     },
                     "decodificar_base64" => {
                         // Implementación básica de base64
@@ -2243,7 +2243,7 @@ impl Evaluador {
                         match base64::engine::general_purpose::STANDARD.decode(cadena) {
                             Ok(decoded) => {
                                 match String::from_utf8(decoded) {
-                                    Ok(s) => Ok((Valor::Cadena(s), ControlFlujo::Ninguno)),
+                                    Ok(s) => Ok((Valor::Texto(s), ControlFlujo::Ninguno)),
                                     Err(_) => Err(ErrorQuetzal::ErrorConversion {
                                         linea,
                                         mensaje: "Error al decodificar base64".to_string(),
@@ -2259,7 +2259,7 @@ impl Evaluador {
                     "codificar_uri" => {
                         // Implementación básica de codificación URI
                         let encoded = urlencoding::encode(cadena).to_string();
-                        Ok((Valor::Cadena(encoded), ControlFlujo::Ninguno))
+                        Ok((Valor::Texto(encoded), ControlFlujo::Ninguno))
                     },
                     "entero" => {
                         match cadena.trim().parse::<i64>() {
@@ -2270,10 +2270,10 @@ impl Evaluador {
                             }),
                         }
                     },
-                    "bool" => {
+                    "log" => {
                         match cadena.to_lowercase().as_str() {
-                            "verdadero" | "true" | "1" => Ok((Valor::Bool(true), ControlFlujo::Ninguno)),
-                            "falso" | "false" | "0" => Ok((Valor::Bool(false), ControlFlujo::Ninguno)),
+                            "verdadero" | "true" | "1" => Ok((Valor::Log(true), ControlFlujo::Ninguno)),
+                            "falso" | "false" | "0" => Ok((Valor::Log(false), ControlFlujo::Ninguno)),
                             _ => Err(ErrorQuetzal::ErrorConversion {
                                 linea: 0,
                                 mensaje: "No se puede convertir cadena a booleano".to_string(),
@@ -2288,10 +2288,10 @@ impl Evaluador {
             },
             Valor::Entero(numero) => {
                 match miembro {
-                    "cadena" => Ok((Valor::Cadena(numero.to_string()), ControlFlujo::Ninguno)),
+                    "texto" => Ok((Valor::Texto(numero.to_string()), ControlFlujo::Ninguno)),
                     "numero" => Ok((Valor::Numero(*numero as f64), ControlFlujo::Ninguno)),
                     "entero" => Ok((objeto.clone(), ControlFlujo::Ninguno)),
-                    "bool" => Ok((Valor::Bool(*numero != 0), ControlFlujo::Ninguno)),
+                    "log" => Ok((Valor::Log(*numero != 0), ControlFlujo::Ninguno)),
                     _ => Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
                         mensaje: format!("La función '{}' no está definida para enteros", miembro),
@@ -2301,25 +2301,25 @@ impl Evaluador {
 
             Valor::Numero(numero) => {
                 match miembro {
-                    "cadena" => Ok((Valor::Cadena(numero.to_string()), ControlFlujo::Ninguno)),
+                    "texto" => Ok((Valor::Texto(numero.to_string()), ControlFlujo::Ninguno)),
                     "numero" => Ok((objeto.clone(), ControlFlujo::Ninguno)),
                     "entero" => Ok((Valor::Entero(*numero as i64), ControlFlujo::Ninguno)),
-                    "bool" => Ok((Valor::Bool(*numero != 0.0), ControlFlujo::Ninguno)),
+                    "log" => Ok((Valor::Log(*numero != 0.0), ControlFlujo::Ninguno)),
                     _ => Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
                         mensaje: format!("La función '{}' no está definida para números", miembro),
                     }),
                 }
             },
-            Valor::Bool(booleano) => {
+            Valor::Log(booleano) => {
                 match miembro {
-                    "cadena" => {
+                    "texto" => {
                         let texto = if *booleano { "verdadero" } else { "falso" };
-                        Ok((Valor::Cadena(texto.to_string()), ControlFlujo::Ninguno))
+                        Ok((Valor::Texto(texto.to_string()), ControlFlujo::Ninguno))
                     },
                     "numero" => Ok((Valor::Numero(if *booleano { 1.0 } else { 0.0 }), ControlFlujo::Ninguno)),
                     "entero" => Ok((Valor::Entero(if *booleano { 1 } else { 0 }), ControlFlujo::Ninguno)),
-                    "bool" => Ok((objeto.clone(), ControlFlujo::Ninguno)),
+                    "log" => Ok((objeto.clone(), ControlFlujo::Ninguno)),
                     _ => Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
                         mensaje: format!("La función '{}' no está definida para booleanos", miembro),
@@ -2329,7 +2329,7 @@ impl Evaluador {
             Valor::Lista(lista) => {
                 match miembro {
                     "longitud" => Ok((Valor::Entero(lista.len() as i64), ControlFlujo::Ninguno)),
-                    "esta_vacia" => Ok((Valor::Bool(lista.is_empty()), ControlFlujo::Ninguno)),
+                    "esta_vacia" => Ok((Valor::Log(lista.is_empty()), ControlFlujo::Ninguno)),
                     "ultimo" => {
                         if lista.is_empty() {
                             Err(ErrorQuetzal::ErrorEjecucion {
@@ -2386,29 +2386,29 @@ impl Evaluador {
             }),
         };
         
-        Ok(Valor::Bool(comparador(num_a, num_b)))
+        Ok(Valor::Log(comparador(num_a, num_b)))
     }
     
     /// Evalúa un método en un valor específico
     fn evaluar_metodo_en_valor(&mut self, valor: &Valor, metodo: &str, argumentos: &[Valor], linea: usize) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
         match metodo {
             // Métodos de conversión
-            "cadena" => {
+            "texto" => {
                 let resultado = match valor {
-                    Valor::Entero(n) => Valor::Cadena(n.to_string()),
-                    Valor::Numero(n) => Valor::Cadena(n.to_string()),
-                    Valor::Bool(b) => Valor::Cadena(b.to_string()),
-                    Valor::Cadena(s) => Valor::Cadena(s.clone()),
+                    Valor::Entero(n) => Valor::Texto(n.to_string()),
+                    Valor::Numero(n) => Valor::Texto(n.to_string()),
+                    Valor::Log(b) => Valor::Texto(b.to_string()),
+                    Valor::Texto(s) => Valor::Texto(s.clone()),
                     Valor::Lista(lista) => {
                         let elementos: Vec<String> = lista.iter()
                             .map(|v| match v {
-                                Valor::Cadena(s) => s.clone(),
+                                Valor::Texto(s) => s.clone(),
                                 _ => v.to_string(),
                             })
                             .collect();
-                        Valor::Cadena(format!("[{}]", elementos.join(", ")))
+                        Valor::Texto(format!("[{}]", elementos.join(", ")))
                     },
-                    _ => Valor::Cadena(valor.to_string()),
+                    _ => Valor::Texto(valor.to_string()),
                 };
                 Ok((resultado, ControlFlujo::Ninguno))
             },
@@ -2417,7 +2417,7 @@ impl Evaluador {
                 let resultado = match valor {
                     Valor::Entero(n) => Valor::Entero(*n),
                     Valor::Numero(n) => Valor::Entero(*n as i64),
-                    Valor::Cadena(s) => {
+                    Valor::Texto(s) => {
                         match s.trim().parse::<i64>() {
                             Ok(n) => Valor::Entero(n),
                             Err(_) => return Err(ErrorQuetzal::ErrorEjecucion {
@@ -2426,8 +2426,8 @@ impl Evaluador {
                             }),
                         }
                     },
-                    Valor::Bool(true) => Valor::Entero(1),
-                    Valor::Bool(false) => Valor::Entero(0),
+                    Valor::Log(true) => Valor::Entero(1),
+                    Valor::Log(false) => Valor::Entero(0),
                     _ => return Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
                         mensaje: format!("No se puede convertir {} a entero", valor.tipo_como_cadena()),
@@ -2440,7 +2440,7 @@ impl Evaluador {
                 let resultado = match valor {
                     Valor::Entero(n) => Valor::Numero(*n as f64),
                     Valor::Numero(n) => Valor::Numero(*n),
-                    Valor::Cadena(s) => {
+                    Valor::Texto(s) => {
                         let trimmed = s.trim();
                         
                         match trimmed.parse::<f64>() {
@@ -2460,8 +2460,8 @@ impl Evaluador {
                             }),
                         }
                     },
-                    Valor::Bool(true) => Valor::Numero(1.0),
-                    Valor::Bool(false) => Valor::Numero(0.0),
+                    Valor::Log(true) => Valor::Numero(1.0),
+                    Valor::Log(false) => Valor::Numero(0.0),
                     _ => return Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
                         mensaje: format!("No se puede convertir {} a número", valor.tipo_como_cadena()),
@@ -2470,12 +2470,12 @@ impl Evaluador {
                 Ok((resultado, ControlFlujo::Ninguno))
             },
             
-            "bool" => {
+            "log" => {
                 let resultado = match valor {
-                    Valor::Bool(b) => Valor::Bool(*b),
-                    Valor::Entero(n) => Valor::Bool(*n != 0),
-                    Valor::Numero(n) => Valor::Bool(*n != 0.0),
-                    Valor::Cadena(s) => Valor::Bool(!s.is_empty()),
+                    Valor::Log(b) => Valor::Log(*b),
+                    Valor::Entero(n) => Valor::Log(*n != 0),
+                    Valor::Numero(n) => Valor::Log(*n != 0.0),
+                    Valor::Texto(s) => Valor::Log(!s.is_empty()),
                     _ => return Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
                         mensaje: format!("No se puede convertir {} a bool", valor.tipo_como_cadena()),
@@ -2485,8 +2485,8 @@ impl Evaluador {
             },
             
             "mayuscula" => {
-                if let Valor::Cadena(s) = valor {
-                    Ok((Valor::Cadena(s.to_uppercase()), ControlFlujo::Ninguno))
+                if let Valor::Texto(s) = valor {
+                    Ok((Valor::Texto(s.to_uppercase()), ControlFlujo::Ninguno))
                 } else {
                     Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
@@ -2496,8 +2496,8 @@ impl Evaluador {
             },
             
             "minuscula" => {
-                if let Valor::Cadena(s) = valor {
-                    Ok((Valor::Cadena(s.to_lowercase()), ControlFlujo::Ninguno))
+                if let Valor::Texto(s) = valor {
+                    Ok((Valor::Texto(s.to_lowercase()), ControlFlujo::Ninguno))
                 } else {
                     Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
@@ -2507,8 +2507,8 @@ impl Evaluador {
             },
             
             "a_minusculas" => {
-                if let Valor::Cadena(s) = valor {
-                    Ok((Valor::Cadena(s.to_lowercase()), ControlFlujo::Ninguno))
+                if let Valor::Texto(s) = valor {
+                    Ok((Valor::Texto(s.to_lowercase()), ControlFlujo::Ninguno))
                 } else {
                     Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
@@ -2518,13 +2518,13 @@ impl Evaluador {
             },
             
             "capitalizar" => {
-                if let Valor::Cadena(s) = valor {
+                if let Valor::Texto(s) = valor {
                     let mut chars = s.chars();
                     let resultado = match chars.next() {
                         None => String::new(),
                         Some(primer_char) => primer_char.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase(),
                     };
-                    Ok((Valor::Cadena(resultado), ControlFlujo::Ninguno))
+                    Ok((Valor::Texto(resultado), ControlFlujo::Ninguno))
                 } else {
                     Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
@@ -2534,8 +2534,8 @@ impl Evaluador {
             },
             
             "recortar" => {
-                if let Valor::Cadena(s) = valor {
-                    Ok((Valor::Cadena(s.trim().to_string()), ControlFlujo::Ninguno))
+                if let Valor::Texto(s) = valor {
+                    Ok((Valor::Texto(s.trim().to_string()), ControlFlujo::Ninguno))
                 } else {
                     Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
@@ -2554,14 +2554,14 @@ impl Evaluador {
                         });
                     }
                     
-                    if let Valor::Cadena(separador) = &argumentos[0] {
+                    if let Valor::Texto(separador) = &argumentos[0] {
                         let elementos: Vec<String> = lista.iter()
                             .map(|v| match v {
-                                Valor::Cadena(s) => s.clone(),
+                                Valor::Texto(s) => s.clone(),
                                 _ => v.to_string(),
                             })
                             .collect();
-                        Ok((Valor::Cadena(elementos.join(separador)), ControlFlujo::Ninguno))
+                        Ok((Valor::Texto(elementos.join(separador)), ControlFlujo::Ninguno))
                     } else {
                         Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
@@ -2580,11 +2580,11 @@ impl Evaluador {
                 if let Valor::Lista(lista) = valor {
                     let elementos: Vec<String> = lista.iter()
                         .map(|v| match v {
-                            Valor::Cadena(s) => s.clone(),
+                            Valor::Texto(s) => s.clone(),
                             _ => v.to_string(),
                         })
                         .collect();
-                    Ok((Valor::Cadena(elementos.join("\n")), ControlFlujo::Ninguno))
+                    Ok((Valor::Texto(elementos.join("\n")), ControlFlujo::Ninguno))
                 } else {
                     Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
@@ -2594,7 +2594,7 @@ impl Evaluador {
             },
             
             "buscar" => {
-                if let Valor::Cadena(s) = valor {
+                if let Valor::Texto(s) = valor {
                     if argumentos.is_empty() {
                         return Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
@@ -2602,7 +2602,7 @@ impl Evaluador {
                         });
                     }
                     
-                    if let Valor::Cadena(patron) = &argumentos[0] {
+                    if let Valor::Texto(patron) = &argumentos[0] {
                         match s.find(patron) {
                             Some(pos) => Ok((Valor::Entero(pos as i64), ControlFlujo::Ninguno)),
                             None => Ok((Valor::Entero(-1), ControlFlujo::Ninguno)),
@@ -2622,7 +2622,7 @@ impl Evaluador {
             },
             
             "contiene" => {
-                if let Valor::Cadena(s) = valor {
+                if let Valor::Texto(s) = valor {
                     if argumentos.is_empty() {
                         return Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
@@ -2630,8 +2630,8 @@ impl Evaluador {
                         });
                     }
                     
-                    if let Valor::Cadena(patron) = &argumentos[0] {
-                        Ok((Valor::Bool(s.contains(patron)), ControlFlujo::Ninguno))
+                    if let Valor::Texto(patron) = &argumentos[0] {
+                        Ok((Valor::Log(s.contains(patron)), ControlFlujo::Ninguno))
                     } else {
                         Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
@@ -2647,7 +2647,7 @@ impl Evaluador {
             },
             
             "empieza_con" => {
-                if let Valor::Cadena(s) = valor {
+                if let Valor::Texto(s) = valor {
                     if argumentos.is_empty() {
                         return Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
@@ -2655,8 +2655,8 @@ impl Evaluador {
                         });
                     }
                     
-                    if let Valor::Cadena(prefijo) = &argumentos[0] {
-                        Ok((Valor::Bool(s.starts_with(prefijo)), ControlFlujo::Ninguno))
+                    if let Valor::Texto(prefijo) = &argumentos[0] {
+                        Ok((Valor::Log(s.starts_with(prefijo)), ControlFlujo::Ninguno))
                     } else {
                         Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
@@ -2672,7 +2672,7 @@ impl Evaluador {
             },
             
             "termina_con" => {
-                if let Valor::Cadena(s) = valor {
+                if let Valor::Texto(s) = valor {
                     if argumentos.is_empty() {
                         return Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
@@ -2680,8 +2680,8 @@ impl Evaluador {
                         });
                     }
                     
-                    if let Valor::Cadena(sufijo) = &argumentos[0] {
-                        Ok((Valor::Bool(s.ends_with(sufijo)), ControlFlujo::Ninguno))
+                    if let Valor::Texto(sufijo) = &argumentos[0] {
+                        Ok((Valor::Log(s.ends_with(sufijo)), ControlFlujo::Ninguno))
                     } else {
                         Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
@@ -2697,7 +2697,7 @@ impl Evaluador {
             },
             
             "contar_ocurrencias" => {
-                if let Valor::Cadena(s) = valor {
+                if let Valor::Texto(s) = valor {
                     if argumentos.is_empty() {
                         return Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
@@ -2705,7 +2705,7 @@ impl Evaluador {
                         });
                     }
                     
-                    if let Valor::Cadena(patron) = &argumentos[0] {
+                    if let Valor::Texto(patron) = &argumentos[0] {
                         if patron.is_empty() {
                             return Err(ErrorQuetzal::ErrorEjecucion {
                                 linea,
@@ -2729,8 +2729,8 @@ impl Evaluador {
             },
             
             "a_mayusculas" => {
-                if let Valor::Cadena(s) = valor {
-                    Ok((Valor::Cadena(s.to_uppercase()), ControlFlujo::Ninguno))
+                if let Valor::Texto(s) = valor {
+                    Ok((Valor::Texto(s.to_uppercase()), ControlFlujo::Ninguno))
                 } else {
                     Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
@@ -2741,9 +2741,9 @@ impl Evaluador {
             
             "invertir" => {
                 match valor {
-                    Valor::Cadena(s) => {
+                    Valor::Texto(s) => {
                         let invertida = s.chars().rev().collect::<String>();
-                        Ok((Valor::Cadena(invertida), ControlFlujo::Ninguno))
+                        Ok((Valor::Texto(invertida), ControlFlujo::Ninguno))
                     },
                     Valor::Lista(lista) => {
                         let mut lista_invertida = lista.clone();
@@ -2760,7 +2760,7 @@ impl Evaluador {
             },
             
             "repetir" => {
-                if let Valor::Cadena(s) = valor {
+                if let Valor::Texto(s) = valor {
                     if argumentos.is_empty() {
                         return Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
@@ -2784,7 +2784,7 @@ impl Evaluador {
                         });
                     }
                     
-                    Ok((Valor::Cadena(s.repeat(veces as usize)), ControlFlujo::Ninguno))
+                    Ok((Valor::Texto(s.repeat(veces as usize)), ControlFlujo::Ninguno))
                 } else {
                     Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
@@ -2794,7 +2794,7 @@ impl Evaluador {
             },
             
             "reemplazar" => {
-                if let Valor::Cadena(s) = valor {
+                if let Valor::Texto(s) = valor {
                     if argumentos.len() < 2 {
                         return Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
@@ -2802,8 +2802,8 @@ impl Evaluador {
                         });
                     }
                     
-                    if let (Valor::Cadena(buscar), Valor::Cadena(reemplazar)) = (&argumentos[0], &argumentos[1]) {
-                        Ok((Valor::Cadena(s.replace(buscar, reemplazar)), ControlFlujo::Ninguno))
+                    if let (Valor::Texto(buscar), Valor::Texto(reemplazar)) = (&argumentos[0], &argumentos[1]) {
+                        Ok((Valor::Texto(s.replace(buscar, reemplazar)), ControlFlujo::Ninguno))
                     } else {
                         Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
@@ -2819,7 +2819,7 @@ impl Evaluador {
             },
             
             "subcadena" => {
-                if let Valor::Cadena(s) = valor {
+                if let Valor::Texto(s) = valor {
                     if argumentos.is_empty() {
                         return Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
@@ -2840,7 +2840,7 @@ impl Evaluador {
                     
                     // Si el índice de inicio es igual o mayor que la longitud, devolver cadena vacía
                     if inicio >= chars.len() {
-                        return Ok((Valor::Cadena(String::new()), ControlFlujo::Ninguno));
+                        return Ok((Valor::Texto(String::new()), ControlFlujo::Ninguno));
                     }
                     
                     let fin = if argumentos.len() > 1 {
@@ -2857,11 +2857,11 @@ impl Evaluador {
                     };
                     
                     if inicio > fin {
-                        return Ok((Valor::Cadena(String::new()), ControlFlujo::Ninguno));
+                        return Ok((Valor::Texto(String::new()), ControlFlujo::Ninguno));
                     }
                     
                     let subcadena: String = chars[inicio..fin].iter().collect();
-                    Ok((Valor::Cadena(subcadena), ControlFlujo::Ninguno))
+                    Ok((Valor::Texto(subcadena), ControlFlujo::Ninguno))
                 } else {
                     Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
@@ -2871,7 +2871,7 @@ impl Evaluador {
             },
             
             "dividir" => {
-                if let Valor::Cadena(s) = valor {
+                if let Valor::Texto(s) = valor {
                     if argumentos.is_empty() {
                         return Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
@@ -2879,7 +2879,7 @@ impl Evaluador {
                         });
                     }
                     
-                    if let Valor::Cadena(delimitador) = &argumentos[0] {
+                    if let Valor::Texto(delimitador) = &argumentos[0] {
                         if delimitador.is_empty() {
                             return Err(ErrorQuetzal::ErrorEjecucion {
                                 linea,
@@ -2887,7 +2887,7 @@ impl Evaluador {
                             });
                         }
                         let partes: Vec<Valor> = s.split(delimitador)
-                            .map(|parte| Valor::Cadena(parte.to_string()))
+                            .map(|parte| Valor::Texto(parte.to_string()))
                             .collect();
                         Ok((Valor::Lista(partes), ControlFlujo::Ninguno))
                     } else {
@@ -2905,9 +2905,9 @@ impl Evaluador {
             },
             
             "partir_lineas" => {
-                if let Valor::Cadena(s) = valor {
+                if let Valor::Texto(s) = valor {
                     let lineas: Vec<Valor> = s.lines()
-                        .map(|linea| Valor::Cadena(linea.to_string()))
+                        .map(|linea| Valor::Texto(linea.to_string()))
                         .collect();
                     Ok((Valor::Lista(lineas), ControlFlujo::Ninguno))
                 } else {
@@ -2919,7 +2919,7 @@ impl Evaluador {
             },
             
             "comparar" => {
-                if let Valor::Cadena(s) = valor {
+                if let Valor::Texto(s) = valor {
                     if argumentos.is_empty() {
                         return Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
@@ -2927,7 +2927,7 @@ impl Evaluador {
                         });
                     }
                     
-                    if let Valor::Cadena(otra) = &argumentos[0] {
+                    if let Valor::Texto(otra) = &argumentos[0] {
                         let resultado = if s < otra {
                             -1
                         } else if s > otra {
@@ -2951,7 +2951,7 @@ impl Evaluador {
             },
             
             "igual_sin_caso" => {
-                if let Valor::Cadena(s) = valor {
+                if let Valor::Texto(s) = valor {
                     if argumentos.is_empty() {
                         return Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
@@ -2959,8 +2959,8 @@ impl Evaluador {
                         });
                     }
                     
-                    if let Valor::Cadena(otra) = &argumentos[0] {
-                        Ok((Valor::Bool(s.to_lowercase() == otra.to_lowercase()), ControlFlujo::Ninguno))
+                    if let Valor::Texto(otra) = &argumentos[0] {
+                        Ok((Valor::Log(s.to_lowercase() == otra.to_lowercase()), ControlFlujo::Ninguno))
                     } else {
                         Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
@@ -2976,10 +2976,10 @@ impl Evaluador {
             },
             
             "codificar_base64" => {
-                if let Valor::Cadena(s) = valor {
+                if let Valor::Texto(s) = valor {
                     use base64::{Engine as _, engine::general_purpose};
                     let encoded = general_purpose::STANDARD.encode(s.as_bytes());
-                    Ok((Valor::Cadena(encoded), ControlFlujo::Ninguno))
+                    Ok((Valor::Texto(encoded), ControlFlujo::Ninguno))
                 } else {
                     Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
@@ -2989,11 +2989,11 @@ impl Evaluador {
             },
             
             "decodificar_base64" => {
-                if let Valor::Cadena(s) = valor {
+                if let Valor::Texto(s) = valor {
                     use base64::{Engine as _, engine::general_purpose};
                     match general_purpose::STANDARD.decode(s) {
                         Ok(bytes) => match String::from_utf8(bytes) {
-                            Ok(decoded) => Ok((Valor::Cadena(decoded), ControlFlujo::Ninguno)),
+                            Ok(decoded) => Ok((Valor::Texto(decoded), ControlFlujo::Ninguno)),
                             Err(_) => Err(ErrorQuetzal::ErrorEjecucion {
                                 linea,
                                 mensaje: "Los datos decodificados no son texto UTF-8 válido".to_string(),
@@ -3013,9 +3013,9 @@ impl Evaluador {
             },
             
             "codificar_uri" => {
-                if let Valor::Cadena(s) = valor {
+                if let Valor::Texto(s) = valor {
                     let encoded = urlencoding::encode(s);
-                    Ok((Valor::Cadena(encoded.to_string()), ControlFlujo::Ninguno))
+                    Ok((Valor::Texto(encoded.to_string()), ControlFlujo::Ninguno))
                 } else {
                     Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
@@ -3025,9 +3025,9 @@ impl Evaluador {
             },
             
             "decodificar_uri" => {
-                if let Valor::Cadena(s) = valor {
+                if let Valor::Texto(s) = valor {
                     match urlencoding::decode(s) {
-                        Ok(decoded) => Ok((Valor::Cadena(decoded.to_string()), ControlFlujo::Ninguno)),
+                        Ok(decoded) => Ok((Valor::Texto(decoded.to_string()), ControlFlujo::Ninguno)),
                         Err(_) => Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
                             mensaje: "URI inválida para decodificar".to_string(),
@@ -3085,7 +3085,7 @@ impl Evaluador {
                         match (a, b) {
                             (Valor::Entero(x), Valor::Entero(y)) => x.cmp(y),
                             (Valor::Numero(x), Valor::Numero(y)) => x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal),
-                            (Valor::Cadena(x), Valor::Cadena(y)) => x.cmp(y),
+                            (Valor::Texto(x), Valor::Texto(y)) => x.cmp(y),
                             _ => std::cmp::Ordering::Equal,
                         }
                     });
@@ -3101,7 +3101,7 @@ impl Evaluador {
             "longitud" => {
                 match valor {
                     Valor::Lista(lista) => Ok((Valor::Entero(lista.len() as i64), ControlFlujo::Ninguno)),
-                    Valor::Cadena(cadena) => Ok((Valor::Entero(cadena.chars().count() as i64), ControlFlujo::Ninguno)),
+                    Valor::Texto(cadena) => Ok((Valor::Entero(cadena.chars().count() as i64), ControlFlujo::Ninguno)),
                     _ => Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
                         mensaje: format!("El método 'longitud' solo es válido para cadenas y listas"),
@@ -3111,8 +3111,8 @@ impl Evaluador {
             
             "esta_vacia" => {
                 match valor {
-                    Valor::Lista(lista) => Ok((Valor::Bool(lista.is_empty()), ControlFlujo::Ninguno)),
-                    Valor::Cadena(cadena) => Ok((Valor::Bool(cadena.is_empty()), ControlFlujo::Ninguno)),
+                    Valor::Lista(lista) => Ok((Valor::Log(lista.is_empty()), ControlFlujo::Ninguno)),
+                    Valor::Texto(cadena) => Ok((Valor::Log(cadena.is_empty()), ControlFlujo::Ninguno)),
                     _ => Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
                         mensaje: format!("El método 'esta_vacia' solo es válido para cadenas y listas"),

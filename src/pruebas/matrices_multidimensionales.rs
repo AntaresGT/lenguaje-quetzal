@@ -16,7 +16,7 @@ mod tests {
                 ]
             ]
             
-            consola.imprimir("Matriz 4D creada: " + matriz_4d.cadena())
+            consola.imprimir("Matriz 4D creada: " + matriz_4d.texto())
         "#;
         
         let resultado = interpretar(codigo);
@@ -38,7 +38,7 @@ mod tests {
             ]
             
             entero valor = matriz_4d[0][1][0][1]
-            consola.imprimir("Valor [0][1][0][1]: " + valor.cadena())
+            consola.imprimir("Valor [0][1][0][1]: " + valor.texto())
         "#;
         
         let resultado = interpretar(codigo);
@@ -48,7 +48,7 @@ mod tests {
     #[test]
     fn test_asignacion_matriz_4d() {
         let codigo = r#"
-            lista mut matriz_4d = [
+            lista var matriz_4d = [
                 [
                     [[1, 2], [3, 4]],
                     [[5, 6], [7, 8]]
@@ -61,7 +61,7 @@ mod tests {
             
             matriz_4d[1][0][1][0] = 999
             entero valor_modificado = matriz_4d[1][0][1][0]
-            consola.imprimir("Matriz modificada - nuevo valor: " + valor_modificado.cadena())
+            consola.imprimir("Matriz modificada - nuevo valor: " + valor_modificado.texto())
         "#;
         
         let resultado = interpretar(codigo);
@@ -83,7 +83,7 @@ mod tests {
             ]
             
             consola.imprimir("Matriz 3D mixta creada")
-            cadena elemento = matriz_3d[0][1][2].cadena()
+            texto elemento = matriz_3d[0][1][2].texto()
             consola.imprimir("Elemento [0][1][2]: " + elemento)
         "#;
         
@@ -94,7 +94,7 @@ mod tests {
     #[test]
     fn test_modificacion_matriz_3d() {
         let codigo = r#"
-            lista mut matriz_3d = [
+            lista var matriz_3d = [
                 [[1, 2], [3, 4]],
                 [[5, 6], [7, 8]]
             ]
@@ -105,8 +105,8 @@ mod tests {
             entero valor1 = matriz_3d[0][0][1]
             entero valor2 = matriz_3d[1][1][0]
             consola.imprimir("Matriz 3D modificada")
-            consola.imprimir("Valor [0][0][1]: " + valor1.cadena())
-            consola.imprimir("Valor [1][1][0]: " + valor2.cadena())
+            consola.imprimir("Valor [0][0][1]: " + valor1.texto())
+            consola.imprimir("Valor [1][1][0]: " + valor2.texto())
         "#;
         
         let resultado = interpretar(codigo);

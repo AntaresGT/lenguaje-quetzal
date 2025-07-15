@@ -8,7 +8,7 @@ mod tests {
     fn test_conversion_entero_a_cadena() {
         let codigo = r#"
 entero numero = 42
-cadena texto = numero.cadena()
+texto mi_texto = numero.texto()
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -18,7 +18,7 @@ cadena texto = numero.cadena()
     fn test_conversion_decimal_a_cadena() {
         let codigo = r#"
 número decimal = 3.14159
-cadena texto = decimal.cadena()
+texto mi_texto = decimal.texto()
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -27,10 +27,10 @@ cadena texto = decimal.cadena()
     #[test]
     fn test_conversion_booleano_a_cadena() {
         let codigo = r#"
-bool verdad = verdadero
-bool mentira = falso
-cadena texto_verdad = verdad.cadena()
-cadena texto_mentira = mentira.cadena()
+log verdad = verdadero
+log mentira = falso
+texto texto_verdad = verdad.texto()
+texto texto_mentira = mentira.texto()
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -39,7 +39,7 @@ cadena texto_mentira = mentira.cadena()
     #[test]
     fn test_conversion_cadena_a_numero() {
         let codigo = r#"
-cadena texto_numero = "123"
+texto texto_numero = "123"
 entero numero = texto_numero.numero()
         "#;
         
@@ -49,7 +49,7 @@ entero numero = texto_numero.numero()
     #[test]
     fn test_conversion_cadena_a_decimal() {
         let codigo = r#"
-cadena texto_decimal = "123.456"
+texto texto_decimal = "123.456"
 número decimal = texto_decimal.numero()
         "#;
         
@@ -79,7 +79,7 @@ entero entero_val = decimal_val.numero()
     #[test]
     fn test_conversion_numero_negativo() {
         let codigo = r#"
-cadena texto_negativo = "-123"
+texto texto_negativo = "-123"
 entero numero_negativo = texto_negativo.numero()
         "#;
         
@@ -89,7 +89,7 @@ entero numero_negativo = texto_negativo.numero()
     #[test]
     fn test_conversion_decimal_negativo() {
         let codigo = r#"
-cadena texto_decimal_negativo = "-123.456"
+texto texto_decimal_negativo = "-123.456"
 número decimal_negativo = texto_decimal_negativo.numero()
         "#;
         
@@ -99,7 +99,7 @@ número decimal_negativo = texto_decimal_negativo.numero()
     #[test]
     fn test_conversion_con_espacios() {
         let codigo = r#"
-cadena texto_con_espacios = "  123  "
+texto texto_con_espacios = "  123  "
 entero numero = texto_con_espacios.numero()
         "#;
         
@@ -109,7 +109,7 @@ entero numero = texto_con_espacios.numero()
     #[test]
     fn test_conversion_cero() {
         let codigo = r#"
-cadena texto_cero = "0"
+texto texto_cero = "0"
 entero cero = texto_cero.numero()
         "#;
         
@@ -119,7 +119,7 @@ entero cero = texto_cero.numero()
     #[test]
     fn test_conversion_decimal_cero() {
         let codigo = r#"
-cadena texto_decimal_cero = "0.0"
+texto texto_decimal_cero = "0.0"
 número decimal_cero = texto_decimal_cero.numero()
         "#;
         
@@ -130,7 +130,7 @@ número decimal_cero = texto_decimal_cero.numero()
     fn test_conversion_en_operaciones() {
         let codigo = r#"
 entero numero = 42
-cadena resultado = "El número es: " + numero.cadena()
+texto resultado = "El número es: " + numero.texto()
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -141,7 +141,7 @@ cadena resultado = "El número es: " + numero.cadena()
         let codigo = r#"
 entero a = 10
 entero b = 20
-cadena resultado = (a + b).cadena()
+texto resultado = (a + b).texto()
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -150,8 +150,8 @@ cadena resultado = (a + b).cadena()
     #[test]
     fn test_conversion_booleano_verdadero() {
         let codigo = r#"
-bool estado = verdadero
-cadena texto_estado = estado.cadena()
+log estado = verdadero
+texto texto_estado = estado.texto()
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -160,8 +160,8 @@ cadena texto_estado = estado.cadena()
     #[test]
     fn test_conversion_booleano_falso() {
         let codigo = r#"
-bool estado = falso
-cadena texto_estado = estado.cadena()
+log estado = falso
+texto texto_estado = estado.texto()
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -171,8 +171,8 @@ cadena texto_estado = estado.cadena()
     fn test_conversion_encadenada() {
         let codigo = r#"
 número decimal = 123.456
-cadena texto = decimal.cadena()
-entero numero_entero = texto.numero()
+texto mi_texto = decimal.texto()
+entero numero_entero = mi_texto.numero()
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -181,10 +181,10 @@ entero numero_entero = texto.numero()
     #[test]
     fn test_conversion_en_funcion() {
         let codigo = r#"
-cadena formatear_numero(entero num) {
-    retornar "Número: " + num.cadena()
+texto formatear_numero(entero num) {
+    retornar "Número: " + num.texto()
 }
-cadena resultado = formatear_numero(42)
+texto resultado = formatear_numero(42)
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -193,7 +193,7 @@ cadena resultado = formatear_numero(42)
     #[test]
     fn test_error_conversion_texto_invalido() {
         let codigo = r#"
-cadena texto_invalido = "no_es_numero"
+texto texto_invalido = "no_es_numero"
 entero numero = texto_invalido.numero()
         "#;
         
@@ -203,7 +203,7 @@ entero numero = texto_invalido.numero()
     #[test]
     fn test_error_conversion_cadena_vacia() {
         let codigo = r#"
-cadena cadena_vacia = ""
+texto cadena_vacia = ""
 entero numero = cadena_vacia.numero()
         "#;
         
@@ -213,7 +213,7 @@ entero numero = cadena_vacia.numero()
     #[test]
     fn test_error_conversion_caracteres_especiales() {
         let codigo = r#"
-cadena texto_especial = "123abc"
+texto texto_especial = "123abc"
 entero numero = texto_especial.numero()
         "#;
         
@@ -223,7 +223,7 @@ entero numero = texto_especial.numero()
     #[test]
     fn test_error_conversion_multiples_puntos() {
         let codigo = r#"
-cadena texto_puntos = "12.34.56"
+texto texto_puntos = "12.34.56"
 número decimal = texto_puntos.numero()
         "#;
         
@@ -233,7 +233,7 @@ número decimal = texto_puntos.numero()
     #[test]
     fn test_conversion_numero_muy_grande() {
         let codigo = r#"
-cadena numero_grande = "999999999999999999999999999"
+texto numero_grande = "999999999999999999999999999"
 entero entero_grande = numero_grande.numero()
         "#;
         
@@ -243,7 +243,7 @@ entero entero_grande = numero_grande.numero()
     #[test]
     fn test_conversion_decimal_precision() {
         let codigo = r#"
-cadena decimal_precision = "3.141592653589793238462643383279"
+texto decimal_precision = "3.141592653589793238462643383279"
 número decimal = decimal_precision.numero()
         "#;
         

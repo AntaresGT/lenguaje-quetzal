@@ -49,12 +49,12 @@ número resultado = entero_val + decimal_val
         let codigo = r#"
 entero a = 10
 entero b = 5
-bool mayor = a > b
-bool menor = a < b
-bool mayor_igual = a >= b
-bool menor_igual = a <= b
-bool igual = a == b
-bool diferente = a != b
+log mayor = a > b
+log menor = a < b
+log mayor_igual = a >= b
+log menor_igual = a <= b
+log igual = a == b
+log diferente = a != b
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -63,13 +63,13 @@ bool diferente = a != b
     #[test]
     fn test_operadores_logicos() {
         let codigo = r#"
-bool verdad = verdadero
-bool mentira = falso
-bool y_logico = verdad && mentira
-bool o_logico = verdad || mentira
-bool y_espanol = verdad y mentira
-bool o_espanol = verdad o mentira
-bool negacion = !verdad
+log verdad = verdadero
+log mentira = falso
+log y_logico = verdad && mentira
+log o_logico = verdad || mentira
+log y_espanol = verdad y mentira
+log o_espanol = verdad o mentira
+log negacion = !verdad
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -105,9 +105,9 @@ decimal /= 2.0
     #[test]
     fn test_asignacion_compuesta_cadenas() {
         let codigo = r#"
-cadena texto = "Hola"
-texto += " mundo"
-texto += "!"
+texto var mi_texto = "Hola"
+mi_texto += " mundo"
+mi_texto += "!"
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -118,7 +118,7 @@ texto += "!"
         let codigo = r#"
 entero a = 10
 entero b = 5
-cadena resultado = a > b ? "a es mayor" : "b es mayor"
+texto resultado = a > b ? "a es mayor" : "b es mayor"
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());

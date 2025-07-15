@@ -17,7 +17,7 @@ consola.imprimir("Hola mundo")
     fn test_imprimir_numero_entero() {
         let codigo = r#"
 entero valor_numero = 42
-consola.imprimir(valor_numero.cadena())
+consola.imprimir(valor_numero.texto())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -27,7 +27,7 @@ consola.imprimir(valor_numero.cadena())
     fn test_imprimir_numero_decimal() {
         let codigo = r#"
 número decimal = 3.14
-consola.imprimir(decimal.cadena())
+consola.imprimir(decimal.texto())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -36,8 +36,8 @@ consola.imprimir(decimal.cadena())
     #[test]
     fn test_imprimir_booleano() {
         let codigo = r#"
-bool verdad = verdadero
-consola.imprimir(verdad.cadena())
+log verdad = verdadero
+consola.imprimir(verdad.texto())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -46,7 +46,7 @@ consola.imprimir(verdad.cadena())
     #[test]
     fn test_imprimir_variable_cadena() {
         let codigo = r#"
-cadena mensaje = "Este es un mensaje"
+texto mensaje = "Este es un mensaje"
 consola.imprimir(mensaje)
         "#;
         
@@ -56,8 +56,8 @@ consola.imprimir(mensaje)
     #[test]
     fn test_imprimir_concatenacion() {
         let codigo = r#"
-cadena parte1 = "Hola"
-cadena parte2 = "mundo"
+texto parte1 = "Hola"
+texto parte2 = "mundo"
 consola.imprimir(parte1 + " " + parte2)
         "#;
         
@@ -69,7 +69,7 @@ consola.imprimir(parte1 + " " + parte2)
         let codigo = r#"
 entero a = 10
 entero b = 5
-consola.imprimir((a + b).cadena())
+consola.imprimir((a + b).texto())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -143,7 +143,7 @@ consola.imprimir("")
     #[test]
     fn test_imprimir_resultado_funcion() {
         let codigo = r#"
-cadena obtener_mensaje() {
+texto obtener_mensaje() {
     retornar "Mensaje desde función"
 }
 consola.imprimir(obtener_mensaje())
@@ -157,10 +157,10 @@ consola.imprimir(obtener_mensaje())
         let codigo = r#"
 entero valor_numero = 123
 número decimal = 45.67
-bool estado = verdadero
-consola.imprimir("Número: " + valor_numero.cadena())
-consola.imprimir("Decimal: " + decimal.cadena())
-consola.imprimir("Estado: " + estado.cadena())
+log estado = verdadero
+consola.imprimir("Número: " + valor_numero.texto())
+consola.imprimir("Decimal: " + decimal.texto())
+consola.imprimir("Estado: " + estado.texto())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -172,7 +172,7 @@ consola.imprimir("Estado: " + estado.cadena())
 entero a = 10
 entero b = 20
 entero c = 30
-consola.imprimir("Resultado: " + (a + b * c).cadena())
+consola.imprimir("Resultado: " + (a + b * c).texto())
         "#;
         
         assert!(interprete::interpretar(codigo).is_ok());
@@ -192,7 +192,7 @@ consola.imprimir()
     fn test_error_imprimir_tipo_incorrecto() {
         let codigo = r#"
 entero valor_numero = 42
-consola.imprimir(valor_numero)  // Debería convertir a cadena primero
+consola.imprimir(valor_numero)  // Debería convertir a texto primero
         "#;
         
         // Esto podría ser válido si el intérprete hace conversión automática

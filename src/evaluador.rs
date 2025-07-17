@@ -5,6 +5,7 @@ use crate::analizador_sintactico::{Nodo, Parametro};
 use crate::tipos_datos::{Valor, Variable, TipoVariable};
 use crate::errores::{ErrorQuetzal, ResultadoQuetzal};
 use crate::consola::CONSOLA_GLOBAL;
+use crate::manejador_modulos::ManejadorModulos;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -99,6 +100,24 @@ impl Entorno {
         }
     }
     
+    /// Obtiene los nombres de todas las variables definidas en el entorno actual
+    pub fn obtener_todas_las_variables(&self) -> Vec<String> {
+        let mut variables: Vec<String> = self.variables.keys().cloned().collect();
+        
+        // También incluir variables de entornos padre
+        if let Some(ref padre) = self.padre {
+            let variables_padre = padre.borrow().obtener_todas_las_variables();
+            for var in variables_padre {
+                if !variables.contains(&var) {
+                    variables.push(var);
+                }
+            }
+        }
+        
+        variables.sort();
+        variables
+    }
+    
     /// Define una nueva función
     pub fn definir_funcion(&mut self, nombre: String, funcion: FuncionDefinida) -> ResultadoQuetzal<()> {
         if !self.es_nombre_valido(&nombre) {
@@ -179,6 +198,7 @@ pub struct Evaluador {
     profundidad_recursion: usize,
     max_profundidad_recursion: usize,
     dentro_de_funcion: bool,
+    manejador_modulos: Option<ManejadorModulos>,
 }
 
 impl Evaluador {
@@ -194,7 +214,16 @@ impl Evaluador {
             profundidad_recursion: 0,
             max_profundidad_recursion: 1000, // Límite razonable para recursión
             dentro_de_funcion: false,
+            manejador_modulos: None,
         }
+    }
+    
+    /// Crea un nuevo evaluador con manejador de módulos
+    pub fn nuevo_con_modulos(ruta_principal: &str) -> ResultadoQuetzal<Self> {
+        let mut evaluador = Self::nuevo();
+        let manejador = ManejadorModulos::nuevo(ruta_principal, evaluador.entorno_global.clone())?;
+        evaluador.manejador_modulos = Some(manejador);
+        Ok(evaluador)
     }
     
     /// Redondea un número de punto flotante para evitar problemas de precisión
@@ -324,6 +353,18 @@ impl Evaluador {
                 };
                 
                 entorno.borrow_mut().definir_funcion(nombre.clone(), funcion)?;
+                Ok((Valor::Vacio, ControlFlujo::Ninguno))
+            },
+            
+            Nodo::DeclaracionImportar { elementos, ruta, linea } => {
+                // Manejar importaciones usando métodos auxiliares para evitar problemas de borrowing
+                self.manejar_importacion(elementos, ruta, *linea)?;
+                Ok((Valor::Vacio, ControlFlujo::Ninguno))
+            },
+            
+            Nodo::DeclaracionExportar { elementos, linea } => {
+                // Manejar exportaciones usando métodos auxiliares para evitar problemas de borrowing
+                self.manejar_exportacion(elementos, *linea)?;
                 Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
             
@@ -897,34 +938,34 @@ impl Evaluador {
         
         // Verificar funciones de consola
         if nombre.starts_with("consola.") {
-            return self.evaluar_funcion_consola(nombre, argumentos, entorno);
+            return self.evaluar_funcion_consola(nombre, argumentos, linea, entorno);
         }
         
         // Funciones globales especiales
         match nombre {
             "imprimir" => {
-                return self.evaluar_funcion_consola("consola.imprimir", argumentos, entorno);
+                return self.evaluar_funcion_consola("consola.imprimir", argumentos, linea, entorno);
             },
             "imprimir_error" => {
-                return self.evaluar_funcion_consola("consola.imprimir_error", argumentos, entorno);
+                return self.evaluar_funcion_consola("consola.imprimir_error", argumentos, linea, entorno);
             },
             "imprimir_advertencia" => {
-                return self.evaluar_funcion_consola("consola.imprimir_advertencia", argumentos, entorno);
+                return self.evaluar_funcion_consola("consola.imprimir_advertencia", argumentos, linea, entorno);
             },
             "imprimir_informacion" => {
-                return self.evaluar_funcion_consola("consola.imprimir_informacion", argumentos, entorno);
+                return self.evaluar_funcion_consola("consola.imprimir_informacion", argumentos, linea, entorno);
             },
             "imprimir_exito" => {
-                return self.evaluar_funcion_consola("consola.imprimir_exito", argumentos, entorno);
+                return self.evaluar_funcion_consola("consola.imprimir_exito", argumentos, linea, entorno);
             },
             "imprimir_depurar" => {
-                return self.evaluar_funcion_consola("consola.imprimir_depurar", argumentos, entorno);
+                return self.evaluar_funcion_consola("consola.imprimir_depurar", argumentos, linea, entorno);
             },
             "imprimir_alerta" => {
-                return self.evaluar_funcion_consola("consola.imprimir_alerta", argumentos, entorno);
+                return self.evaluar_funcion_consola("consola.imprimir_alerta", argumentos, linea, entorno);
             },
             "imprimir_confirmacion" => {
-                return self.evaluar_funcion_consola("consola.imprimir_confirmacion", argumentos, entorno);
+                return self.evaluar_funcion_consola("consola.imprimir_confirmacion", argumentos, linea, entorno);
             },
             _ => {}
         }
@@ -1063,9 +1104,20 @@ impl Evaluador {
     }
     
     /// Evalúa funciones de consola
-    fn evaluar_funcion_consola(&mut self, nombre: &str, argumentos: &[Nodo], entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
+    fn evaluar_funcion_consola(&mut self, nombre: &str, argumentos: &[Nodo], linea: usize, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
         match nombre {
             "consola.imprimir" => {
+                // Evaluar primer argumento (mensaje)
+                let mensaje = if !argumentos.is_empty() {
+                    let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
+                    valor.a_cadena()
+                } else {
+                    String::new()
+                };
+                CONSOLA_GLOBAL.imprimir(&mensaje);
+                Ok((Valor::Vacio, ControlFlujo::Ninguno))
+            },
+            "consola.mostrar" => {
                 // Evaluar primer argumento (mensaje)
                 let mensaje = if !argumentos.is_empty() {
                     let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
@@ -1168,7 +1220,7 @@ impl Evaluador {
             },
             _ => {
                 return Err(ErrorQuetzal::FuncionNoDefinida {
-                    linea: 0,
+                    linea,
                     nombre: nombre.to_string(),
                 });
             }
@@ -3706,6 +3758,61 @@ impl Evaluador {
             Err(ErrorQuetzal::ErrorEjecucion {
                 linea,
                 mensaje: "Métodos mutantes en accesos anidados complejos no están soportados".to_string(),
+            })
+        }
+    }
+    
+    /// Define una variable en el entorno global
+    pub fn definir_variable_global(&mut self, nombre: String, variable: Variable) -> ResultadoQuetzal<()> {
+        self.entorno_global.borrow_mut().definir_variable(nombre, variable)
+    }
+    
+    /// Obtiene una variable del entorno actual
+    pub fn obtener_variable(&self, nombre: &str) -> Option<Variable> {
+        self.entorno_global.borrow().obtener_variable(nombre)
+    }
+    
+    /// Obtiene los nombres de todas las variables definidas en el entorno actual
+    pub fn obtener_todas_las_variables(&self) -> Vec<String> {
+        self.entorno_global.borrow().obtener_todas_las_variables()
+    }
+    
+    /// Intercambia el entorno global temporalmente y devuelve el anterior
+    pub fn intercambiar_entorno(&mut self, nuevo_entorno: Rc<RefCell<Entorno>>) -> Rc<RefCell<Entorno>> {
+        std::mem::replace(&mut self.entorno_global, nuevo_entorno)
+    }
+    
+    /// Maneja una declaración de importación
+    fn manejar_importacion(&mut self, elementos: &[crate::analizador_sintactico::ElementoImportar], ruta: &str, linea: usize) -> ResultadoQuetzal<()> {
+        // Extraer el manejador temporalmente para evitar problemas de préstamo
+        if let Some(mut manejador) = self.manejador_modulos.take() {
+            let resultado = manejador.procesar_importacion(elementos, ruta, self, linea);
+            self.manejador_modulos = Some(manejador);
+            resultado
+        } else {
+            Err(ErrorQuetzal::ErrorCargaModulo {
+                linea,
+                ruta: ruta.to_string(),
+                detalle: "Sistema de módulos no inicializado. No se pueden importar módulos.".to_string(),
+            })
+        }
+    }
+    
+    /// Maneja una declaración de exportación
+    fn manejar_exportacion(&mut self, elementos: &[String], linea: usize) -> ResultadoQuetzal<()> {
+        // Extraer el manejador temporalmente para evitar problemas de préstamo
+        if let Some(mut manejador) = self.manejador_modulos.take() {
+            // Para obtener la ruta actual, necesitamos extraerla del contexto
+            // Por simplicidad, usaremos una ruta temporal
+            let ruta_actual = "modulo_actual.qz"; // TODO: Obtener la ruta real del contexto
+            let resultado = manejador.procesar_exportacion(elementos, self, ruta_actual, linea);
+            self.manejador_modulos = Some(manejador);
+            resultado
+        } else {
+            Err(ErrorQuetzal::ErrorExportacion {
+                linea,
+                elemento: elementos.join(", "),
+                sugerencia: "Sistema de módulos no inicializado. No se pueden exportar elementos.".to_string(),
             })
         }
     }

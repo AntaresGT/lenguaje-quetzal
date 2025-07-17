@@ -74,6 +74,13 @@ pub fn interpretar(codigo: &str) -> ResultadoQuetzal<Valor> {
 /// Esta es una función de conveniencia que lee un archivo y lo interpreta
 #[allow(dead_code)]
 pub fn interpretar_archivo(ruta: &str) -> ResultadoQuetzal<Valor> {
+    interpretar_archivo_con_modulos(ruta)
+}
+
+/// Interpreta código Quetzal desde un archivo con soporte completo de módulos
+/// 
+/// Esta función usa el evaluador avanzado que soporta importación y exportación de módulos
+pub fn interpretar_archivo_con_modulos(ruta: &str) -> ResultadoQuetzal<Valor> {
     use std::fs;
     
     let codigo = fs::read_to_string(ruta)
@@ -81,7 +88,25 @@ pub fn interpretar_archivo(ruta: &str) -> ResultadoQuetzal<Valor> {
             mensaje: format!("No se pudo leer el archivo '{}': {}", ruta, error),
         })?;
     
-    interpretar(&codigo)
+    // Etapa 1: Análisis léxico
+    let mut analizador_lexico = AnalizadorLexico::nuevo(&codigo);
+    let tokens = analizador_lexico.analizar()?;
+    
+    // Filtrar tokens de nueva línea
+    let tokens_filtrados: Vec<_> = tokens
+        .into_iter()
+        .filter(|token| !matches!(token.tipo, crate::analizador_lexico::TipoToken::NuevaLinea))
+        .collect();
+    
+    // Etapa 2: Análisis sintáctico
+    let mut analizador_sintactico = AnalizadorSintactico::nuevo(tokens_filtrados);
+    let ast = analizador_sintactico.analizar()?;
+    
+    // Etapa 3: Evaluación con soporte de módulos
+    let mut evaluador = Evaluador::nuevo_con_modulos(ruta)?;
+    let (resultado, _) = evaluador.evaluar(&ast)?;
+    
+    Ok(resultado)
 }
 
 /// Modo interactivo del intérprete (REPL - Read-Eval-Print Loop)

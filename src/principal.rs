@@ -4,7 +4,6 @@
 // Autor: Desarrollado siguiendo las especificaciones del lenguaje Quetzal
 
 use std::env;
-use std::fs;
 use std::path::Path;
 use colored::Colorize;
 
@@ -16,6 +15,7 @@ mod tipos_datos;
 mod evaluador;
 mod errores;
 mod consola;
+mod manejador_modulos;
 
 // Módulo de pruebas
 #[cfg(test)]
@@ -80,31 +80,39 @@ fn mostrar_ayuda(_programa: &str) {
 fn ejecutar_archivo(ruta_archivo: &str) {
     // Verificar que el archivo tenga extensión .qz
     if !ruta_archivo.ends_with(".qz") {
-        eprintln!("{}", "Error: El archivo debe tener extensión .qz".red());
+        eprintln!("{}[E0001]: el archivo debe tener extensión .qz", "error".red().bold());
+        eprintln!(" {} {}", "-->".blue().bold(), ruta_archivo);
+        eprintln!("  {} archivos de Quetzal deben terminar en `.qz`", "=".blue().bold());
         return;
     }
     
     // Verificar que el archivo existe
     if !Path::new(ruta_archivo).exists() {
-        eprintln!("{}", format!("Error: No se pudo encontrar el archivo '{}'", ruta_archivo).red());
+        eprintln!("{}[E0001]: no se pudo encontrar el archivo `{}`", "error".red().bold(), ruta_archivo);
+        eprintln!(" {} {}", "-->".blue().bold(), ruta_archivo);
+        eprintln!("  {} verifica que la ruta sea correcta", "=".blue().bold());
         return;
     }
     
-    // Leer el contenido del archivo
-    match fs::read_to_string(ruta_archivo) {
-        Ok(contenido) => {
-            // Interpretar el código
-            match interprete::interpretar(&contenido) {
-                Ok(_) => {
-                    // Ejecución exitosa
-                },
-                Err(error) => {
-                    eprintln!("{}", format!("Error de ejecución: {}", error).red());
-                }
-            }
+    // Leer el contenido del archivo para poder pasarlo a los errores
+    let codigo_fuente = match std::fs::read_to_string(ruta_archivo) {
+        Ok(contenido) => contenido,
+        Err(error) => {
+            eprintln!("{}[E0001]: error al leer el archivo `{}`", "error".red().bold(), ruta_archivo);
+            eprintln!(" {} {}", "-->".blue().bold(), ruta_archivo);
+            eprintln!("  {} {}", "=".blue().bold(), error);
+            return;
+        }
+    };
+    
+    // Interpretar el archivo con soporte completo de módulos
+    match interprete::interpretar_archivo_con_modulos(ruta_archivo) {
+        Ok(_) => {
+            // Ejecución exitosa
         },
         Err(error) => {
-            eprintln!("{}", format!("Error al leer el archivo: {}", error).red());
+            // Mostrar error con formato estilo Rust y código fuente
+            error.mostrar_error_con_codigo(Some(&codigo_fuente), Some(ruta_archivo));
         }
     }
 }

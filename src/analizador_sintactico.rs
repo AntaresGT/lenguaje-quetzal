@@ -203,6 +203,18 @@ pub enum Nodo {
         variables: Vec<Nodo>,
         linea: usize,
     },
+    
+    // Módulos
+    DeclaracionImportar {
+        elementos: Vec<ElementoImportar>,
+        ruta: String,
+        linea: usize,
+    },
+    
+    DeclaracionExportar {
+        elementos: Vec<String>,
+        linea: usize,
+    },
 }
 
 /// Parámetro de función
@@ -212,6 +224,13 @@ pub struct Parametro {
     pub tipo_dato: String,
     pub es_variable: bool,
     pub valor_defecto: Option<Valor>,
+}
+
+/// Elemento de importación para módulos
+#[derive(Debug, Clone, PartialEq)]
+pub struct ElementoImportar {
+    pub nombre: String,
+    pub alias: Option<String>,
 }
 
 /// Bloque de captura de excepciones
@@ -258,6 +277,16 @@ impl AnalizadorSintactico {
     
     /// Analiza una declaración
     fn declaracion(&mut self) -> ResultadoQuetzal<Nodo> {
+        // Verificar si es una declaración de importación
+        if self.coincidir(&TipoToken::Importar) {
+            return self.declaracion_importar();
+        }
+        
+        // Verificar si es una declaración de exportación
+        if self.coincidir(&TipoToken::Exportar) {
+            return self.declaracion_exportar();
+        }
+        
         // Verificar si es una declaración de función
         if self.verificar_declaracion_funcion() {
             return self.declaracion_funcion();
@@ -315,6 +344,27 @@ impl AnalizadorSintactico {
             return self.declaracion_variable();
         }
         
+        // Verificar si se intenta asignar a una palabra reservada
+        match &self.token_actual().tipo {
+            TipoToken::Y | TipoToken::O => {
+                // Mirar adelante para ver si hay un '=' o asignación compuesta
+                if self.posicion_actual + 1 < self.tokens.len() {
+                    match &self.tokens[self.posicion_actual + 1].tipo {
+                        TipoToken::Asignacion | TipoToken::AsignacionSuma | TipoToken::AsignacionResta | 
+                        TipoToken::AsignacionMult | TipoToken::AsignacionDiv | TipoToken::AsignacionMod => {
+                            let nombre = if matches!(self.token_actual().tipo, TipoToken::Y) { "y" } else { "o" };
+                            return Err(ErrorQuetzal::ErrorSintaxis {
+                                linea: self.token_actual().linea,
+                                mensaje: format!("no se puede asignar a la palabra reservada `{}`", nombre),
+                            });
+                        },
+                        _ => {}
+                    }
+                }
+            },
+            _ => {}
+        }
+
         // Si no es una declaración, es una expresión
         self.expresion()
     }
@@ -434,6 +484,145 @@ impl AnalizadorSintactico {
             tipo_retorno,
             cuerpo,
             es_asincrona,
+            linea,
+        })
+    }
+    
+    /// Analiza una declaración de importación
+    fn declaracion_importar(&mut self) -> ResultadoQuetzal<Nodo> {
+        let linea = self.token_actual().linea;
+        
+        // Debe empezar con '{'
+        if !self.coincidir(&TipoToken::LlaveAbre) {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Se esperaba '{' después de 'importar'".to_string(),
+            });
+        }
+        
+        let mut elementos = Vec::new();
+        
+        // Analizar elementos de importación
+        if !self.verificar(&TipoToken::LlaveCierra) {
+            loop {
+                // Nombre del elemento a importar
+                let nombre = if let TipoToken::Identificador(nom) = &self.token_actual().tipo {
+                    let n = nom.clone();
+                    self.avanzar();
+                    n
+                } else {
+                    return Err(ErrorQuetzal::ErrorSintaxis {
+                        linea: self.token_actual().linea,
+                        mensaje: "Se esperaba el nombre del elemento a importar".to_string(),
+                    });
+                };
+                
+                // Verificar si hay alias (como)
+                let alias = if self.coincidir(&TipoToken::Como) {
+                    if let TipoToken::Identificador(nom_alias) = &self.token_actual().tipo {
+                        let alias = nom_alias.clone();
+                        self.avanzar();
+                        Some(alias)
+                    } else {
+                        return Err(ErrorQuetzal::ErrorSintaxis {
+                            linea: self.token_actual().linea,
+                            mensaje: "Se esperaba el nombre del alias después de 'como'".to_string(),
+                        });
+                    }
+                } else {
+                    None
+                };
+                
+                elementos.push(ElementoImportar { nombre, alias });
+                
+                if !self.coincidir(&TipoToken::Coma) {
+                    break;
+                }
+            }
+        }
+        
+        // Debe terminar con '}'
+        if !self.coincidir(&TipoToken::LlaveCierra) {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Se esperaba '}' después de los elementos de importación".to_string(),
+            });
+        }
+        
+        // Palabra clave 'desde'
+        if !self.coincidir(&TipoToken::Desde) {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Se esperaba 'desde' después de los elementos de importación".to_string(),
+            });
+        }
+        
+        // Ruta del módulo (cadena literal)
+        let ruta = if let TipoToken::LiteralCadena(ruta_str) = &self.token_actual().tipo {
+            let r = ruta_str.clone();
+            self.avanzar();
+            r
+        } else {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Se esperaba la ruta del módulo como cadena literal".to_string(),
+            });
+        };
+        
+        Ok(Nodo::DeclaracionImportar {
+            elementos,
+            ruta,
+            linea,
+        })
+    }
+    
+    /// Analiza una declaración de exportación
+    fn declaracion_exportar(&mut self) -> ResultadoQuetzal<Nodo> {
+        let linea = self.token_actual().linea;
+        
+        // Debe empezar con '{'
+        if !self.coincidir(&TipoToken::LlaveAbre) {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Se esperaba '{' después de 'exportar'".to_string(),
+            });
+        }
+        
+        let mut elementos = Vec::new();
+        
+        // Analizar elementos de exportación
+        if !self.verificar(&TipoToken::LlaveCierra) {
+            loop {
+                // Nombre del elemento a exportar
+                let nombre = if let TipoToken::Identificador(nom) = &self.token_actual().tipo {
+                    let n = nom.clone();
+                    self.avanzar();
+                    n
+                } else {
+                    return Err(ErrorQuetzal::ErrorSintaxis {
+                        linea: self.token_actual().linea,
+                        mensaje: "Se esperaba el nombre del elemento a exportar".to_string(),
+                    });
+                };
+                
+                elementos.push(nombre);
+                
+                if !self.coincidir(&TipoToken::Coma) {
+                    break;
+                }
+            }
+        }
+        
+        // Debe terminar con '}'
+        if !self.coincidir(&TipoToken::LlaveCierra) {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Se esperaba '}' después de los elementos de exportación".to_string(),
+            });
+        }
+        
+        Ok(Nodo::DeclaracionExportar {
+            elementos,
             linea,
         })
     }
@@ -652,15 +841,32 @@ impl AnalizadorSintactico {
         let es_variable = self.coincidir(&TipoToken::Var);
         
         // Nombre de la variable
-        let nombre = if let TipoToken::Identificador(nom) = &self.token_actual().tipo {
-            let n = nom.clone();
-            self.avanzar();
-            n
-        } else {
-            return Err(ErrorQuetzal::ErrorSintaxis {
-                linea: self.token_actual().linea,
-                mensaje: "Se esperaba el nombre de la variable".to_string(),
-            });
+        let nombre = match &self.token_actual().tipo {
+            TipoToken::Identificador(nom) => {
+                let n = nom.clone();
+                self.avanzar();
+                n
+            },
+            TipoToken::Y => {
+                // Es una palabra reservada
+                return Err(ErrorQuetzal::ErrorSintaxis {
+                    linea: self.token_actual().linea,
+                    mensaje: "no se puede usar la palabra reservada `y` como nombre de variable".to_string(),
+                });
+            },
+            TipoToken::O => {
+                // Es una palabra reservada
+                return Err(ErrorQuetzal::ErrorSintaxis {
+                    linea: self.token_actual().linea,
+                    mensaje: "no se puede usar la palabra reservada `o` como nombre de variable".to_string(),
+                });
+            },
+            _ => {
+                return Err(ErrorQuetzal::ErrorSintaxis {
+                    linea: self.token_actual().linea,
+                    mensaje: "Se esperaba el nombre de la variable".to_string(),
+                });
+            }
         };
         
         // Valor inicial (opcional)
@@ -719,6 +925,23 @@ impl AnalizadorSintactico {
         // Verificar si es una asignación de variable simple
         if let Nodo::Identificador(nombre) = &expresion {
             if self.coincidir(&TipoToken::Asignacion) {
+                // Verificar si el nombre es una palabra reservada
+                let palabras_reservadas = [
+                    "vacio", "entero", "número", "texto", "log", "lista", "jsn",
+                    "si", "sino", "para", "mientras", "hacer", "romper", "continuar",
+                    "retornar", "objeto", "nuevo", "ambiente", "asincrono", "esperar",
+                    "intentar", "atrapar", "finalmente", "lanzar", "excepcion",
+                    "importar", "exportar", "desde", "como", "privado", "publico",
+                    "verdadero", "falso", "nulo", "y", "o", "en", "de", "es", "no", "var"
+                ];
+                
+                if palabras_reservadas.contains(&nombre.as_str()) {
+                    return Err(ErrorQuetzal::ErrorSintaxis {
+                        linea: self.token_anterior().linea,
+                        mensaje: format!("no se puede asignar a la palabra reservada `{}`", nombre),
+                    });
+                }
+                
                 // Asignación simple (=)
                 let valor = Box::new(self.asignacion()?);
                 let linea = self.token_anterior().linea;
@@ -733,6 +956,23 @@ impl AnalizadorSintactico {
                       self.coincidir(&TipoToken::AsignacionMult) ||
                       self.coincidir(&TipoToken::AsignacionDiv) ||
                       self.coincidir(&TipoToken::AsignacionMod) {
+                // Verificar si el nombre es una palabra reservada
+                let palabras_reservadas = [
+                    "vacio", "entero", "número", "texto", "log", "lista", "jsn",
+                    "si", "sino", "para", "mientras", "hacer", "romper", "continuar",
+                    "retornar", "objeto", "nuevo", "ambiente", "asincrono", "esperar",
+                    "intentar", "atrapar", "finalmente", "lanzar", "excepcion",
+                    "importar", "exportar", "desde", "como", "privado", "publico",
+                    "verdadero", "falso", "nulo", "y", "o", "en", "de", "es", "no", "var"
+                ];
+                
+                if palabras_reservadas.contains(&nombre.as_str()) {
+                    return Err(ErrorQuetzal::ErrorSintaxis {
+                        linea: self.token_anterior().linea,
+                        mensaje: format!("no se puede asignar a la palabra reservada `{}`", nombre),
+                    });
+                }
+                
                 // Asignación compuesta (+=, -=, etc.)
                 let operador = self.token_anterior().lexema.clone();
                 let valor = Box::new(self.asignacion()?);
@@ -780,7 +1020,11 @@ impl AnalizadorSintactico {
     fn o_logico(&mut self) -> ResultadoQuetzal<Nodo> {
         let mut expresion = self.y_logico()?;
         
-        while self.coincidir(&TipoToken::OrLogico) || self.coincidir(&TipoToken::O) {
+        while self.coincidir(&TipoToken::OrLogico) || 
+              (self.verificar(&TipoToken::O) && !self.es_asignacion_siguiente()) {
+            if self.coincidir(&TipoToken::O) {
+                // Ya verificamos que no es asignación, así que es operador
+            }
             let operador = self.token_anterior().lexema.clone();
             let derecho = Box::new(self.y_logico()?);
             expresion = Nodo::OperacionBinaria {
@@ -797,7 +1041,11 @@ impl AnalizadorSintactico {
     fn y_logico(&mut self) -> ResultadoQuetzal<Nodo> {
         let mut expresion = self.igualdad()?;
         
-        while self.coincidir(&TipoToken::AndLogico) || self.coincidir(&TipoToken::Y) {
+        while self.coincidir(&TipoToken::AndLogico) || 
+              (self.verificar(&TipoToken::Y) && !self.es_asignacion_siguiente()) {
+            if self.coincidir(&TipoToken::Y) {
+                // Ya verificamos que no es asignación, así que es operador
+            }
             let operador = self.token_anterior().lexema.clone();
             let derecho = Box::new(self.igualdad()?);
             expresion = Nodo::OperacionBinaria {
@@ -1088,6 +1336,17 @@ impl AnalizadorSintactico {
                 self.avanzar();
                 Ok(Nodo::Identificador(nom))
             },
+            // Tratar 'y' y 'o' como identificadores en contextos no operadores
+            TipoToken::Y => {
+                let nom = "y".to_string();
+                self.avanzar();
+                Ok(Nodo::Identificador(nom))
+            },
+            TipoToken::O => {
+                let nom = "o".to_string();
+                self.avanzar();
+                Ok(Nodo::Identificador(nom))
+            },
             _ => {
                 // Paréntesis para agrupación
                 if self.coincidir(&TipoToken::ParentesisAbre) {
@@ -1304,6 +1563,19 @@ impl AnalizadorSintactico {
         )
     }
     
+    /// Verifica si el siguiente token es una asignación
+    fn es_asignacion_siguiente(&self) -> bool {
+        if self.posicion_actual + 1 < self.tokens.len() {
+            match self.tokens[self.posicion_actual + 1].tipo {
+                TipoToken::Asignacion | TipoToken::AsignacionSuma | TipoToken::AsignacionResta |
+                TipoToken::AsignacionMult | TipoToken::AsignacionDiv | TipoToken::AsignacionMod => true,
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+
     /// Verifica si el token actual es del tipo especificado
     fn verificar(&self, tipo: &TipoToken) -> bool {
         if self.esta_al_final() {

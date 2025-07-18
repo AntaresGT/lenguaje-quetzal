@@ -100,6 +100,29 @@ impl Entorno {
         }
     }
     
+    /// Actualiza una variable existente en el entorno donde está definida
+    pub fn actualizar_variable(&mut self, nombre: &str, nueva_variable: Variable) -> bool {
+        if self.variables.contains_key(nombre) {
+            self.variables.insert(nombre.to_string(), nueva_variable);
+            true
+        } else if let Some(ref padre) = self.padre {
+            padre.borrow_mut().actualizar_variable(nombre, nueva_variable)
+        } else {
+            false
+        }
+    }
+    
+    /// Obtiene una referencia mutable a una variable en el entorno donde está definida
+    pub fn obtener_variable_mut(&mut self, nombre: &str) -> Option<&mut Variable> {
+        if self.variables.contains_key(nombre) {
+            self.variables.get_mut(nombre)
+        } else {
+            // No podemos devolver una referencia mutable de un padre debido a borrow checker
+            // En su lugar, debemos usar actualizar_variable para casos de mutación
+            None
+        }
+    }
+    
     /// Obtiene los nombres de todas las variables definidas en el entorno actual
     pub fn obtener_todas_las_variables(&self) -> Vec<String> {
         let mut variables: Vec<String> = self.variables.keys().cloned().collect();
@@ -541,14 +564,20 @@ impl Evaluador {
                         });
                     }
                     
-                    // Actualizar variable existente directamente
+                    // Actualizar variable existente en su entorno original
                     let nueva_variable = Variable::nueva(
                         nombre.clone(),
                         valor_evaluado.clone(),
                         var_actual.tipo_variable,
                         var_actual.tipo_dato.clone(),
                     );
-                    entorno.borrow_mut().variables.insert(nombre.clone(), nueva_variable);
+                    
+                    if !entorno.borrow_mut().actualizar_variable(nombre, nueva_variable) {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea: *linea,
+                            mensaje: format!("Error interno: no se pudo actualizar la variable '{}'", nombre),
+                        });
+                    }
                 } else {
                     // Variable no existe - crear nueva (inmutable por defecto)
                     let variable = Variable::nueva(
@@ -687,16 +716,16 @@ impl Evaluador {
             },
             
             Nodo::BuclePara { inicializacion, condicion, incremento, cuerpo, linea: _ } => {
-                // Crear nuevo entorno para el bucle
+                // Crear nuevo entorno para el bucle (para la variable de inicialización)
                 let entorno_bucle = Rc::new(RefCell::new(Entorno::con_padre(entorno.clone())));
                 
-                // Ejecutar inicialización si existe
+                // Ejecutar inicialización si existe (en el entorno del bucle)
                 if let Some(init) = inicializacion {
                     self.evaluar_con_entorno(init, entorno_bucle.clone())?;
                 }
                 
                 loop {
-                    // Evaluar condición si existe
+                    // Evaluar condición si existe (en el entorno del bucle)
                     if let Some(cond) = condicion {
                         let (valor_condicion, _) = self.evaluar_con_entorno(cond, entorno_bucle.clone())?;
                         if !valor_condicion.a_bool() {
@@ -704,7 +733,7 @@ impl Evaluador {
                         }
                     }
                     
-                    // Crear nuevo entorno para cada iteración del bucle
+                    // Crear nuevo entorno para cada iteración (hijo del entorno del bucle)
                     let entorno_iteracion = Rc::new(RefCell::new(Entorno::con_padre(entorno_bucle.clone())));
                     
                     // Ejecutar cuerpo del bucle en el entorno de iteración
@@ -713,7 +742,7 @@ impl Evaluador {
                     match control {
                         ControlFlujo::Romper => break,
                         ControlFlujo::Continuar => {
-                            // Ejecutar incremento antes de continuar
+                            // Ejecutar incremento antes de continuar (en el entorno del bucle)
                             if let Some(inc) = incremento {
                                 self.evaluar_con_entorno(inc, entorno_bucle.clone())?;
                             }
@@ -723,7 +752,7 @@ impl Evaluador {
                         _ => {},
                     }
                     
-                    // Ejecutar incremento al final de cada iteración
+                    // Ejecutar incremento al final de cada iteración (en el entorno del bucle)
                     if let Some(inc) = incremento {
                         self.evaluar_con_entorno(inc, entorno_bucle.clone())?;
                     }
@@ -782,7 +811,10 @@ impl Evaluador {
                         break;
                     }
                     
-                    let (_, control) = self.evaluar_con_entorno(cuerpo, entorno.clone())?;
+                    // Crear un nuevo entorno hijo para cada iteración (scoping de bucle)
+                    let entorno_iteracion = Rc::new(RefCell::new(Entorno::con_padre(entorno.clone())));
+                    
+                    let (_, control) = self.evaluar_con_entorno(cuerpo, entorno_iteracion)?;
                     
                     match control {
                         ControlFlujo::Romper => break,
@@ -797,8 +829,11 @@ impl Evaluador {
             
             Nodo::BucleHacerMientras { cuerpo, condicion, linea: _ } => {
                 loop {
+                    // Crear un nuevo entorno hijo para cada iteración (scoping de bucle)
+                    let entorno_iteracion = Rc::new(RefCell::new(Entorno::con_padre(entorno.clone())));
+                    
                     // Ejecutar el cuerpo al menos una vez
-                    let (_, control) = self.evaluar_con_entorno(cuerpo, entorno.clone())?;
+                    let (_, control) = self.evaluar_con_entorno(cuerpo, entorno_iteracion)?;
                     
                     match control {
                         ControlFlujo::Romper => break,
@@ -3183,9 +3218,13 @@ impl Evaluador {
     
     /// Evalúa métodos que modifican la variable original (métodos mutantes)
     fn evaluar_metodo_mutante(&mut self, nombre_var: &str, metodo: &str, argumentos: &[Valor], linea: usize, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
-        let mut entorno_ref = entorno.borrow_mut();
+        // Primero verificar si la variable existe en la cadena de entornos
+        let variable_original = {
+            let entorno_ref = entorno.borrow();
+            entorno_ref.obtener_variable(nombre_var)
+        };
         
-        if let Some(variable) = entorno_ref.variables.get_mut(nombre_var) {
+        if let Some(mut variable) = variable_original {
             if !variable.es_mutable() {
                 return Err(ErrorQuetzal::ErrorEjecucion {
                     linea,
@@ -3193,7 +3232,7 @@ impl Evaluador {
                 });
             }
             
-            match (&mut variable.valor, metodo) {
+            let resultado = match (&mut variable.valor, metodo) {
                 (Valor::Lista(ref mut lista), "agregar") => {
                     if argumentos.is_empty() {
                         return Err(ErrorQuetzal::ErrorEjecucion {
@@ -3223,7 +3262,6 @@ impl Evaluador {
                             mensaje: "El método 'quitar' requiere un índice".to_string(),
                         });
                     }
-                    
                     let indice = match &argumentos[0] {
                         Valor::Entero(i) => {
                             if *i < 0 {
@@ -3264,7 +3302,20 @@ impl Evaluador {
                         mensaje: format!("El método '{}' no está disponible para el tipo {}", metodo, variable.valor.tipo_como_cadena()),
                     })
                 }
+            };
+            
+            // Actualizar la variable en el entorno correcto después de la modificación
+            if resultado.is_ok() {
+                let mut entorno_ref = entorno.borrow_mut();
+                if !entorno_ref.actualizar_variable(nombre_var, variable) {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("Error interno: no se pudo actualizar la variable '{}'", nombre_var),
+                    });
+                }
             }
+            
+            resultado
         } else {
             Err(ErrorQuetzal::VariableNoDefinida {
                 linea,

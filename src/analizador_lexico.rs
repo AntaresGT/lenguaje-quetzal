@@ -35,6 +35,7 @@ pub enum TipoToken {
     Objeto,             // objeto
     Nuevo,              // nuevo
     Ambiente,           // ambiente
+    Constructor,        // constructor
     Asincrono,          // asincrono
     Esperar,            // esperar
     
@@ -600,6 +601,7 @@ impl AnalizadorLexico {
             "objeto" => TipoToken::Objeto,
             "nuevo" => TipoToken::Nuevo,
             "ambiente" => TipoToken::Ambiente,
+            "constructor" => TipoToken::Constructor,
             "asincrono" => TipoToken::Asincrono,
             "esperar" => TipoToken::Esperar,
             

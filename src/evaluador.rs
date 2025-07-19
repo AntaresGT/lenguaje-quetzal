@@ -287,6 +287,17 @@ impl Evaluador {
         Ok(evaluador)
     }
     
+    /// Compara si dos valores son iguales (para detectar cambios en objetos)
+    fn valores_son_iguales(&self, a: &Valor, b: &Valor) -> bool {
+        match (a, b) {
+            (Valor::Objeto { clase: c1, propiedades: p1 }, Valor::Objeto { clase: c2, propiedades: p2 }) => {
+                c1 == c2 && p1.len() == p2.len() && 
+                p1.iter().all(|(k, v1)| p2.get(k).map_or(false, |v2| self.valores_son_iguales(v1, v2)))
+            },
+            _ => false, // Para simplificar, solo comparamos objetos
+        }
+    }
+    
     /// Redondea un número de punto flotante para evitar problemas de precisión
     fn redondear_numero(&self, numero: f64) -> f64 {
         // Redondear a 15 decimales para evitar problemas de precisión de punto flotante
@@ -391,7 +402,11 @@ impl Evaluador {
                 };
                 
                 // En Quetzal, las variables son inmutables por defecto a menos que se especifique explícitamente como variables
-                let tipo_variable = if *es_variable {
+                // Excepción: variables JSON y lista temporales dentro de métodos de objeto son mutables por defecto
+                let es_variable_especial = *es_variable || 
+                    ((tipo_dato == "jsn" || tipo_dato == "lista") && self.dentro_de_funcion && valor.is_some());
+                
+                let tipo_variable = if es_variable_especial {
                     TipoVariable::Variable
                 } else {
                     TipoVariable::Inmutable  // Por defecto inmutable
@@ -556,9 +571,19 @@ impl Evaluador {
                     }
                 }
                 
-                // Métodos que no modifican (como longitud, primero, ultimo, etc.)
-                let (valor_objeto, _) = self.evaluar_con_entorno(objeto, entorno.clone())?;
-                self.evaluar_metodo_en_valor(&valor_objeto, metodo, &args_evaluados, *linea)
+                // Métodos que no modifican (como longitud, primero, ultimo, etc.) o métodos de objeto
+                let (valor_objeto_original, _) = self.evaluar_con_entorno(objeto, entorno.clone())?;
+                
+                // Verificar si es un método de objeto que puede modificar el objeto
+                if let Valor::Objeto { .. } = valor_objeto_original {
+                    if let Nodo::Identificador(nombre_var) = objeto.as_ref() {
+                        // Es un método de objeto llamado en una variable - usar versión especial que puede actualizar la variable
+                        return self.evaluar_metodo_en_valor_con_actualizacion(&valor_objeto_original, metodo, &args_evaluados, *linea, entorno, Some(nombre_var.clone()));
+                    }
+                }
+                
+                // Para otros casos (no objetos o no variables), comportamiento normal
+                self.evaluar_metodo_en_valor(&valor_objeto_original, metodo, &args_evaluados, *linea)
             },
             
             Nodo::AccesoMiembro { objeto, miembro, linea } => {
@@ -710,27 +735,8 @@ impl Evaluador {
                 // Evaluar el índice
                 let (valor_indice, _) = self.evaluar_con_entorno(indice, entorno.clone())?;
                 
-                // Verificar que el índice sea un entero
-                let indice_usize = match valor_indice {
-                    Valor::Entero(i) => {
-                        if i < 0 {
-                            return Err(ErrorQuetzal::ErrorEjecucion {
-                                linea: *linea,
-                                mensaje: format!("Índice negativo: {}", i),
-                            });
-                        }
-                        i as usize
-                    },
-                    _ => {
-                        return Err(ErrorQuetzal::ErrorEjecucion {
-                            linea: *linea,
-                            mensaje: "El índice debe ser un número entero".to_string(),
-                        });
-                    }
-                };
-                
                 // Función auxiliar para asignar a índice anidado
-                self.asignar_indice_recursivo(objeto, indice_usize, nuevo_valor.clone(), entorno, *linea)?;
+                self.asignar_indice_recursivo_universal(objeto, valor_indice, nuevo_valor.clone(), entorno, *linea)?;
                 Ok((nuevo_valor, ControlFlujo::Ninguno))
             },
             
@@ -1052,6 +1058,30 @@ impl Evaluador {
     
     /// Evalúa una llamada a función
     fn evaluar_llamada_funcion(&mut self, nombre: &str, argumentos: &[Nodo], linea: usize, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
+        // Detectar métodos de objeto (formato: "variable.metodo")
+        if let Some(punto_pos) = nombre.rfind('.') {
+            let nombre_variable = &nombre[..punto_pos];
+            let nombre_metodo = &nombre[punto_pos + 1..];
+            
+            // Verificar si la variable es un objeto
+            let entorno_ref = entorno.borrow();
+            if let Some(variable) = entorno_ref.obtener_variable(nombre_variable) {
+                if let Valor::Objeto { .. } = variable.valor {
+                    drop(entorno_ref); // Liberar referencia
+                    
+                    // Evaluar argumentos
+                    let mut args_evaluados = Vec::new();
+                    for arg in argumentos {
+                        let (valor_arg, _) = self.evaluar_con_entorno(arg, entorno.clone())?;
+                        args_evaluados.push(valor_arg);
+                    }
+                    
+                    // Usar la función especial para métodos de objeto
+                    return self.evaluar_metodo_en_valor_con_actualizacion(&variable.valor, nombre_metodo, &args_evaluados, linea, entorno, Some(nombre_variable.to_string()));
+                }
+            }
+        }
+        
         // Verificar funciones de consola
         if nombre.starts_with("consola.") {
             return self.evaluar_funcion_consola(nombre, argumentos, linea, entorno);
@@ -2621,7 +2651,7 @@ impl Evaluador {
                             // Ejecutar el método
                             let anterior_dentro_de_funcion = self.dentro_de_funcion;
                             self.dentro_de_funcion = true;
-                            let resultado = self.evaluar_con_entorno(cuerpo, entorno_metodo);
+                            let resultado = self.evaluar_con_entorno(cuerpo, entorno_metodo.clone());
                             self.dentro_de_funcion = anterior_dentro_de_funcion;
                             
                             return resultado;
@@ -3371,6 +3401,92 @@ impl Evaluador {
         }
     }
     
+    /// Evalúa un método en un valor específico con capacidad de actualizar la variable original del objeto
+    fn evaluar_metodo_en_valor_con_actualizacion(&mut self, valor: &Valor, metodo: &str, argumentos: &[Valor], linea: usize, entorno: Rc<RefCell<Entorno>>, nombre_variable: Option<String>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
+        // Manejar métodos específicos de objetos Quetzal
+        if let Valor::Objeto { clase, .. } = valor {
+            // Buscar la clase para obtener los métodos disponibles
+            let clase_def = {
+                let entorno_ref = self.entorno_global.borrow();
+                entorno_ref.obtener_clase(clase)
+            };
+
+            if let Some(clase_definida) = clase_def {
+                // Buscar en métodos públicos
+                for miembro in &clase_definida.miembros_publicos {
+                    if let Nodo::DeclaracionFuncion { nombre: nombre_metodo, parametros, cuerpo, .. } = miembro {
+                        if nombre_metodo == metodo {
+                            // Crear entorno para la ejecución del método
+                            let entorno_metodo = Rc::new(RefCell::new(Entorno::nuevo()));
+                            entorno_metodo.borrow_mut().padre = Some(self.entorno_global.clone());
+                            
+                            // Verificar número de argumentos
+                            if argumentos.len() != parametros.len() {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: format!("Método '{}' espera {} argumentos, pero se proporcionaron {}", 
+                                        metodo, parametros.len(), argumentos.len()),
+                                });
+                            }
+                            
+                            // Definir parámetros
+                            for (parametro, valor_arg) in parametros.iter().zip(argumentos.iter()) {
+                                let variable = Variable::nueva(
+                                    parametro.nombre.clone(),
+                                    valor_arg.clone(),
+                                    if parametro.es_variable { TipoVariable::Variable } else { TipoVariable::Inmutable },
+                                    parametro.tipo_dato.clone(),
+                                );
+                                entorno_metodo.borrow_mut().definir_variable(parametro.nombre.clone(), variable)?;
+                            }
+                            
+                            // Definir 'ambiente' que referencia al objeto
+                            let variable_ambiente = Variable::nueva(
+                                "ambiente".to_string(),
+                                valor.clone(),
+                                TipoVariable::Variable, // 'ambiente' puede ser modificado en métodos
+                                "objeto".to_string(),
+                            );
+                            entorno_metodo.borrow_mut().definir_variable("ambiente".to_string(), variable_ambiente)?;
+                            
+                            // Ejecutar el método
+                            let anterior_dentro_de_funcion = self.dentro_de_funcion;
+                            self.dentro_de_funcion = true;
+                            let resultado = self.evaluar_con_entorno(cuerpo, entorno_metodo.clone());
+                            self.dentro_de_funcion = anterior_dentro_de_funcion;
+                            
+                            // Después de ejecutar el método, actualizar la variable original si fue modificada
+                            if let Some(nombre_var) = nombre_variable {
+                                if let Some(variable_ambiente_actualizada) = entorno_metodo.borrow().obtener_variable("ambiente") {
+                                    // Verificar si 'ambiente' fue modificado
+                                    if !self.valores_son_iguales(valor, &variable_ambiente_actualizada.valor) {
+                                        // Actualizar la variable original en el entorno
+                                        let entorno_ref = entorno.borrow();
+                                        if let Some(variable_original) = entorno_ref.obtener_variable(&nombre_var) {
+                                            let nueva_variable = Variable::nueva(
+                                                nombre_var.clone(),
+                                                variable_ambiente_actualizada.valor.clone(),
+                                                variable_original.tipo_variable,
+                                                variable_original.tipo_dato.clone(),
+                                            );
+                                            drop(entorno_ref); // Liberar referencia inmutable
+                                            entorno.borrow_mut().variables.insert(nombre_var.clone(), nueva_variable);
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            return resultado;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Si no es un método de objeto, usar el método estándar
+        self.evaluar_metodo_en_valor(valor, metodo, argumentos, linea)
+    }
+    
     /// Evalúa métodos que modifican la variable original (métodos mutantes)
     fn evaluar_metodo_mutante(&mut self, nombre_var: &str, metodo: &str, argumentos: &[Valor], linea: usize, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
         // Primero verificar si la variable existe en la cadena de entornos
@@ -3553,6 +3669,458 @@ impl Evaluador {
             _ => Err(ErrorQuetzal::ErrorEjecucion {
                 linea,
                 mensaje: "Solo se puede asignar a índices de variables o accesos a índices".to_string(),
+            })
+        }
+    }
+
+    /// Función auxiliar universal para asignar valores a índices (listas con enteros, JSON con cadenas)
+    fn asignar_indice_recursivo_universal(
+        &mut self,
+        objeto: &Nodo,
+        indice: Valor,
+        nuevo_valor: Valor,
+        entorno: Rc<RefCell<Entorno>>,
+        linea: usize,
+    ) -> ResultadoQuetzal<()> {
+        match objeto {
+            // Caso base: identificador directo (variable)
+            Nodo::Identificador(nombre_var) => {
+                let mut entorno_ref = entorno.borrow_mut();
+                if let Some(variable) = entorno_ref.variables.get_mut(nombre_var) {
+                    if !variable.es_mutable() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: format!("No se puede modificar el objeto inmutable '{}'", nombre_var),
+                        });
+                    }
+                    
+                    match (&variable.valor, &indice) {
+                        // Lista con índice entero
+                        (Valor::Lista(lista), Valor::Entero(i)) => {
+                            if *i < 0 {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: format!("Índice negativo: {}", i),
+                                });
+                            }
+                            let indice_usize = *i as usize;
+                            if indice_usize >= lista.len() {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: format!("Índice fuera de rango: {} (tamaño: {})", indice_usize, lista.len()),
+                                });
+                            }
+                            
+                            if let Valor::Lista(ref mut lista_mut) = variable.valor {
+                                lista_mut[indice_usize] = nuevo_valor;
+                            }
+                            Ok(())
+                        },
+                        // JSON con índice de cadena
+                        (Valor::Json(mapa), Valor::Texto(clave)) => {
+                            if let Valor::Json(ref mut mapa_mut) = variable.valor {
+                                mapa_mut.insert(clave.clone(), nuevo_valor);
+                            }
+                            Ok(())
+                        },
+                        _ => {
+                            match indice {
+                                Valor::Entero(_) => Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: format!("'{}' no es una lista", nombre_var),
+                                }),
+                                Valor::Texto(_) => Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: format!("'{}' no es un objeto JSON", nombre_var),
+                                }),
+                                _ => Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: "El índice debe ser un entero para listas o texto para objetos JSON".to_string(),
+                                }),
+                            }
+                        }
+                    }
+                } else {
+                    Err(ErrorQuetzal::VariableNoDefinida {
+                        linea,
+                        nombre: nombre_var.clone(),
+                    })
+                }
+            },
+            // Caso recursivo: acceso a miembro (como ambiente.configuraciones[clave])
+            Nodo::AccesoMiembro { objeto, miembro, linea: _ } => {
+                // Verificar que el objeto sea un identificador (variable)
+                if let Nodo::Identificador(nombre_objeto) = objeto.as_ref() {
+                    let mut entorno_ref = entorno.borrow_mut();
+                    if let Some(variable) = entorno_ref.variables.get_mut(nombre_objeto) {
+                        match &variable.valor {
+                            Valor::Objeto { propiedades, .. } => {
+                                if let Some(propiedad_valor) = propiedades.get(miembro) {
+                                    // La propiedad debe ser mutable para modificarla
+                                    match (propiedad_valor, &indice) {
+                                        (Valor::Json(mapa), Valor::Texto(clave)) => {
+                                            // Modificar directamente la propiedad del objeto
+                                            if let Valor::Objeto { ref mut propiedades, .. } = variable.valor {
+                                                if let Some(Valor::Json(ref mut mapa_mut)) = propiedades.get_mut(miembro) {
+                                                    mapa_mut.insert(clave.clone(), nuevo_valor);
+                                                    return Ok(());
+                                                }
+                                            }
+                                        },
+                                        _ => {}
+                                    }
+                                }
+                            },
+                            _ => {}
+                        }
+                    }
+                }
+                Err(ErrorQuetzal::ErrorEjecucion {
+                    linea,
+                    mensaje: "No se puede asignar a índice de acceso a miembro".to_string(),
+                })
+            },
+            
+            // Caso recursivo: acceso a índice anidado (como matriz[0][1][0])
+            Nodo::AccesoIndice { objeto: objeto_padre, indice: indice_padre, linea: _ } => {
+                // Evaluar el índice padre
+                let (valor_indice_padre, _) = self.evaluar_con_entorno(indice_padre, entorno.clone())?;
+                
+                match valor_indice_padre {
+                    Valor::Entero(indice_padre_int) => {
+                        if indice_padre_int < 0 {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: format!("Índice negativo: {}", indice_padre_int),
+                            });
+                        }
+                        
+                        // Ahora necesitamos acceder al elemento padre y luego asignar al índice hijo
+                        match objeto_padre.as_ref() {
+                            Nodo::Identificador(nombre_var) => {
+                                let mut entorno_ref = entorno.borrow_mut();
+                                if let Some(variable) = entorno_ref.variables.get_mut(nombre_var) {
+                                    if !variable.es_mutable() {
+                                        return Err(ErrorQuetzal::ErrorEjecucion {
+                                            linea,
+                                            mensaje: format!("No se puede modificar el objeto inmutable '{}'", nombre_var),
+                                        });
+                                    }
+                                    
+                                    if let Valor::Lista(ref mut lista) = variable.valor {
+                                        let indice_padre_usize = indice_padre_int as usize;
+                                        if indice_padre_usize >= lista.len() {
+                                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                                linea,
+                                                mensaje: format!("Índice fuera de rango: {} (tamaño: {})", indice_padre_usize, lista.len()),
+                                            });
+                                        }
+                                        
+                                        // Ahora asignar al elemento hijo
+                                        match (&mut lista[indice_padre_usize], &indice) {
+                                            (Valor::Lista(ref mut lista_hijo), Valor::Entero(indice_hijo)) => {
+                                                if *indice_hijo < 0 {
+                                                    return Err(ErrorQuetzal::ErrorEjecucion {
+                                                        linea,
+                                                        mensaje: format!("Índice negativo: {}", indice_hijo),
+                                                    });
+                                                }
+                                                let indice_hijo_usize = *indice_hijo as usize;
+                                                if indice_hijo_usize >= lista_hijo.len() {
+                                                    return Err(ErrorQuetzal::ErrorEjecucion {
+                                                        linea,
+                                                        mensaje: format!("Índice fuera de rango: {} (tamaño: {})", indice_hijo_usize, lista_hijo.len()),
+                                                    });
+                                                }
+                                                lista_hijo[indice_hijo_usize] = nuevo_valor;
+                                                Ok(())
+                                            },
+                                            (Valor::Json(ref mut mapa), Valor::Texto(clave)) => {
+                                                mapa.insert(clave.clone(), nuevo_valor);
+                                                Ok(())
+                                            },
+                                            _ => Err(ErrorQuetzal::ErrorEjecucion {
+                                                linea,
+                                                mensaje: "Tipo de índice incompatible para asignación anidada".to_string(),
+                                            })
+                                        }
+                                    } else {
+                                        Err(ErrorQuetzal::ErrorEjecucion {
+                                            linea,
+                                            mensaje: format!("'{}' no es una lista", nombre_var),
+                                        })
+                                    }
+                                } else {
+                                    Err(ErrorQuetzal::VariableNoDefinida {
+                                        linea,
+                                        nombre: nombre_var.clone(),
+                                    })
+                                }
+                            },
+                            // Caso más profundo: objeto_padre también es un AccesoIndice
+                            Nodo::AccesoIndice { .. } => {
+                                // Para matrices de 3D o más, necesitamos recursión más profunda
+                                // Por ahora, implementar casos específicos
+                                self.asignar_matriz_multidimensional(objeto_padre, indice_padre_int as usize, indice, nuevo_valor, entorno, linea)
+                            },
+                            _ => Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "Estructura de acceso no soportada para asignación".to_string(),
+                            })
+                        }
+                    },
+                    _ => Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: "El índice debe ser un entero".to_string(),
+                    })
+                }
+            },
+            
+            _ => Err(ErrorQuetzal::ErrorEjecucion {
+                linea,
+                mensaje: "Solo se puede asignar a índices de variables".to_string(),
+            })
+        }
+    }
+
+    /// Función auxiliar para manejar asignaciones en matrices multidimensionales
+    fn asignar_matriz_multidimensional(
+        &mut self,
+        objeto_padre: &Nodo,
+        indice_padre: usize,
+        indice_hijo: Valor,
+        nuevo_valor: Valor,
+        entorno: Rc<RefCell<Entorno>>,
+        linea: usize,
+    ) -> ResultadoQuetzal<()> {
+        match objeto_padre {
+            Nodo::AccesoIndice { objeto: objeto_abuelo, indice: indice_abuelo, linea: _ } => {
+                // Evaluar el índice del abuelo
+                let (valor_indice_abuelo, _) = self.evaluar_con_entorno(indice_abuelo, entorno.clone())?;
+                
+                if let Valor::Entero(indice_abuelo_int) = valor_indice_abuelo {
+                    if indice_abuelo_int < 0 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: format!("Índice negativo: {}", indice_abuelo_int),
+                        });
+                    }
+                    
+                    match objeto_abuelo.as_ref() {
+                        Nodo::Identificador(nombre_var) => {
+                            let mut entorno_ref = entorno.borrow_mut();
+                            if let Some(variable) = entorno_ref.variables.get_mut(nombre_var) {
+                                if !variable.es_mutable() {
+                                    return Err(ErrorQuetzal::ErrorEjecucion {
+                                        linea,
+                                        mensaje: format!("No se puede modificar el objeto inmutable '{}'", nombre_var),
+                                    });
+                                }
+                                
+                                if let Valor::Lista(ref mut lista_abuelo) = variable.valor {
+                                    let indice_abuelo_usize = indice_abuelo_int as usize;
+                                    if indice_abuelo_usize >= lista_abuelo.len() {
+                                        return Err(ErrorQuetzal::ErrorEjecucion {
+                                            linea,
+                                            mensaje: format!("Índice fuera de rango: {} (tamaño: {})", indice_abuelo_usize, lista_abuelo.len()),
+                                        });
+                                    }
+                                    
+                                    if let Valor::Lista(ref mut lista_padre) = lista_abuelo[indice_abuelo_usize] {
+                                        if indice_padre >= lista_padre.len() {
+                                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                                linea,
+                                                mensaje: format!("Índice fuera de rango: {} (tamaño: {})", indice_padre, lista_padre.len()),
+                                            });
+                                        }
+                                        
+                                        match (&mut lista_padre[indice_padre], &indice_hijo) {
+                                            (Valor::Lista(ref mut lista_hijo), Valor::Entero(indice_hijo_int)) => {
+                                                if *indice_hijo_int < 0 {
+                                                    return Err(ErrorQuetzal::ErrorEjecucion {
+                                                        linea,
+                                                        mensaje: format!("Índice negativo: {}", indice_hijo_int),
+                                                    });
+                                                }
+                                                let indice_hijo_usize = *indice_hijo_int as usize;
+                                                if indice_hijo_usize >= lista_hijo.len() {
+                                                    return Err(ErrorQuetzal::ErrorEjecucion {
+                                                        linea,
+                                                        mensaje: format!("Índice fuera de rango: {} (tamaño: {})", indice_hijo_usize, lista_hijo.len()),
+                                                    });
+                                                }
+                                                lista_hijo[indice_hijo_usize] = nuevo_valor;
+                                                Ok(())
+                                            },
+                                            _ => Err(ErrorQuetzal::ErrorEjecucion {
+                                                linea,
+                                                mensaje: "Tipo de índice incompatible para matriz 3D".to_string(),
+                                            })
+                                        }
+                                    } else {
+                                        Err(ErrorQuetzal::ErrorEjecucion {
+                                            linea,
+                                            mensaje: "El elemento padre no es una lista".to_string(),
+                                        })
+                                    }
+                                } else {
+                                    Err(ErrorQuetzal::ErrorEjecucion {
+                                        linea,
+                                        mensaje: format!("'{}' no es una lista", nombre_var),
+                                    })
+                                }
+                            } else {
+                                Err(ErrorQuetzal::VariableNoDefinida {
+                                    linea,
+                                    nombre: nombre_var.clone(),
+                                })
+                            }
+                        },
+                        // Para matrices 4D o superiores, agregar más recursión aquí
+                        Nodo::AccesoIndice { .. } => {
+                            self.asignar_matriz_4d_o_superior(objeto_abuelo, indice_abuelo_int as usize, indice_padre, indice_hijo, nuevo_valor, entorno, linea)
+                        },
+                        _ => Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "Estructura no soportada para matriz multidimensional".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: "El índice debe ser un entero".to_string(),
+                    })
+                }
+            },
+            _ => Err(ErrorQuetzal::ErrorEjecucion {
+                linea,
+                mensaje: "Estructura no soportada para matriz multidimensional".to_string(),
+            })
+        }
+    }
+
+    /// Función auxiliar para manejar asignaciones en matrices 4D o superiores
+    fn asignar_matriz_4d_o_superior(
+        &mut self,
+        objeto_bisabuelo: &Nodo,
+        indice_bisabuelo: usize,
+        indice_abuelo: usize,
+        indice_padre: Valor,
+        nuevo_valor: Valor,
+        entorno: Rc<RefCell<Entorno>>,
+        linea: usize,
+    ) -> ResultadoQuetzal<()> {
+        match objeto_bisabuelo {
+            Nodo::AccesoIndice { objeto: objeto_tatarabuelo, indice: indice_tatarabuelo, linea: _ } => {
+                // Evaluar el índice del tatarabuelo (matriz 4D)
+                let (valor_indice_tatarabuelo, _) = self.evaluar_con_entorno(indice_tatarabuelo, entorno.clone())?;
+                
+                if let Valor::Entero(indice_tatarabuelo_int) = valor_indice_tatarabuelo {
+                    if indice_tatarabuelo_int < 0 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: format!("Índice negativo: {}", indice_tatarabuelo_int),
+                        });
+                    }
+                    
+                    if let Nodo::Identificador(nombre_var) = objeto_tatarabuelo.as_ref() {
+                        let mut entorno_ref = entorno.borrow_mut();
+                        if let Some(variable) = entorno_ref.variables.get_mut(nombre_var) {
+                            if !variable.es_mutable() {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: format!("No se puede modificar el objeto inmutable '{}'", nombre_var),
+                                });
+                            }
+                            
+                            if let Valor::Lista(ref mut lista_tatarabuelo) = variable.valor {
+                                let indice_tatarabuelo_usize = indice_tatarabuelo_int as usize;
+                                if indice_tatarabuelo_usize >= lista_tatarabuelo.len() {
+                                    return Err(ErrorQuetzal::ErrorEjecucion {
+                                        linea,
+                                        mensaje: format!("Índice fuera de rango: {} (tamaño: {})", indice_tatarabuelo_usize, lista_tatarabuelo.len()),
+                                    });
+                                }
+                                
+                                if let Valor::Lista(ref mut lista_bisabuelo) = lista_tatarabuelo[indice_tatarabuelo_usize] {
+                                    if indice_bisabuelo >= lista_bisabuelo.len() {
+                                        return Err(ErrorQuetzal::ErrorEjecucion {
+                                            linea,
+                                            mensaje: format!("Índice fuera de rango: {} (tamaño: {})", indice_bisabuelo, lista_bisabuelo.len()),
+                                        });
+                                    }
+                                    
+                                    if let Valor::Lista(ref mut lista_abuelo) = lista_bisabuelo[indice_bisabuelo] {
+                                        if indice_abuelo >= lista_abuelo.len() {
+                                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                                linea,
+                                                mensaje: format!("Índice fuera de rango: {} (tamaño: {})", indice_abuelo, lista_abuelo.len()),
+                                            });
+                                        }
+                                        
+                                        match (&mut lista_abuelo[indice_abuelo], &indice_padre) {
+                                            (Valor::Lista(ref mut lista_padre), Valor::Entero(indice_padre_int)) => {
+                                                if *indice_padre_int < 0 {
+                                                    return Err(ErrorQuetzal::ErrorEjecucion {
+                                                        linea,
+                                                        mensaje: format!("Índice negativo: {}", indice_padre_int),
+                                                    });
+                                                }
+                                                let indice_padre_usize = *indice_padre_int as usize;
+                                                if indice_padre_usize >= lista_padre.len() {
+                                                    return Err(ErrorQuetzal::ErrorEjecucion {
+                                                        linea,
+                                                        mensaje: format!("Índice fuera de rango: {} (tamaño: {})", indice_padre_usize, lista_padre.len()),
+                                                    });
+                                                }
+                                                lista_padre[indice_padre_usize] = nuevo_valor;
+                                                Ok(())
+                                            },
+                                            _ => Err(ErrorQuetzal::ErrorEjecucion {
+                                                linea,
+                                                mensaje: "Tipo de índice incompatible para matriz 4D".to_string(),
+                                            })
+                                        }
+                                    } else {
+                                        Err(ErrorQuetzal::ErrorEjecucion {
+                                            linea,
+                                            mensaje: "El elemento abuelo no es una lista".to_string(),
+                                        })
+                                    }
+                                } else {
+                                    Err(ErrorQuetzal::ErrorEjecucion {
+                                        linea,
+                                        mensaje: "El elemento bisabuelo no es una lista".to_string(),
+                                    })
+                                }
+                            } else {
+                                Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: format!("'{}' no es una lista", nombre_var),
+                                })
+                            }
+                        } else {
+                            Err(ErrorQuetzal::VariableNoDefinida {
+                                linea,
+                                nombre: nombre_var.clone(),
+                            })
+                        }
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "Solo se pueden asignar índices a variables".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: "El índice debe ser un entero".to_string(),
+                    })
+                }
+            },
+            _ => Err(ErrorQuetzal::ErrorEjecucion {
+                linea,
+                mensaje: "Estructura no soportada para matriz 4D o superior".to_string(),
             })
         }
     }

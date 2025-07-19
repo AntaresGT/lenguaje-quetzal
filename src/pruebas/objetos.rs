@@ -182,7 +182,7 @@ mod tests {
                     texto titular = ""
                     número var saldo = 0.0
                     
-                    constructor(texto t) {
+                    Banco(texto t) {
                         ambiente.titular = t
                     }
                     
@@ -292,7 +292,7 @@ mod tests {
                     texto marca = ""
                     Motor motor = nuevo Motor()
                     
-                    constructor(texto m) {
+                    Vehiculo(texto m) {
                         ambiente.marca = m
                         ambiente.motor = nuevo Motor()
                     }
@@ -379,14 +379,12 @@ mod tests {
                     entero edad = 0
                     número salario = 0.0
                     
-                    constructor(texto n, entero e, número s) {
+                    Empleado(texto n, entero e, número s) {
                         si (e < 18) {
                             consola.imprimir_error("La edad debe ser mayor a 18")
-                            retornar
                         }
                         si (s < 0.0) {
                             consola.imprimir_error("El salario no puede ser negativo")
-                            retornar
                         }
                         
                         ambiente.nombre = n

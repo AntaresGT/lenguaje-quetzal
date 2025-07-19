@@ -252,6 +252,7 @@ pub struct BloqueAtrapar {
 pub struct AnalizadorSintactico {
     tokens: Vec<Token>,
     posicion_actual: usize,
+    dentro_de_constructor: bool,
 }
 
 impl AnalizadorSintactico {
@@ -260,6 +261,7 @@ impl AnalizadorSintactico {
         AnalizadorSintactico {
             tokens,
             posicion_actual: 0,
+            dentro_de_constructor: false,
         }
     }
     
@@ -793,14 +795,21 @@ impl AnalizadorSintactico {
                 continue;
             }
             
-            // Verificar si es un constructor (nombre de clase seguido de paréntesis)
+            // Verificar si es un constructor (nombre de clase seguido de paréntesis o palabra clave "constructor")
             if let TipoToken::Identificador(nombre_posible) = &self.token_actual().tipo {
                 if nombre_posible == &nombre && self.verificar_siguiente(&TipoToken::ParentesisAbre) {
-                    // Es un constructor
+                    // Es un constructor con nombre de clase
                     let miembro = self.declaracion_constructor(&nombre)?;
                     miembros.push(miembro);
                     continue;
                 }
+            }
+            
+            // Verificar si es la palabra clave "constructor"
+            if self.coincidir(&TipoToken::Constructor) {
+                let miembro = self.declaracion_constructor_palabra_clave(&nombre)?;
+                miembros.push(miembro);
+                continue;
             }
             
             let miembro = self.declaracion()?;
@@ -873,13 +882,116 @@ impl AnalizadorSintactico {
             });
         }
         
+        // Marcar que estamos dentro de un constructor
+        let anterior_dentro_de_constructor = self.dentro_de_constructor;
+        self.dentro_de_constructor = true;
+        
         // Cuerpo de la función
         let cuerpo = Box::new(self.bloque_o_expresion()?);
+        
+        // Restaurar el estado anterior
+        self.dentro_de_constructor = anterior_dentro_de_constructor;
         
         Ok(Nodo::DeclaracionFuncion {
             nombre,
             parametros,
             tipo_retorno: "vacio".to_string(), // Los constructores no retornan nada explícitamente
+            cuerpo,
+            es_asincrona: false,
+            linea,
+        })
+    }
+    
+    /// Analiza una declaración de constructor usando la palabra clave "constructor"
+    fn declaracion_constructor_palabra_clave(&mut self, _nombre_clase: &str) -> ResultadoQuetzal<Nodo> {
+        let linea = self.token_actual().linea;
+        
+        // Parámetros
+        if !self.coincidir(&TipoToken::ParentesisAbre) {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Se esperaba '(' después de 'constructor'".to_string(),
+            });
+        }
+        
+        let mut parametros = Vec::new();
+        
+        if !self.verificar(&TipoToken::ParentesisCierra) {
+            loop {
+                // Tipo del parámetro
+                let tipo_parametro = if self.es_tipo_dato(&self.token_actual().tipo) {
+                    match &self.token_actual().tipo {
+                        TipoToken::TipoEntero => { self.avanzar(); "entero".to_string() },
+                        TipoToken::TipoNumero => { self.avanzar(); "número".to_string() },
+                        TipoToken::TipoTexto => { self.avanzar(); "texto".to_string() },
+                        TipoToken::TipoLog => { self.avanzar(); "log".to_string() },
+                        TipoToken::TipoLista => { self.avanzar(); "lista".to_string() },
+                        TipoToken::TipoJson => { self.avanzar(); "jsn".to_string() },
+                        _ => return Err(ErrorQuetzal::ErrorSintaxis {
+                            linea: self.token_actual().linea,
+                            mensaje: "Se esperaba un tipo de dato válido".to_string(),
+                        }),
+                    }
+                } else if let TipoToken::Identificador(tipo_personalizado) = &self.token_actual().tipo {
+                    let tipo = tipo_personalizado.clone();
+                    self.avanzar();
+                    tipo
+                } else {
+                    return Err(ErrorQuetzal::ErrorSintaxis {
+                        linea: self.token_actual().linea,
+                        mensaje: "Se esperaba un tipo de dato".to_string(),
+                    });
+                };
+                
+                // Verificar si es variable
+                let es_mutable = self.coincidir(&TipoToken::Var);
+                
+                // Nombre del parámetro
+                let nombre_param = if let TipoToken::Identificador(nom) = &self.token_actual().tipo {
+                    let n = nom.clone();
+                    self.avanzar();
+                    n
+                } else {
+                    return Err(ErrorQuetzal::ErrorSintaxis {
+                        linea: self.token_actual().linea,
+                        mensaje: "Se esperaba el nombre del parámetro".to_string(),
+                    });
+                };
+                
+                parametros.push(Parametro {
+                    nombre: nombre_param,
+                    tipo_dato: tipo_parametro,
+                    es_variable: es_mutable,
+                    valor_defecto: None,
+                });
+                
+                if !self.coincidir(&TipoToken::Coma) {
+                    break;
+                }
+            }
+        }
+        
+        if !self.coincidir(&TipoToken::ParentesisCierra) {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Se esperaba ')' después de los parámetros del constructor".to_string(),
+            });
+        }
+        
+        // Marcar que estamos dentro de un constructor
+        let anterior_dentro_de_constructor = self.dentro_de_constructor;
+        self.dentro_de_constructor = true;
+        
+        // Cuerpo de la función
+        let cuerpo = Box::new(self.bloque_o_expresion()?);
+        
+        // Restaurar el estado anterior
+        self.dentro_de_constructor = anterior_dentro_de_constructor;
+        
+        Ok(Nodo::DeclaracionFuncion {
+            nombre: "constructor".to_string(),
+            parametros,
+            tipo_retorno: "vacio".to_string(),
             cuerpo,
             es_asincrona: false,
             linea,
@@ -2084,6 +2196,14 @@ impl AnalizadorSintactico {
     /// Analiza una declaración de retorno
     fn declaracion_retorno(&mut self) -> ResultadoQuetzal<Nodo> {
         let linea = self.token_anterior().linea;
+        
+        // Verificar si estamos dentro de un constructor
+        if self.dentro_de_constructor {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea,
+                mensaje: "Los constructores no pueden usar la instrucción 'retornar'".to_string(),
+            });
+        }
         
         // El valor a retornar es opcional
         let valor = if self.verificar(&TipoToken::NuevaLinea) || self.esta_al_final() {

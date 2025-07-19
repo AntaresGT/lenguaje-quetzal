@@ -9,6 +9,7 @@ use crate::manejador_modulos::ManejadorModulos;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
+use stacker::{maybe_grow, remaining_stack};
 
 /// Entorno de ejecución que mantiene el estado de variables y funciones
 #[derive(Debug, Clone)]
@@ -17,6 +18,8 @@ pub struct Entorno {
     variables: HashMap<String, Variable>,
     /// Funciones definidas
     funciones: HashMap<String, FuncionDefinida>,
+    /// Clases definidas
+    clases: HashMap<String, ClaseDefinida>,
     /// Entorno padre (para scoping)
     padre: Option<Rc<RefCell<Entorno>>>,
 }
@@ -29,6 +32,15 @@ pub struct FuncionDefinida {
     pub cuerpo: Nodo,
     #[allow(dead_code)]
     pub es_asincrona: bool,
+}
+
+/// Definición de una clase de objeto
+#[derive(Debug, Clone)]
+pub struct ClaseDefinida {
+    pub nombre: String,
+    pub miembros_publicos: Vec<Nodo>,
+    pub miembros_privados: Vec<Nodo>,
+    pub constructor: Option<Nodo>,
 }
 
 /// Resultado del control de flujo
@@ -46,6 +58,7 @@ impl Entorno {
         Entorno {
             variables: HashMap::new(),
             funciones: HashMap::new(),
+            clases: HashMap::new(),
             padre: None,
         }
     }
@@ -55,6 +68,7 @@ impl Entorno {
         Entorno {
             variables: HashMap::new(),
             funciones: HashMap::new(),
+            clases: HashMap::new(),
             padre: Some(padre),
         }
     }
@@ -64,13 +78,15 @@ impl Entorno {
         Entorno {
             variables: HashMap::new(),
             funciones: HashMap::new(),
+            clases: HashMap::new(),
             padre: Some(padre),
         }
     }
     
     /// Define una nueva variable
     pub fn definir_variable(&mut self, nombre: String, variable: Variable) -> ResultadoQuetzal<()> {
-        if !self.es_nombre_valido(&nombre) {
+        // Permitir 'ambiente' como variable especial en objetos
+        if !self.es_nombre_valido(&nombre) && nombre != "ambiente" {
             return Err(ErrorQuetzal::ErrorSintaxis {
                 linea: 0,
                 mensaje: format!("Nombre de variable inválido: {}", nombre),
@@ -165,6 +181,30 @@ impl Entorno {
         }
     }
     
+    /// Define una nueva clase
+    pub fn definir_clase(&mut self, nombre: String, clase: ClaseDefinida) -> ResultadoQuetzal<()> {
+        if !self.es_nombre_valido(&nombre) {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: 0,
+                mensaje: format!("Nombre de clase inválido: {}", nombre),
+            });
+        }
+        
+        self.clases.insert(nombre, clase);
+        Ok(())
+    }
+    
+    /// Obtiene una clase del entorno actual o de los padres
+    pub fn obtener_clase(&self, nombre: &str) -> Option<ClaseDefinida> {
+        if let Some(clase) = self.clases.get(nombre) {
+            Some(clase.clone())
+        } else if let Some(ref padre) = self.padre {
+            padre.borrow().obtener_clase(nombre)
+        } else {
+            None
+        }
+    }
+    
     /// Verifica si un nombre de variable es válido
     fn es_nombre_valido(&self, nombre: &str) -> bool {
         if nombre.is_empty() {
@@ -218,8 +258,7 @@ impl Entorno {
 /// Evaluador principal
 pub struct Evaluador {
     entorno_global: Rc<RefCell<Entorno>>,
-    profundidad_recursion: usize,
-    max_profundidad_recursion: usize,
+    profundidad_recursion: usize, // Solo para estadísticas/debugging
     dentro_de_funcion: bool,
     manejador_modulos: Option<ManejadorModulos>,
 }
@@ -235,7 +274,6 @@ impl Evaluador {
         Evaluador {
             entorno_global: Rc::new(RefCell::new(entorno)),
             profundidad_recursion: 0,
-            max_profundidad_recursion: 1000, // Límite razonable para recursión
             dentro_de_funcion: false,
             manejador_modulos: None,
         }
@@ -273,22 +311,37 @@ impl Evaluador {
     
     /// Evalúa un nodo del AST
     pub fn evaluar(&mut self, nodo: &Nodo) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
-        self.evaluar_con_entorno(nodo, self.entorno_global.clone())
+        // Usar stacker para proteger contra stack overflow
+        // Si queda menos de 128KB de stack, crecer a 8MB
+        let limite_stack_minimo = 128 * 1024; // 128KB
+        let tamaño_stack_nuevo = 8 * 1024 * 1024; // 8MB
+        
+        if remaining_stack().unwrap_or(0) < limite_stack_minimo {
+            maybe_grow(limite_stack_minimo, tamaño_stack_nuevo, || {
+                self.evaluar_con_entorno(nodo, self.entorno_global.clone())
+            })
+        } else {
+            self.evaluar_con_entorno(nodo, self.entorno_global.clone())
+        }
     }
     
     /// Evalúa un nodo con un entorno específico
     fn evaluar_con_entorno(&mut self, nodo: &Nodo, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
-        // Verificar si estamos en una llamada a función para controlar recursión
-        if let Nodo::LlamadaFuncion { .. } = nodo {
-            // Verificar recursión infinita para llamadas a funciones
-            if self.profundidad_recursion >= self.max_profundidad_recursion {
-                return Err(ErrorQuetzal::ErrorEjecucion {
-                    linea: 0,
-                    mensaje: format!("Recursión infinita detectada: profundidad máxima de {} excedida", self.max_profundidad_recursion),
-                });
-            }
-        }
+        // Control adicional de recursión con crecimiento dinámico de stack
+        let limite_stack_minimo = 64 * 1024; // 64KB mínimo
+        let tamaño_stack_nuevo = 4 * 1024 * 1024; // 4MB para llamadas internas
         
+        if remaining_stack().unwrap_or(0) < limite_stack_minimo {
+            maybe_grow(limite_stack_minimo, tamaño_stack_nuevo, || {
+                self.evaluar_nodo_interno(nodo, entorno)
+            })
+        } else {
+            self.evaluar_nodo_interno(nodo, entorno)
+        }
+    }
+    
+    /// Método interno para evaluar nodos sin control de recursión
+    fn evaluar_nodo_interno(&mut self, nodo: &Nodo, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
         match nodo {
             Nodo::Programa(declaraciones) => {
                 let mut ultimo_valor = Valor::Vacio;
@@ -379,6 +432,10 @@ impl Evaluador {
                 Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
             
+            Nodo::DeclaracionObjeto { nombre, miembros, linea } => {
+                self.evaluar_declaracion_objeto(nombre, miembros, *linea, entorno)
+            },
+            
             Nodo::DeclaracionImportar { elementos, ruta, linea } => {
                 // Manejar importaciones usando métodos auxiliares para evitar problemas de borrowing
                 self.manejar_importacion(elementos, ruta, *linea)?;
@@ -405,6 +462,10 @@ impl Evaluador {
                         nombre: nombre.clone(),
                     })
                 }
+            },
+            
+            Nodo::CreacionObjeto { nombre_clase, argumentos, linea } => {
+                self.evaluar_creacion_objeto(nombre_clase, argumentos, *linea, entorno)
             },
             
             Nodo::OperacionBinaria { izquierdo, operador, derecho } => {
@@ -450,9 +511,21 @@ impl Evaluador {
             },
             
             Nodo::LlamadaFuncion { nombre, argumentos, linea } => {
-                // Incrementar profundidad antes de la llamada
+                // Incrementar contador para estadísticas (opcional)
                 self.profundidad_recursion += 1;
-                let resultado = self.evaluar_llamada_funcion(nombre, argumentos, *linea, entorno);
+                
+                // Usar stacker para manejar recursión profunda en funciones
+                let limite_stack_funcion = 96 * 1024; // 96KB mínimo para funciones
+                let tamaño_stack_funcion = 6 * 1024 * 1024; // 6MB para funciones recursivas
+                
+                let resultado = if remaining_stack().unwrap_or(0) < limite_stack_funcion {
+                    maybe_grow(limite_stack_funcion, tamaño_stack_funcion, || {
+                        self.evaluar_llamada_funcion(nombre, argumentos, *linea, entorno)
+                    })
+                } else {
+                    self.evaluar_llamada_funcion(nombre, argumentos, *linea, entorno)
+                };
+                
                 self.profundidad_recursion -= 1;
                 resultado
             },
@@ -678,28 +751,47 @@ impl Evaluador {
                             });
                         }
                         
-                        // Verificar que la variable sea un objeto JSON
-                        if let Valor::Json(mut mapa) = variable.valor.clone() {
-                            // Asignar la nueva propiedad
-                            mapa.insert(propiedad.clone(), nuevo_valor.clone());
-                            
-                            // Actualizar la variable en el entorno
-                            drop(entorno_ref); // Liberar la referencia inmutable
-                            let nueva_variable = Variable::nueva(
-                                nombre_objeto.clone(),
-                                Valor::Json(mapa),
-                                variable.tipo_variable,
-                                variable.tipo_dato.clone(),
-                            );
-                            entorno.borrow_mut().variables.insert(nombre_objeto.clone(), nueva_variable);
-                            
-                            Ok((nuevo_valor, ControlFlujo::Ninguno))
-                        } else {
-                            Err(ErrorQuetzal::ErrorEjecucion {
-                                linea: *linea,
-                                mensaje: format!("No se puede asignar propiedades a una variable de tipo '{}', debe ser un objeto JSON", 
-                                    self.obtener_nombre_tipo(&variable.valor)),
-                            })
+                        // Verificar que la variable sea un objeto JSON o un objeto personalizado
+                        match variable.valor.clone() {
+                            Valor::Json(mut mapa) => {
+                                // Asignar la nueva propiedad
+                                mapa.insert(propiedad.clone(), nuevo_valor.clone());
+                                
+                                // Actualizar la variable en el entorno
+                                drop(entorno_ref); // Liberar la referencia inmutable
+                                let nueva_variable = Variable::nueva(
+                                    nombre_objeto.clone(),
+                                    Valor::Json(mapa),
+                                    variable.tipo_variable,
+                                    variable.tipo_dato.clone(),
+                                );
+                                entorno.borrow_mut().variables.insert(nombre_objeto.clone(), nueva_variable);
+                                
+                                Ok((nuevo_valor, ControlFlujo::Ninguno))
+                            },
+                            Valor::Objeto { clase, mut propiedades } => {
+                                // Asignar la nueva propiedad a objeto personalizado
+                                propiedades.insert(propiedad.clone(), nuevo_valor.clone());
+                                
+                                // Actualizar la variable en el entorno
+                                drop(entorno_ref); // Liberar la referencia inmutable
+                                let nueva_variable = Variable::nueva(
+                                    nombre_objeto.clone(),
+                                    Valor::Objeto { clase, propiedades },
+                                    variable.tipo_variable,
+                                    variable.tipo_dato.clone(),
+                                );
+                                entorno.borrow_mut().variables.insert(nombre_objeto.clone(), nueva_variable);
+                                
+                                Ok((nuevo_valor, ControlFlujo::Ninguno))
+                            },
+                            _ => {
+                                Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea: *linea,
+                                    mensaje: format!("No se puede asignar propiedades a una variable de tipo '{}', debe ser un objeto JSON o un objeto personalizado", 
+                                        self.obtener_nombre_tipo(&variable.valor)),
+                                })
+                            }
                         }
                     } else {
                         Err(ErrorQuetzal::VariableNoDefinida {
@@ -811,10 +903,9 @@ impl Evaluador {
                         break;
                     }
                     
-                    // Crear un nuevo entorno hijo para cada iteración (scoping de bucle)
-                    let entorno_iteracion = Rc::new(RefCell::new(Entorno::con_padre(entorno.clone())));
-                    
-                    let (_, control) = self.evaluar_con_entorno(cuerpo, entorno_iteracion)?;
+                    // No crear entorno hijo para bucles - usar el entorno actual para permitir 
+                    // modificaciones de variables existentes
+                    let (_, control) = self.evaluar_con_entorno(cuerpo, entorno.clone())?;
                     
                     match control {
                         ControlFlujo::Romper => break,
@@ -829,11 +920,9 @@ impl Evaluador {
             
             Nodo::BucleHacerMientras { cuerpo, condicion, linea: _ } => {
                 loop {
-                    // Crear un nuevo entorno hijo para cada iteración (scoping de bucle)
-                    let entorno_iteracion = Rc::new(RefCell::new(Entorno::con_padre(entorno.clone())));
-                    
+                    // No crear entorno hijo para bucles - usar el entorno actual
                     // Ejecutar el cuerpo al menos una vez
-                    let (_, control) = self.evaluar_con_entorno(cuerpo, entorno_iteracion)?;
+                    let (_, control) = self.evaluar_con_entorno(cuerpo, entorno.clone())?;
                     
                     match control {
                         ControlFlujo::Romper => break,
@@ -963,14 +1052,6 @@ impl Evaluador {
     
     /// Evalúa una llamada a función
     fn evaluar_llamada_funcion(&mut self, nombre: &str, argumentos: &[Nodo], linea: usize, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
-        // Verificar recursión infinita
-        if self.profundidad_recursion >= self.max_profundidad_recursion {
-            return Err(ErrorQuetzal::ErrorEjecucion {
-                linea,
-                mensaje: format!("Recursión infinita detectada: profundidad máxima de {} excedida", self.max_profundidad_recursion),
-            });
-        }
-        
         // Verificar funciones de consola
         if nombre.starts_with("consola.") {
             return self.evaluar_funcion_consola(nombre, argumentos, linea, entorno);
@@ -1977,6 +2058,8 @@ impl Evaluador {
             (Valor::Log(_), "log") => true,
             (Valor::Lista(_), "lista") => true,
             (Valor::Json(_), "jsn") => true,
+            // Objetos personalizados
+            (Valor::Objeto { clase, .. }, tipo_esperado) => clase == tipo_esperado,
             // Permitir conversiones automáticas compatibles
             (Valor::Entero(_), "número") => true, // entero puede ser número
             (Valor::Numero(n), "entero") => {
@@ -2029,15 +2112,16 @@ impl Evaluador {
     }
     
     /// Obtiene el nombre del tipo de un valor
-    fn obtener_nombre_tipo(&self, valor: &Valor) -> &str {
+    fn obtener_nombre_tipo(&self, valor: &Valor) -> String {
         match valor {
-            Valor::Vacio => "vacio",
-            Valor::Entero(_) => "entero",
-            Valor::Numero(_) => "número",
-            Valor::Texto(_) => "texto",
-            Valor::Log(_) => "log",
-            Valor::Lista(_) => "lista",
-            Valor::Json(_) => "jsn",
+            Valor::Vacio => "vacio".to_string(),
+            Valor::Entero(_) => "entero".to_string(),
+            Valor::Numero(_) => "número".to_string(),
+            Valor::Texto(_) => "texto".to_string(),
+            Valor::Log(_) => "log".to_string(),
+            Valor::Lista(_) => "lista".to_string(),
+            Valor::Json(_) => "jsn".to_string(),
+            Valor::Objeto { clase, .. } => clase.clone(),
         }
     }
     
@@ -2222,6 +2306,16 @@ impl Evaluador {
     /// Evalúa acceso a miembro de objeto o método
     fn evaluar_acceso_miembro(&self, objeto: &Valor, miembro: &str, linea: usize) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
         match objeto {
+            Valor::Objeto { propiedades, .. } => {
+                if let Some(valor) = propiedades.get(miembro) {
+                    Ok((valor.clone(), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("La propiedad '{}' no existe en el objeto o es privada", miembro),
+                    })
+                }
+            },
             Valor::Json(mapa) => {
                 if let Some(valor) = mapa.get(miembro) {
                     Ok((valor.clone(), ControlFlujo::Ninguno))
@@ -2478,6 +2572,67 @@ impl Evaluador {
     
     /// Evalúa un método en un valor específico
     fn evaluar_metodo_en_valor(&mut self, valor: &Valor, metodo: &str, argumentos: &[Valor], linea: usize) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
+        // Manejar métodos específicos de objetos Quetzal
+        if let Valor::Objeto { clase, .. } = valor {
+            // Buscar la clase para obtener los métodos disponibles
+            let clase_def = {
+                let entorno_ref = self.entorno_global.borrow();
+                entorno_ref.obtener_clase(clase)
+            };
+            
+            if let Some(clase_definida) = clase_def {
+                // Buscar en métodos públicos
+                for miembro in &clase_definida.miembros_publicos {
+                    if let Nodo::DeclaracionFuncion { nombre: nombre_metodo, parametros, cuerpo, .. } = miembro {
+                        if nombre_metodo == metodo {
+                            // Crear entorno para la ejecución del método
+                            let entorno_metodo = Rc::new(RefCell::new(Entorno::nuevo()));
+                            entorno_metodo.borrow_mut().padre = Some(self.entorno_global.clone());
+                            
+                            // Verificar número de argumentos
+                            if argumentos.len() != parametros.len() {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: format!("Método '{}' espera {} argumentos, pero se proporcionaron {}", 
+                                        metodo, parametros.len(), argumentos.len()),
+                                });
+                            }
+                            
+                            // Definir parámetros
+                            for (parametro, valor_arg) in parametros.iter().zip(argumentos.iter()) {
+                                let variable = Variable::nueva(
+                                    parametro.nombre.clone(),
+                                    valor_arg.clone(),
+                                    if parametro.es_variable { TipoVariable::Variable } else { TipoVariable::Inmutable },
+                                    parametro.tipo_dato.clone(),
+                                );
+                                entorno_metodo.borrow_mut().definir_variable(parametro.nombre.clone(), variable)?;
+                            }
+                            
+                            // Definir 'ambiente' que referencia al objeto
+                            let variable_ambiente = Variable::nueva(
+                                "ambiente".to_string(),
+                                valor.clone(),
+                                TipoVariable::Variable, // 'ambiente' puede ser modificado en métodos
+                                "objeto".to_string(),
+                            );
+                            entorno_metodo.borrow_mut().definir_variable("ambiente".to_string(), variable_ambiente)?;
+                            
+                            // Ejecutar el método
+                            let anterior_dentro_de_funcion = self.dentro_de_funcion;
+                            self.dentro_de_funcion = true;
+                            let resultado = self.evaluar_con_entorno(cuerpo, entorno_metodo);
+                            self.dentro_de_funcion = anterior_dentro_de_funcion;
+                            
+                            return resultado;
+                        }
+                    }
+                }
+            }
+            
+            // Si no se encontró el método en la clase, continuar con los métodos estándar
+        }
+        
         match metodo {
             // Métodos de conversión
             "texto" => {
@@ -3866,5 +4021,209 @@ impl Evaluador {
                 sugerencia: "Sistema de módulos no inicializado. No se pueden exportar elementos.".to_string(),
             })
         }
+    }
+    
+    /// Evalúa una declaración de objeto
+    fn evaluar_declaracion_objeto(&mut self, nombre: &str, miembros: &[Nodo], _linea: usize, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
+        let mut miembros_publicos = Vec::new();
+        let mut miembros_privados = Vec::new();
+        let mut constructor = None;
+        
+        let mut es_seccion_publica = true; // Por defecto todo es público
+        
+        for miembro in miembros {
+            match miembro {
+                // Detectar marcadores de sección
+                Nodo::Identificador(palabra) if palabra == "publico" => {
+                    es_seccion_publica = true;
+                    continue;
+                },
+                Nodo::Identificador(palabra) if palabra == "privado" => {
+                    es_seccion_publica = false;
+                    continue;
+                },
+                
+                // Verificar si es un constructor (función con el mismo nombre de la clase)
+                Nodo::DeclaracionFuncion { nombre: nombre_funcion, .. } if nombre_funcion == nombre => {
+                    constructor = Some(miembro.clone());
+                },
+                
+                // Cualquier otro miembro
+                _ => {
+                    if es_seccion_publica {
+                        miembros_publicos.push(miembro.clone());
+                    } else {
+                        miembros_privados.push(miembro.clone());
+                    }
+                }
+            }
+        }
+        
+        let clase = ClaseDefinida {
+            nombre: nombre.to_string(),
+            miembros_publicos,
+            miembros_privados,
+            constructor,
+        };
+        
+        entorno.borrow_mut().definir_clase(nombre.to_string(), clase)?;
+        Ok((Valor::Vacio, ControlFlujo::Ninguno))
+    }
+    
+    /// Evalúa la creación de un objeto (nuevo NombreClase(...))
+    fn evaluar_creacion_objeto(&mut self, nombre_clase: &str, argumentos: &[Nodo], linea: usize, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
+        // Obtener la definición de la clase
+        let clase = {
+            let entorno_ref = entorno.borrow();
+            entorno_ref.obtener_clase(nombre_clase)
+        };
+        
+        let clase = match clase {
+            Some(c) => c,
+            None => {
+                return Err(ErrorQuetzal::ErrorEjecucion {
+                    linea,
+                    mensaje: format!("Clase '{}' no encontrada", nombre_clase),
+                });
+            }
+        };
+        
+        // Crear entorno para el objeto
+        let entorno_objeto = Rc::new(RefCell::new(Entorno::nuevo()));
+        entorno_objeto.borrow_mut().padre = Some(entorno.clone());
+        
+        // Inicializar propiedades públicas con valores por defecto
+        let mut propiedades_publicas = HashMap::new();
+        for miembro in &clase.miembros_publicos {
+            if let Nodo::DeclaracionVariable { nombre: nombre_prop, tipo_dato, valor, .. } = miembro {
+                let valor_inicial = if let Some(expr_valor) = valor {
+                    let (val, _) = self.evaluar_con_entorno(expr_valor, entorno_objeto.clone())?;
+                    val
+                } else {
+                    // Valor por defecto según el tipo
+                    match tipo_dato.as_str() {
+                        "vacio" => Valor::Vacio,
+                        "entero" => Valor::Entero(0),
+                        "número" => Valor::Numero(0.0),
+                        "texto" => Valor::Texto(String::new()),
+                        "log" => Valor::Log(false),
+                        "lista" => Valor::Lista(Vec::new()),
+                        "jsn" => Valor::Json(HashMap::new()),
+                        _ => Valor::Vacio,
+                    }
+                };
+                propiedades_publicas.insert(nombre_prop.clone(), valor_inicial);
+            }
+        }
+        
+        // Inicializar propiedades privadas en el entorno del objeto
+        for miembro in &clase.miembros_privados {
+            if let Nodo::DeclaracionVariable { nombre: nombre_prop, tipo_dato, es_variable, valor, .. } = miembro {
+                let valor_inicial = if let Some(expr_valor) = valor {
+                    let (val, _) = self.evaluar_con_entorno(expr_valor, entorno_objeto.clone())?;
+                    val
+                } else {
+                    // Valor por defecto según el tipo
+                    match tipo_dato.as_str() {
+                        "vacio" => Valor::Vacio,
+                        "entero" => Valor::Entero(0),
+                        "número" => Valor::Numero(0.0),
+                        "texto" => Valor::Texto(String::new()),
+                        "log" => Valor::Log(false),
+                        "lista" => Valor::Lista(Vec::new()),
+                        "jsn" => Valor::Json(HashMap::new()),
+                        _ => Valor::Vacio,
+                    }
+                };
+                
+                let tipo_variable = if *es_variable {
+                    TipoVariable::Variable
+                } else {
+                    TipoVariable::Inmutable
+                };
+                
+                let variable = Variable::nueva(
+                    nombre_prop.clone(),
+                    valor_inicial,
+                    tipo_variable,
+                    tipo_dato.clone(),
+                );
+                
+                entorno_objeto.borrow_mut().definir_variable(nombre_prop.clone(), variable)?;
+            }
+        }
+        
+        // Crear el objeto preliminar para 'ambiente'
+        let objeto_ambiente = Valor::Objeto {
+            clase: nombre_clase.to_string(),
+            propiedades: propiedades_publicas.clone(),
+        };
+        
+        // Definir 'ambiente' en el entorno del objeto
+        let variable_ambiente = Variable::nueva(
+            "ambiente".to_string(),
+            objeto_ambiente,
+            TipoVariable::Variable, // 'ambiente' puede ser modificado
+            "objeto".to_string(),
+        );
+        entorno_objeto.borrow_mut().definir_variable("ambiente".to_string(), variable_ambiente)?;
+        
+        // Ejecutar constructor si existe
+        if let Some(constructor) = &clase.constructor {
+            if let Nodo::DeclaracionFuncion { parametros, cuerpo, .. } = constructor {
+                // Evaluar argumentos
+                let mut argumentos_evaluados = Vec::new();
+                for arg in argumentos {
+                    let (valor_arg, _) = self.evaluar_con_entorno(arg, entorno.clone())?;
+                    argumentos_evaluados.push(valor_arg);
+                }
+                
+                // Verificar que el número de argumentos coincida
+                if argumentos_evaluados.len() != parametros.len() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("Constructor de '{}' espera {} argumentos, pero se proporcionaron {}", 
+                            nombre_clase, parametros.len(), argumentos_evaluados.len()),
+                    });
+                }
+                
+                // Definir parámetros en el entorno del objeto
+                for (parametro, valor_arg) in parametros.iter().zip(argumentos_evaluados.iter()) {
+                    let variable = Variable::nueva(
+                        parametro.nombre.clone(),
+                        valor_arg.clone(),
+                        if parametro.es_variable { TipoVariable::Variable } else { TipoVariable::Inmutable },
+                        parametro.tipo_dato.clone(),
+                    );
+                    entorno_objeto.borrow_mut().definir_variable(parametro.nombre.clone(), variable)?;
+                }
+                
+                // Ejecutar el constructor
+                let anterior_dentro_de_funcion = self.dentro_de_funcion;
+                self.dentro_de_funcion = true;
+                let resultado_constructor = self.evaluar_con_entorno(cuerpo, entorno_objeto.clone());
+                self.dentro_de_funcion = anterior_dentro_de_funcion;
+                
+                // Manejar errores del constructor
+                if let Err(e) = resultado_constructor {
+                    return Err(e);
+                }
+                
+                // Actualizar propiedades públicas después de ejecutar el constructor
+                if let Some(variable_ambiente) = entorno_objeto.borrow().obtener_variable("ambiente") {
+                    if let Valor::Objeto { propiedades, .. } = &variable_ambiente.valor {
+                        propiedades_publicas = propiedades.clone();
+                    }
+                }
+            }
+        }
+        
+        // Crear el objeto final
+        let objeto = Valor::Objeto {
+            clase: nombre_clase.to_string(),
+            propiedades: propiedades_publicas,
+        };
+        
+        Ok((objeto, ControlFlujo::Ninguno))
     }
 }

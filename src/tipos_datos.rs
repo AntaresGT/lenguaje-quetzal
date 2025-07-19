@@ -22,6 +22,11 @@ pub enum Valor {
     Lista(Vec<Valor>),
     /// Objeto JSON
     Json(HashMap<String, Valor>),
+    /// Instancia de objeto Quetzal
+    Objeto {
+        clase: String,
+        propiedades: HashMap<String, Valor>,
+    },
 }
 
 impl Valor {
@@ -42,6 +47,12 @@ impl Valor {
                     .map(|(clave, valor)| format!("{}: {}", clave, valor.a_texto()))
                     .collect();
                 format!("{{{}}}", pares.join(", "))
+            },
+            Valor::Objeto { clase, propiedades } => {
+                let pares: Vec<String> = propiedades.iter()
+                    .map(|(clave, valor)| format!("{}: {}", clave, valor.a_texto()))
+                    .collect();
+                format!("{}[{}]", clase, pares.join(", "))
             }
         }
     }
@@ -82,6 +93,7 @@ impl Valor {
             Valor::Log(b) => *b,
             Valor::Lista(lista) => !lista.is_empty(),
             Valor::Json(objeto) => !objeto.is_empty(),
+            Valor::Objeto { propiedades, .. } => !propiedades.is_empty(),
         }
     }
     
@@ -95,6 +107,7 @@ impl Valor {
             Valor::Log(_) => "log",
             Valor::Lista(_) => "lista",
             Valor::Json(_) => "jsn",
+            Valor::Objeto { .. } => "objeto",
         }
     }
     

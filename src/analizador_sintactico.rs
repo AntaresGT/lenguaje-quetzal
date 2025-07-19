@@ -36,6 +36,13 @@ pub enum Nodo {
         linea: usize,
     },
     
+    // Creación de instancia de objeto
+    CreacionObjeto {
+        nombre_clase: String,
+        argumentos: Vec<Nodo>,
+        linea: usize,
+    },
+    
     // Expresiones
     Literal(Valor),
     Identificador(String),
@@ -342,6 +349,20 @@ impl AnalizadorSintactico {
         // Verificar si es una declaración de variable
         if self.es_tipo_dato(&self.token_actual().tipo) {
             return self.declaracion_variable();
+        }
+        
+        // Verificar si es una declaración de variable con tipo personalizado
+        // Buscar patrón: Identificador Identificador = ...
+        if let TipoToken::Identificador(_) = &self.token_actual().tipo {
+            if self.posicion_actual + 1 < self.tokens.len() {
+                if let TipoToken::Identificador(_) = &self.tokens[self.posicion_actual + 1].tipo {
+                    if self.posicion_actual + 2 < self.tokens.len() {
+                        if matches!(&self.tokens[self.posicion_actual + 2].tipo, TipoToken::Asignacion) {
+                            return self.declaracion_variable();
+                        }
+                    }
+                }
+            }
         }
         
         // Verificar si se intenta asignar a una palabra reservada
@@ -748,14 +769,38 @@ impl AnalizadorSintactico {
             }
             
             // Verificar modificadores de acceso
-            if self.coincidir(&TipoToken::Publico) || self.coincidir(&TipoToken::Privado) {
+            if self.coincidir(&TipoToken::Publico) {
                 if !self.coincidir(&TipoToken::DosPuntos) {
                     return Err(ErrorQuetzal::ErrorSintaxis {
                         linea: self.token_actual().linea,
-                        mensaje: "Se esperaba ':' después del modificador de acceso".to_string(),
+                        mensaje: "Se esperaba ':' después de 'publico'".to_string(),
                     });
                 }
+                // Agregar marcador de sección pública
+                miembros.push(Nodo::Identificador("__seccion_publica__".to_string()));
                 continue;
+            }
+            
+            if self.coincidir(&TipoToken::Privado) {
+                if !self.coincidir(&TipoToken::DosPuntos) {
+                    return Err(ErrorQuetzal::ErrorSintaxis {
+                        linea: self.token_actual().linea,
+                        mensaje: "Se esperaba ':' después de 'privado'".to_string(),
+                    });
+                }
+                // Agregar marcador de sección privada
+                miembros.push(Nodo::Identificador("__seccion_privada__".to_string()));
+                continue;
+            }
+            
+            // Verificar si es un constructor (nombre de clase seguido de paréntesis)
+            if let TipoToken::Identificador(nombre_posible) = &self.token_actual().tipo {
+                if nombre_posible == &nombre && self.verificar_siguiente(&TipoToken::ParentesisAbre) {
+                    // Es un constructor
+                    let miembro = self.declaracion_constructor(&nombre)?;
+                    miembros.push(miembro);
+                    continue;
+                }
             }
             
             let miembro = self.declaracion()?;
@@ -776,11 +821,76 @@ impl AnalizadorSintactico {
         })
     }
     
+    /// Analiza una declaración de constructor
+    fn declaracion_constructor(&mut self, nombre_clase: &str) -> ResultadoQuetzal<Nodo> {
+        let linea = self.token_actual().linea;
+        
+        // Nombre del constructor (debe coincidir con el nombre de la clase)
+        let nombre = if let TipoToken::Identificador(nom) = &self.token_actual().tipo {
+            let n = nom.clone();
+            self.avanzar();
+            n
+        } else {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Se esperaba el nombre del constructor".to_string(),
+            });
+        };
+        
+        // Verificar que el nombre del constructor coincida con la clase
+        if nombre != nombre_clase {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea,
+                mensaje: format!("El constructor debe tener el mismo nombre que la clase '{}'", nombre_clase),
+            });
+        }
+        
+        // Parámetros
+        if !self.coincidir(&TipoToken::ParentesisAbre) {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Se esperaba '(' después del nombre del constructor".to_string(),
+            });
+        }
+        
+        let mut parametros = Vec::new();
+        
+        if !self.verificar(&TipoToken::ParentesisCierra) {
+            loop {
+                let parametro = self.parametro_funcion()?;
+                parametros.push(parametro);
+                
+                if !self.coincidir(&TipoToken::Coma) {
+                    break;
+                }
+            }
+        }
+        
+        if !self.coincidir(&TipoToken::ParentesisCierra) {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Se esperaba ')' después de los parámetros del constructor".to_string(),
+            });
+        }
+        
+        // Cuerpo de la función
+        let cuerpo = Box::new(self.bloque_o_expresion()?);
+        
+        Ok(Nodo::DeclaracionFuncion {
+            nombre,
+            parametros,
+            tipo_retorno: "vacio".to_string(), // Los constructores no retornan nada explícitamente
+            cuerpo,
+            es_asincrona: false,
+            linea,
+        })
+    }
+    
     /// Analiza una declaración de variable
     fn declaracion_variable(&mut self) -> ResultadoQuetzal<Nodo> {
         let linea = self.token_actual().linea;
         
-        // Tipo de la variable
+        // Tipo de la variable (puede ser tipo primitivo o tipo personalizado)
         let tipo_dato = if self.es_tipo_dato(&self.token_actual().tipo) {
             match &self.token_actual().tipo {
                 TipoToken::TipoVacio => { self.avanzar(); "vacio".to_string() },
@@ -830,6 +940,11 @@ impl AnalizadorSintactico {
                     mensaje: "Tipo de dato no válido".to_string(),
                 }),
             }
+        } else if let TipoToken::Identificador(tipo_personalizado) = &self.token_actual().tipo {
+            // Tipo personalizado (objeto)
+            let tipo = tipo_personalizado.clone();
+            self.avanzar();
+            tipo
         } else {
             return Err(ErrorQuetzal::ErrorSintaxis {
                 linea: self.token_actual().linea,
@@ -1305,6 +1420,54 @@ impl AnalizadorSintactico {
     
     /// Analiza expresiones primarias (literales, identificadores, etc.)
     fn primario(&mut self) -> ResultadoQuetzal<Nodo> {
+        // Creación de objetos con 'nuevo'
+        if self.coincidir(&TipoToken::Nuevo) {
+            let linea = self.token_anterior().linea;
+            
+            // Nombre de la clase
+            let nombre_clase = if let TipoToken::Identificador(nom) = &self.token_actual().tipo {
+                let n = nom.clone();
+                self.avanzar();
+                n
+            } else {
+                return Err(ErrorQuetzal::ErrorSintaxis {
+                    linea: self.token_actual().linea,
+                    mensaje: "Se esperaba el nombre de la clase después de 'nuevo'".to_string(),
+                });
+            };
+            
+            // Paréntesis y argumentos del constructor
+            if !self.coincidir(&TipoToken::ParentesisAbre) {
+                return Err(ErrorQuetzal::ErrorSintaxis {
+                    linea: self.token_actual().linea,
+                    mensaje: "Se esperaba '(' después del nombre de la clase".to_string(),
+                });
+            }
+            
+            let mut argumentos = Vec::new();
+            if !self.verificar(&TipoToken::ParentesisCierra) {
+                loop {
+                    argumentos.push(self.expresion()?);
+                    if !self.coincidir(&TipoToken::Coma) {
+                        break;
+                    }
+                }
+            }
+            
+            if !self.coincidir(&TipoToken::ParentesisCierra) {
+                return Err(ErrorQuetzal::ErrorSintaxis {
+                    linea: self.token_actual().linea,
+                    mensaje: "Se esperaba ')' después de los argumentos del constructor".to_string(),
+                });
+            }
+            
+            return Ok(Nodo::CreacionObjeto {
+                nombre_clase,
+                argumentos,
+                linea,
+            });
+        }
+        
         // Literales booleanos
         if self.coincidir(&TipoToken::Verdadero) {
             return Ok(Nodo::Literal(Valor::Log(true)));
@@ -1333,6 +1496,12 @@ impl AnalizadorSintactico {
             },
             TipoToken::Identificador(nombre) => {
                 let nom = nombre.clone();
+                self.avanzar();
+                Ok(Nodo::Identificador(nom))
+            },
+            // Manejar 'ambiente' como identificador especial
+            TipoToken::Ambiente => {
+                let nom = "ambiente".to_string();
                 self.avanzar();
                 Ok(Nodo::Identificador(nom))
             },
@@ -1582,6 +1751,14 @@ impl AnalizadorSintactico {
             return false;
         }
         std::mem::discriminant(&self.token_actual().tipo) == std::mem::discriminant(tipo)
+    }
+    
+    /// Verifica si el siguiente token es del tipo especificado
+    fn verificar_siguiente(&self, tipo: &TipoToken) -> bool {
+        if self.posicion_actual + 1 >= self.tokens.len() {
+            return false;
+        }
+        std::mem::discriminant(&self.tokens[self.posicion_actual + 1].tipo) == std::mem::discriminant(tipo)
     }
     
     /// Coincide con el tipo de token y avanza si coincide

@@ -26,3 +26,7 @@ pub mod procesamiento_cadenas_avanzado;
 
 // Módulos para tests de correcciones específicas
 pub mod ambito_variables;
+
+// Módulo para tests de objetos
+pub mod objetos;
+pub mod objetos_simples;

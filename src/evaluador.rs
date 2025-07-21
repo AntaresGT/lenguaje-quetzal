@@ -1012,10 +1012,8 @@ impl Evaluador {
                         if let Some(valor) = mapa.get(clave) {
                             Ok((valor.clone(), ControlFlujo::Ninguno))
                         } else {
-                            Err(ErrorQuetzal::ErrorEjecucion {
-                                linea: *linea,
-                                mensaje: format!("La propiedad '{}' no existe en el objeto", clave),
-                            })
+                            // Devolver nulo en lugar de error cuando la propiedad no existe
+                            Ok((Valor::Nulo, ControlFlujo::Ninguno))
                         }
                     },
                     
@@ -2081,6 +2079,8 @@ impl Evaluador {
     /// Valida si un valor es compatible con un tipo de dato específico
     fn validar_tipo_compatible(&self, valor: &Valor, tipo_esperado: &str) -> bool {
         match (valor, tipo_esperado) {
+            // Nulo es compatible con cualquier tipo
+            (Valor::Nulo, _) => true,
             (Valor::Vacio, "vacio") => true,
             (Valor::Entero(_), "entero") => true,
             (Valor::Numero(_), "número") => true,
@@ -2111,6 +2111,8 @@ impl Evaluador {
     /// Convierte un valor al tipo especificado automáticamente cuando es compatible
     fn convertir_tipo_automatico(&self, valor: Valor, tipo_destino: &str) -> ResultadoQuetzal<Valor> {
         match (valor, tipo_destino) {
+            // Nulo se mantiene como nulo independientemente del tipo destino
+            (val @ Valor::Nulo, _) => Ok(val),
             // Sin conversión necesaria
             (val @ Valor::Vacio, "vacio") => Ok(val),
             (val @ Valor::Entero(_), "entero") => Ok(val),
@@ -2151,6 +2153,7 @@ impl Evaluador {
             Valor::Log(_) => "log".to_string(),
             Valor::Lista(_) => "lista".to_string(),
             Valor::Json(_) => "jsn".to_string(),
+            Valor::Nulo => "nulo".to_string(),
             Valor::Objeto { clase, .. } => clase.clone(),
         }
     }
@@ -2323,6 +2326,7 @@ impl Evaluador {
     fn valores_iguales(&self, a: &Valor, b: &Valor) -> bool {
         match (a, b) {
             (Valor::Vacio, Valor::Vacio) => true,
+            (Valor::Nulo, Valor::Nulo) => true,
             (Valor::Entero(a), Valor::Entero(b)) => a == b,
             (Valor::Numero(a), Valor::Numero(b)) => (a - b).abs() < f64::EPSILON,
             (Valor::Entero(a), Valor::Numero(b)) => (*a as f64 - b).abs() < f64::EPSILON,

@@ -30,3 +30,6 @@ pub mod ambito_variables;
 // Módulo para tests de objetos
 pub mod objetos;
 pub mod objetos_simples;
+
+// Módulo para tests del tipo nulo
+pub mod tipo_nulo;

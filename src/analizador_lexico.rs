@@ -56,6 +56,9 @@ pub enum TipoToken {
     Verdadero,          // verdadero
     Falso,              // falso
     
+    // Valor nulo
+    Nulo,               // nulo
+    
     // Operadores lógicos
     Y,                  // y
     O,                  // o
@@ -621,6 +624,9 @@ impl AnalizadorLexico {
             // Valores booleanos
             "verdadero" => TipoToken::Verdadero,
             "falso" => TipoToken::Falso,
+            
+            // Valor nulo
+            "nulo" => TipoToken::Nulo,
             
             // Operadores lógicos
             "y" => TipoToken::Y,

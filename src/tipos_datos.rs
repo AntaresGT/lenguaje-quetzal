@@ -10,6 +10,8 @@ use std::fmt;
 pub enum Valor {
     /// Tipo vacío - sin valor
     Vacio,
+    /// Valor nulo - representa ausencia de valor
+    Nulo,
     /// Número entero
     Entero(i64),
     /// Número decimal/flotante  
@@ -34,6 +36,7 @@ impl Valor {
     pub fn a_texto(&self) -> String {
         match self {
             Valor::Vacio => String::new(),
+            Valor::Nulo => "nulo".to_string(),
             Valor::Entero(n) => n.to_string(),
             Valor::Numero(n) => n.to_string(),
             Valor::Texto(s) => s.clone(),
@@ -61,6 +64,7 @@ impl Valor {
     #[allow(dead_code)]
     pub fn a_entero(&self) -> Result<i64, String> {
         match self {
+            Valor::Nulo => Err("No se puede convertir 'nulo' a entero".to_string()),
             Valor::Entero(n) => Ok(*n),
             Valor::Numero(n) => Ok(*n as i64),
             Valor::Texto(s) => s.parse::<i64>()
@@ -74,6 +78,7 @@ impl Valor {
     #[allow(dead_code)]
     pub fn a_numero(&self) -> Result<f64, String> {
         match self {
+            Valor::Nulo => Err("No se puede convertir 'nulo' a número".to_string()),
             Valor::Entero(n) => Ok(*n as f64),
             Valor::Numero(n) => Ok(*n),
             Valor::Texto(s) => s.parse::<f64>()
@@ -87,6 +92,7 @@ impl Valor {
     pub fn a_log(&self) -> bool {
         match self {
             Valor::Vacio => false,
+            Valor::Nulo => false,
             Valor::Entero(n) => *n != 0,
             Valor::Numero(n) => *n != 0.0,
             Valor::Texto(s) => !s.is_empty() && s != "falso",
@@ -101,6 +107,7 @@ impl Valor {
     pub fn tipo_como_texto(&self) -> &'static str {
         match self {
             Valor::Vacio => "vacio",
+            Valor::Nulo => "nulo",
             Valor::Entero(_) => "entero",
             Valor::Numero(_) => "número",
             Valor::Texto(_) => "texto",

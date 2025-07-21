@@ -1589,6 +1589,11 @@ impl AnalizadorSintactico {
             return Ok(Nodo::Literal(Valor::Log(false)));
         }
         
+        // Literal nulo
+        if self.coincidir(&TipoToken::Nulo) {
+            return Ok(Nodo::Literal(Valor::Nulo));
+        }
+        
         // Literales numéricos y de cadena
         match &self.token_actual().tipo {
             TipoToken::LiteralEntero(n) => {
@@ -1696,15 +1701,16 @@ impl AnalizadorSintactico {
                                 };
                                 self.avanzar();
                                 tipo_como_clave
-                            } else if matches!(&self.token_actual().tipo, TipoToken::Verdadero | TipoToken::Falso) {
-                                // Permitir valores booleanos como claves
-                                let bool_como_clave = match &self.token_actual().tipo {
+                            } else if matches!(&self.token_actual().tipo, TipoToken::Verdadero | TipoToken::Falso | TipoToken::Nulo) {
+                                // Permitir valores booleanos y nulo como claves
+                                let valor_como_clave = match &self.token_actual().tipo {
                                     TipoToken::Verdadero => "verdadero".to_string(),
                                     TipoToken::Falso => "falso".to_string(),
+                                    TipoToken::Nulo => "nulo".to_string(),
                                     _ => unreachable!(),
                                 };
                                 self.avanzar();
-                                bool_como_clave
+                                valor_como_clave
                             } else if matches!(&self.token_actual().tipo, 
                                 TipoToken::Objeto | TipoToken::Nuevo | TipoToken::Retornar | 
                                 TipoToken::Asincrono | TipoToken::Si | TipoToken::Sino |
@@ -1827,6 +1833,10 @@ impl AnalizadorSintactico {
             TipoToken::Falso => {
                 self.avanzar();
                 Ok(Valor::Log(false))
+            },
+            TipoToken::Nulo => {
+                self.avanzar();
+                Ok(Valor::Nulo)
             },
             _ => Err(ErrorQuetzal::ErrorSintaxis {
                 linea: self.token_actual().linea,

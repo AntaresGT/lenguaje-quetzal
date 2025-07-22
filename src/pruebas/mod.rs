@@ -33,3 +33,6 @@ pub mod objetos_simples;
 
 // Módulo para tests del tipo nulo
 pub mod tipo_nulo;
+
+// Módulo para tests de validación de tipos en listas tipadas
+pub mod validacion_tipos_lista;

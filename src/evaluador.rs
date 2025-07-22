@@ -3518,7 +3518,21 @@ impl Evaluador {
                     
                     let elemento = &argumentos[0];
                     
-                    // TODO: Validación de tipos para listas tipadas se puede agregar aquí
+                    // Validación de tipos para listas tipadas
+                    if variable.tipo_dato.starts_with("lista<") && variable.tipo_dato.ends_with(">") {
+                        let tipo_elemento = &variable.tipo_dato[6..variable.tipo_dato.len()-1]; // extraer tipo entre < >
+                        if !self.validar_tipo_compatible(elemento, tipo_elemento) {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: format!(
+                                    "Error: No se puede agregar un valor de tipo '{}' a una lista de tipo '{}'",
+                                    self.obtener_nombre_tipo(elemento),
+                                    variable.tipo_dato
+                                ),
+                            });
+                        }
+                    }
+                    
                     if let Valor::Vacio = elemento {
                         return Err(ErrorQuetzal::ErrorEjecucion {
                             linea,

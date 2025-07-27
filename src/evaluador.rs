@@ -4582,9 +4582,19 @@ impl Evaluador {
         self.entorno_global.borrow_mut().definir_variable(nombre, variable)
     }
     
+    /// Define una función en el entorno global
+    pub fn definir_funcion_global(&mut self, nombre: String, funcion: FuncionDefinida) -> ResultadoQuetzal<()> {
+        self.entorno_global.borrow_mut().definir_funcion(nombre, funcion)
+    }
+    
     /// Obtiene una variable del entorno actual
     pub fn obtener_variable(&self, nombre: &str) -> Option<Variable> {
         self.entorno_global.borrow().obtener_variable(nombre)
+    }
+    
+    /// Obtiene una función del entorno actual
+    pub fn obtener_funcion(&self, nombre: &str) -> Option<FuncionDefinida> {
+        self.entorno_global.borrow().obtener_funcion(nombre)
     }
     
     /// Obtiene los nombres de todas las variables definidas en el entorno actual

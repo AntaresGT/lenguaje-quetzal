@@ -3,7 +3,7 @@
 
 use crate::analizador_lexico::AnalizadorLexico;
 use crate::analizador_sintactico::{AnalizadorSintactico, Nodo, ElementoImportar};
-use crate::evaluador::{Evaluador, Entorno};
+use crate::evaluador::{Evaluador, Entorno, FuncionDefinida};
 use crate::errores::{ErrorQuetzal, ResultadoQuetzal};
 use crate::tipos_datos::Variable;
 use std::collections::HashMap;
@@ -11,6 +11,13 @@ use std::path::{Path, PathBuf};
 use std::fs;
 use std::rc::Rc;
 use std::cell::RefCell;
+
+/// Elemento exportado de un módulo (puede ser variable o función)
+#[derive(Debug, Clone)]
+pub enum ElementoExportado {
+    Variable(Variable),
+    Funcion(FuncionDefinida),
+}
 
 /// Estructura que maneja el sistema de módulos
 #[derive(Debug)]
@@ -29,7 +36,7 @@ pub struct ModuloInfo {
     /// Ruta absoluta del módulo
     pub ruta: PathBuf,
     /// Variables y funciones exportadas por el módulo
-    pub exportaciones: HashMap<String, Variable>,
+    pub exportaciones: HashMap<String, ElementoExportado>,
     /// AST del módulo (para debug y análisis)
     pub ast: Nodo,
 }
@@ -82,9 +89,16 @@ impl ManejadorModulos {
             let nombre_real = &elemento.nombre;
             let nombre_local = elemento.alias.as_ref().unwrap_or(nombre_real);
             
-            if let Some(variable) = modulo.exportaciones.get(nombre_real) {
-                // Agregar la variable al entorno actual del evaluador
-                evaluador.definir_variable_global(nombre_local.clone(), variable.clone())?;
+            if let Some(elemento_exportado) = modulo.exportaciones.get(nombre_real) {
+                // Agregar el elemento al entorno actual del evaluador
+                match elemento_exportado {
+                    ElementoExportado::Variable(variable) => {
+                        evaluador.definir_variable_global(nombre_local.clone(), variable.clone())?;
+                    },
+                    ElementoExportado::Funcion(funcion) => {
+                        evaluador.definir_funcion_global(nombre_local.clone(), funcion.clone())?;
+                    },
+                }
             } else {
                 // Crear sugerencia de elementos disponibles
                 let elementos_disponibles: Vec<String> = modulo.exportaciones.keys().cloned().collect();
@@ -125,9 +139,16 @@ impl ManejadorModulos {
         
         // Verificar que todos los elementos a exportar existan en el entorno actual
         for nombre in elementos {
+            // Intentar obtener como variable primero
             if let Some(variable) = evaluador.obtener_variable(nombre) {
-                exportaciones.insert(nombre.clone(), variable);
-            } else {
+                exportaciones.insert(nombre.clone(), ElementoExportado::Variable(variable));
+            }
+            // Si no es una variable, intentar obtener como función
+            else if let Some(funcion) = evaluador.obtener_funcion(nombre) {
+                exportaciones.insert(nombre.clone(), ElementoExportado::Funcion(funcion));
+            }
+            // Si no es ni variable ni función, dar error
+            else {
                 // Crear sugerencia con variables similares o disponibles
                 let mut sugerencias = Vec::new();
                 
@@ -140,7 +161,7 @@ impl ManejadorModulos {
                 
                 let sugerencia = if sugerencias.is_empty() {
                     if variables_definidas.is_empty() {
-                        "No hay variables definidas en este contexto. Define la variable antes de exportarla.".to_string()
+                        "No hay variables ni funciones definidas en este contexto. Define el elemento antes de exportarlo.".to_string()
                     } else if variables_definidas.len() <= 5 {
                         format!("Variables disponibles: {}", variables_definidas.join(", "))
                     } else {
@@ -428,7 +449,7 @@ impl ManejadorModulos {
         ast: &Nodo,
         evaluador: &Evaluador,
         ruta: &Path,
-        exportaciones: &mut HashMap<String, Variable>,
+        exportaciones: &mut HashMap<String, ElementoExportado>,
     ) -> ResultadoQuetzal<()> {
         self.recopilar_exportaciones_en_nodo(ast, evaluador, ruta, exportaciones)
     }
@@ -462,7 +483,7 @@ impl ManejadorModulos {
         nodo: &Nodo,
         evaluador: &Evaluador,
         ruta: &Path,
-        exportaciones: &mut HashMap<String, Variable>,
+        exportaciones: &mut HashMap<String, ElementoExportado>,
     ) -> ResultadoQuetzal<()> {
         match nodo {
             Nodo::Programa(declaraciones) => {
@@ -473,13 +494,20 @@ impl ManejadorModulos {
             Nodo::DeclaracionExportar { elementos, linea } => {
                 // Recopilar esta exportación
                 for elemento in elementos {
+                    // Intentar obtener como variable primero
                     if let Some(variable) = evaluador.obtener_variable(elemento) {
-                        exportaciones.insert(elemento.clone(), variable);
-                    } else {
+                        exportaciones.insert(elemento.clone(), ElementoExportado::Variable(variable));
+                    }
+                    // Si no es una variable, intentar obtener como función
+                    else if let Some(funcion) = evaluador.obtener_funcion(elemento) {
+                        exportaciones.insert(elemento.clone(), ElementoExportado::Funcion(funcion));
+                    }
+                    // Si no es ni variable ni función, dar error
+                    else {
                         return Err(ErrorQuetzal::ErrorExportacion {
                             linea: *linea,
                             elemento: elemento.clone(),
-                            sugerencia: format!("La variable '{}' no está definida en el entorno actual", elemento),
+                            sugerencia: format!("El elemento '{}' no está definido en el entorno actual (ni como variable ni como función)", elemento),
                         });
                     }
                 }

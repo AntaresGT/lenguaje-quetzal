@@ -192,7 +192,7 @@ pub enum Nodo {
     #[allow(dead_code)]
     BloqueIntentar {
         bloque_intentar: Box<Nodo>,
-        bloques_atrapar: Vec<BloqueAtrapar>,
+        bloques_capturar: Vec<BloqueCapturar>,
         bloque_finalmente: Option<Box<Nodo>>,
         linea: usize,
     },
@@ -242,7 +242,7 @@ pub struct ElementoImportar {
 
 /// Bloque de captura de excepciones
 #[derive(Debug, Clone, PartialEq)]
-pub struct BloqueAtrapar {
+pub struct BloqueCapturar {
     pub tipo_excepcion: String,
     pub nombre_variable: String,
     pub bloque: Nodo,
@@ -343,9 +343,19 @@ impl AnalizadorSintactico {
             return Ok(Nodo::Continuar { linea });
         }
         
+        // Verificar si es lanzar excepción
+        if self.coincidir(&TipoToken::Lanzar) {
+            return self.declaracion_lanzar();
+        }
+        
         // Verificar si es una declaración de retorno
         if self.coincidir(&TipoToken::Retornar) {
             return self.declaracion_retorno();
+        }
+        
+        // Verificar si es un bloque intentar
+        if self.coincidir(&TipoToken::Intentar) {
+            return self.bloque_intentar();
         }
         
         // Verificar si es una declaración de variable
@@ -1157,7 +1167,7 @@ impl AnalizadorSintactico {
                     "vacio", "entero", "número", "texto", "log", "lista", "jsn",
                     "si", "sino", "para", "mientras", "hacer", "romper", "continuar",
                     "retornar", "objeto", "nuevo", "ambiente", "asincrono", "esperar",
-                    "intentar", "atrapar", "finalmente", "lanzar", "excepcion",
+                    "intentar", "capturar", "finalmente", "lanzar", "excepcion",
                     "importar", "exportar", "desde", "como", "privado", "publico",
                     "verdadero", "falso", "nulo", "y", "o", "en", "de", "es", "no", "var"
                 ];
@@ -1188,7 +1198,7 @@ impl AnalizadorSintactico {
                     "vacio", "entero", "número", "texto", "log", "lista", "jsn",
                     "si", "sino", "para", "mientras", "hacer", "romper", "continuar",
                     "retornar", "objeto", "nuevo", "ambiente", "asincrono", "esperar",
-                    "intentar", "atrapar", "finalmente", "lanzar", "excepcion",
+                    "intentar", "capturar", "finalmente", "lanzar", "excepcion",
                     "importar", "exportar", "desde", "como", "privado", "publico",
                     "verdadero", "falso", "nulo", "y", "o", "en", "de", "es", "no", "var"
                 ];
@@ -2289,6 +2299,102 @@ impl AnalizadorSintactico {
             tipo_dato,
             es_variable,
             valor,
+            linea,
+        })
+    }
+
+    /// Analiza un bloque intentar-capturar-finalmente
+    fn bloque_intentar(&mut self) -> ResultadoQuetzal<Nodo> {
+        let linea = self.token_anterior().linea;
+        
+        // Parsear el bloque intentar
+        let bloque_intentar = Box::new(self.bloque_o_declaracion()?);
+        
+        // Parsear bloques capturar
+        let mut bloques_capturar = Vec::new();
+        
+        while self.coincidir(&TipoToken::Capturar) {
+            // Parsear (TipoExcepcion nombre_variable)
+            if !self.coincidir(&TipoToken::ParentesisAbre) {
+                return Err(ErrorQuetzal::ErrorSintaxis {
+                    linea: self.token_actual().linea,
+                    mensaje: "Se esperaba '(' después de 'capturar'".to_string(),
+                });
+            }
+            
+            // Tipo de excepción
+            let tipo_excepcion = if let TipoToken::Identificador(tipo) = &self.token_actual().tipo {
+                let t = tipo.clone();
+                self.avanzar();
+                t
+            } else {
+                return Err(ErrorQuetzal::ErrorSintaxis {
+                    linea: self.token_actual().linea,
+                    mensaje: "Se esperaba el tipo de excepción".to_string(),
+                });
+            };
+            
+            // Nombre de la variable
+            let nombre_variable = if let TipoToken::Identificador(nombre) = &self.token_actual().tipo {
+                let n = nombre.clone();
+                self.avanzar();
+                n
+            } else {
+                return Err(ErrorQuetzal::ErrorSintaxis {
+                    linea: self.token_actual().linea,
+                    mensaje: "Se esperaba el nombre de la variable de excepción".to_string(),
+                });
+            };
+            
+            if !self.coincidir(&TipoToken::ParentesisCierra) {
+                return Err(ErrorQuetzal::ErrorSintaxis {
+                    linea: self.token_actual().linea,
+                    mensaje: "Se esperaba ')' después de la declaración de excepción".to_string(),
+                });
+            }
+            
+            // Bloque de manejo
+            let bloque = self.bloque_o_declaracion()?;
+            
+            bloques_capturar.push(BloqueCapturar {
+                tipo_excepcion,
+                nombre_variable,
+                bloque,
+            });
+        }
+        
+        // Verificar que haya al menos un bloque capturar
+        if bloques_capturar.is_empty() {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea,
+                mensaje: "Se esperaba al menos un bloque 'capturar' después de 'intentar'".to_string(),
+            });
+        }
+        
+        // Parsear bloque finalmente (opcional)
+        let bloque_finalmente = if self.coincidir(&TipoToken::Finalmente) {
+            Some(Box::new(self.bloque_o_declaracion()?))
+        } else {
+            None
+        };
+        
+        Ok(Nodo::BloqueIntentar {
+            bloque_intentar,
+            bloques_capturar,
+            bloque_finalmente,
+            linea,
+        })
+    }
+    
+    /// Analiza una declaración de lanzar excepción
+    fn declaracion_lanzar(&mut self) -> ResultadoQuetzal<Nodo> {
+        let linea = self.token_anterior().linea;
+        
+        // Parsear la expresión de la excepción
+        let excepcion = Box::new(self.expresion()?);
+        
+        Ok(Nodo::Lanzar {
+            excepcion,
             linea,
         })
     }

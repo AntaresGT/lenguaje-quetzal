@@ -10,6 +10,7 @@ pub mod cadenas;
 pub mod funciones;
 pub mod entrada_salida;
 pub mod manejo_errores;
+pub mod manejo_excepciones_basico;
 pub mod conversiones;
 pub mod sintaxis_y_comentarios;
 pub mod integracion;

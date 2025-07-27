@@ -219,7 +219,7 @@ impl Entorno {
             "vacio", "entero", "texto", "log", "lista", "jsn",
             "si", "sino", "para", "mientras", "hacer", "romper", "continuar",
             "retornar", "objeto", "nuevo", "ambiente", "asincrono", "esperar",
-            "intentar", "atrapar", "finalmente", "lanzar", "excepcion",
+            "intentar", "capturar", "finalmente", "lanzar", "excepcion",
             "importar", "exportar", "desde", "como", "privado", "publico",
             "verdadero", "falso", "nulo", "y", "o", "en", "de", "es", "no", "mut"
         ];
@@ -1149,6 +1149,98 @@ impl Evaluador {
                 } else {
                     self.evaluar_con_entorno(valor_falso, entorno)
                 }
+            },
+            
+            Nodo::Lanzar { excepcion, linea } => {
+                // Evaluar la expresión de la excepción
+                let (valor_excepcion, _) = self.evaluar_con_entorno(excepcion, entorno)?;
+                
+                // Convertir a texto si no es ya texto
+                let mensaje = match valor_excepcion {
+                    Valor::Texto(msg) => msg,
+                    _ => valor_excepcion.a_cadena(),
+                };
+                
+                // Lanzar el error
+                return Err(ErrorQuetzal::ErrorEjecucion {
+                    linea: *linea,
+                    mensaje,
+                });
+            },
+            
+            Nodo::BloqueIntentar { bloque_intentar, bloques_capturar, bloque_finalmente, linea } => {
+                // Evaluar el bloque intentar
+                let resultado_intentar = self.evaluar_con_entorno(bloque_intentar, entorno.clone());
+                
+                // Variable para almacenar el resultado final
+                let mut resultado_final = Ok((Valor::Vacio, ControlFlujo::Ninguno));
+                
+                match resultado_intentar {
+                    Ok((valor, control)) => {
+                        // Si no hubo error, el resultado es el valor del bloque intentar
+                        resultado_final = Ok((valor, control));
+                    },
+                    Err(error) => {
+                        // Hubo error, buscar un bloque capturar apropiado
+                        let mut error_manejado = false;
+                        
+                        for bloque_capturar in bloques_capturar {
+                            // Por simplicidad, por ahora capturamos cualquier tipo de error con cualquier tipo de excepción
+                            // TODO: Implementar verificación específica de tipos de excepción
+                            
+                            // Crear nuevo entorno para el bloque capturar
+                            let entorno_capturar = Rc::new(RefCell::new(Entorno::con_padre(entorno.clone())));
+                            
+                            // Crear objeto de excepción simple
+                            let mensaje_error = match &error {
+                                ErrorQuetzal::ErrorSintaxis { mensaje, .. } => mensaje.clone(),
+                                ErrorQuetzal::ErrorTipo { mensaje, .. } => mensaje.clone(),
+                                ErrorQuetzal::ErrorEjecucion { mensaje, .. } => mensaje.clone(),
+                                ErrorQuetzal::VariableNoDefinida { nombre, .. } => format!("Variable no definida: {}", nombre),
+                                ErrorQuetzal::FuncionNoDefinida { nombre, .. } => format!("Función no definida: {}", nombre),
+                                ErrorQuetzal::DivisionPorCero { .. } => "División por cero".to_string(),
+                                _ => "Error desconocido".to_string(),
+                            };
+                            
+                            let mut propiedades_excepcion = HashMap::new();
+                            propiedades_excepcion.insert("mensaje".to_string(), Valor::Texto(mensaje_error));
+                            propiedades_excepcion.insert("llamadas".to_string(), Valor::Lista(vec![])); // Lista vacía por simplicidad
+                            
+                            let excepcion = Valor::Json(propiedades_excepcion);
+                            
+                            // Definir la variable de excepción en el entorno del bloque capturar
+                            let variable_excepcion = Variable::nueva(
+                                bloque_capturar.nombre_variable.clone(),
+                                excepcion,
+                                TipoVariable::Inmutable,
+                                "excepcion".to_string(),
+                            );
+                            entorno_capturar.borrow_mut().definir_variable(
+                                bloque_capturar.nombre_variable.clone(), 
+                                variable_excepcion
+                            )?;
+                            
+                            // Evaluar el bloque capturar
+                            resultado_final = self.evaluar_con_entorno(&bloque_capturar.bloque, entorno_capturar);
+                            error_manejado = true;
+                            break; // Solo ejecutar el primer bloque capturar que coincida
+                        }
+                        
+                        // Si no se manejó el error, propagarlo
+                        if !error_manejado {
+                            resultado_final = Err(error);
+                        }
+                    }
+                }
+                
+                // Ejecutar bloque finalmente si existe
+                if let Some(bloque_fin) = bloque_finalmente {
+                    let _resultado_finalmente = self.evaluar_con_entorno(bloque_fin, entorno);
+                    // Ignoramos errores en el bloque finalmente para mantener el error original
+                    // En una implementación completa, los errores en finalmente deberían reemplazar el error original
+                }
+                
+                resultado_final
             },
             
             _ => {

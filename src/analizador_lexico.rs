@@ -41,7 +41,7 @@ pub enum TipoToken {
     
     // Palabras clave de excepciones
     Intentar,           // intentar
-    Atrapar,            // atrapar
+    Capturar,           // capturar
     Finalmente,         // finalmente
     Lanzar,             // lanzar
     Excepcion,          // excepción
@@ -610,7 +610,7 @@ impl AnalizadorLexico {
             
             // Excepciones
             "intentar" => TipoToken::Intentar,
-            "atrapar" => TipoToken::Atrapar,
+            "capturar" => TipoToken::Capturar,
             "finalmente" => TipoToken::Finalmente,
             "lanzar" => TipoToken::Lanzar,
             "excepción" => TipoToken::Excepcion,

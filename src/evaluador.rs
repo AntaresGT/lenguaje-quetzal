@@ -658,7 +658,7 @@ impl Evaluador {
                 }
                 
                 // Métodos que modifican la variable original (como agregar)
-                if metodo == "agregar" || metodo == "quitar" || metodo == "limpiar" {
+                if metodo == "agregar" || metodo == "quitar" || metodo == "limpiar" || metodo == "insertar" || metodo == "sacar" || metodo == "sacar_ultimo" {
                     match objeto.as_ref() {
                         Nodo::Identificador(nombre_var) => {
                             return self.evaluar_metodo_mutante(nombre_var, metodo, &args_evaluados, *linea, entorno);
@@ -1339,7 +1339,7 @@ impl Evaluador {
                 }
                 
                 // Verificar si es un método que modifica la variable (mutante)
-                if nombre_metodo == "agregar" || nombre_metodo == "quitar" || nombre_metodo == "limpiar" {
+                if nombre_metodo == "agregar" || nombre_metodo == "quitar" || nombre_metodo == "limpiar" || nombre_metodo == "insertar" || nombre_metodo == "sacar" || nombre_metodo == "sacar_ultimo" {
                     return self.evaluar_metodo_mutante(nombre_variable, nombre_metodo, &args_evaluados, linea, entorno);
                 }
                 
@@ -2118,6 +2118,16 @@ impl Evaluador {
                 Ok((Valor::Texto(cadena.to_uppercase()), ControlFlujo::Ninguno))
             },
             
+            "mayuscula" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'mayuscula' no acepta argumentos".to_string(),
+                    });
+                }
+                Ok((Valor::Texto(cadena.to_uppercase()), ControlFlujo::Ninguno))
+            },
+            
             "a_minusculas" => {
                 if !argumentos.is_empty() {
                     return Err(ErrorQuetzal::ErrorEjecucion {
@@ -2126,6 +2136,56 @@ impl Evaluador {
                     });
                 }
                 Ok((Valor::Texto(cadena.to_lowercase()), ControlFlujo::Ninguno))
+            },
+            
+            "minuscula" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'minuscula' no acepta argumentos".to_string(),
+                    });
+                }
+                Ok((Valor::Texto(cadena.to_lowercase()), ControlFlujo::Ninguno))
+            },
+            
+            "capitalizar" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'capitalizar' no acepta argumentos".to_string(),
+                    });
+                }
+                let mut chars: Vec<char> = cadena.chars().collect();
+                if !chars.is_empty() {
+                    chars[0] = chars[0].to_uppercase().next().unwrap_or(chars[0]);
+                    for i in 1..chars.len() {
+                        chars[i] = chars[i].to_lowercase().next().unwrap_or(chars[i]);
+                    }
+                }
+                Ok((Valor::Texto(chars.into_iter().collect()), ControlFlujo::Ninguno))
+            },
+            
+            "titulo" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'titulo' no acepta argumentos".to_string(),
+                    });
+                }
+                let resultado = cadena.split_whitespace()
+                    .map(|palabra| {
+                        let mut chars: Vec<char> = palabra.chars().collect();
+                        if !chars.is_empty() {
+                            chars[0] = chars[0].to_uppercase().next().unwrap_or(chars[0]);
+                            for i in 1..chars.len() {
+                                chars[i] = chars[i].to_lowercase().next().unwrap_or(chars[i]);
+                            }
+                        }
+                        chars.into_iter().collect::<String>()
+                    })
+                    .collect::<Vec<String>>()
+                    .join(" ");
+                Ok((Valor::Texto(resultado), ControlFlujo::Ninguno))
             },
             
             "recortar" => {
@@ -2248,21 +2308,6 @@ impl Evaluador {
                     .map(|linea| Valor::Texto(linea.to_string()))
                     .collect();
                 Ok((Valor::Lista(lineas), ControlFlujo::Ninguno))
-            },
-            
-            "capitalizar" => {
-                if !argumentos.is_empty() {
-                    return Err(ErrorQuetzal::ErrorEjecucion {
-                        linea: 0,
-                        mensaje: "El método 'capitalizar' no acepta argumentos".to_string(),
-                    });
-                }
-                let mut chars = cadena.chars();
-                let resultado = match chars.next() {
-                    None => String::new(),
-                    Some(primer_char) => primer_char.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase(),
-                };
-                Ok((Valor::Texto(resultado), ControlFlujo::Ninguno))
             },
             
             _ => Err(ErrorQuetzal::ErrorEjecucion {
@@ -3035,6 +3080,30 @@ impl Evaluador {
                 }
             },
             
+            "titulo" => {
+                if let Valor::Texto(s) = valor {
+                    let resultado = s.split_whitespace()
+                        .map(|palabra| {
+                            let mut chars: Vec<char> = palabra.chars().collect();
+                            if !chars.is_empty() {
+                                chars[0] = chars[0].to_uppercase().next().unwrap_or(chars[0]);
+                                for i in 1..chars.len() {
+                                    chars[i] = chars[i].to_lowercase().next().unwrap_or(chars[i]);
+                                }
+                            }
+                            chars.into_iter().collect::<String>()
+                        })
+                        .collect::<Vec<String>>()
+                        .join(" ");
+                    Ok((Valor::Texto(resultado), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'titulo' solo es válido para cadenas"),
+                    })
+                }
+            },
+            
             "recortar" => {
                 if let Valor::Texto(s) = valor {
                     Ok((Valor::Texto(s.trim().to_string()), ControlFlujo::Ninguno))
@@ -3096,55 +3165,93 @@ impl Evaluador {
             },
             
             "buscar" => {
-                if let Valor::Texto(s) = valor {
-                    if argumentos.is_empty() {
-                        return Err(ErrorQuetzal::ErrorEjecucion {
-                            linea,
-                            mensaje: "El método 'buscar' requiere un patrón como argumento".to_string(),
-                        });
-                    }
-                    
-                    if let Valor::Texto(patron) = &argumentos[0] {
-                        match s.find(patron) {
-                            Some(pos) => Ok((Valor::Entero(pos as i64), ControlFlujo::Ninguno)),
-                            None => Ok((Valor::Entero(-1), ControlFlujo::Ninguno)),
+                match valor {
+                    Valor::Texto(s) => {
+                        if argumentos.is_empty() {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El método 'buscar' requiere un patrón como argumento".to_string(),
+                            });
                         }
-                    } else {
+                        
+                        if let Valor::Texto(patron) = &argumentos[0] {
+                            match s.find(patron) {
+                                Some(pos) => Ok((Valor::Entero(pos as i64), ControlFlujo::Ninguno)),
+                                None => Ok((Valor::Entero(-1), ControlFlujo::Ninguno)),
+                            }
+                        } else {
+                            Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El patrón para 'buscar' debe ser una cadena".to_string(),
+                            })
+                        }
+                    },
+                    Valor::Lista(lista) => {
+                        if argumentos.is_empty() {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El método 'buscar' requiere un elemento como argumento".to_string(),
+                            });
+                        }
+                        
+                        let elemento = &argumentos[0];
+                        for (i, valor_lista) in lista.iter().enumerate() {
+                            if self.valores_son_iguales_simple(valor_lista, elemento) {
+                                return Ok((Valor::Entero(i as i64), ControlFlujo::Ninguno));
+                            }
+                        }
+                        Ok((Valor::Entero(-1), ControlFlujo::Ninguno))
+                    },
+                    _ => {
                         Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
-                            mensaje: "El patrón para 'buscar' debe ser una cadena".to_string(),
+                            mensaje: format!("El método 'buscar' solo es válido para cadenas y listas"),
                         })
                     }
-                } else {
-                    Err(ErrorQuetzal::ErrorEjecucion {
-                        linea,
-                        mensaje: format!("El método 'buscar' solo es válido para cadenas"),
-                    })
                 }
             },
             
             "contiene" => {
-                if let Valor::Texto(s) = valor {
-                    if argumentos.is_empty() {
-                        return Err(ErrorQuetzal::ErrorEjecucion {
-                            linea,
-                            mensaje: "El método 'contiene' requiere un patrón como argumento".to_string(),
-                        });
-                    }
-                    
-                    if let Valor::Texto(patron) = &argumentos[0] {
-                        Ok((Valor::Log(s.contains(patron)), ControlFlujo::Ninguno))
-                    } else {
+                match valor {
+                    Valor::Texto(s) => {
+                        if argumentos.is_empty() {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El método 'contiene' requiere un patrón como argumento".to_string(),
+                            });
+                        }
+                        
+                        if let Valor::Texto(patron) = &argumentos[0] {
+                            Ok((Valor::Log(s.contains(patron)), ControlFlujo::Ninguno))
+                        } else {
+                            Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El patrón para 'contiene' debe ser una cadena".to_string(),
+                            })
+                        }
+                    },
+                    Valor::Lista(lista) => {
+                        if argumentos.is_empty() {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El método 'contiene' requiere un elemento como argumento".to_string(),
+                            });
+                        }
+                        
+                        let elemento = &argumentos[0];
+                        for valor_lista in lista.iter() {
+                            if self.valores_son_iguales_simple(valor_lista, elemento) {
+                                return Ok((Valor::Log(true), ControlFlujo::Ninguno));
+                            }
+                        }
+                        Ok((Valor::Log(false), ControlFlujo::Ninguno))
+                    },
+                    _ => {
                         Err(ErrorQuetzal::ErrorEjecucion {
                             linea,
-                            mensaje: "El patrón para 'contiene' debe ser una cadena".to_string(),
+                            mensaje: format!("El método 'contiene' solo es válido para cadenas y listas"),
                         })
                     }
-                } else {
-                    Err(ErrorQuetzal::ErrorEjecucion {
-                        linea,
-                        mensaje: format!("El método 'contiene' solo es válido para cadenas"),
-                    })
                 }
             },
             
@@ -3585,9 +3692,10 @@ impl Evaluador {
                     let mut lista_ordenada = lista.clone();
                     lista_ordenada.sort_by(|a, b| {
                         match (a, b) {
-                            (Valor::Entero(x), Valor::Entero(y)) => x.cmp(y),
-                            (Valor::Numero(x), Valor::Numero(y)) => x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal),
-                            (Valor::Texto(x), Valor::Texto(y)) => x.cmp(y),
+                            (Valor::Entero(a), Valor::Entero(b)) => a.cmp(b),
+                            (Valor::Numero(a), Valor::Numero(b)) => a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal),
+                            (Valor::Texto(a), Valor::Texto(b)) => a.cmp(b),
+                            (Valor::Log(a), Valor::Log(b)) => a.cmp(b),
                             _ => std::cmp::Ordering::Equal,
                         }
                     });
@@ -3596,6 +3704,53 @@ impl Evaluador {
                     Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
                         mensaje: format!("El método 'ordenar' solo es válido para listas"),
+                    })
+                }
+            },
+            
+            "buscar_ultimo" => {
+                if let Valor::Lista(lista) = valor {
+                    if argumentos.len() != 1 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'buscar_ultimo' requiere exactamente un argumento".to_string(),
+                        });
+                    }
+                    let elemento_buscar = &argumentos[0];
+                    for (indice, elemento) in lista.iter().enumerate().rev() {
+                        if self.valores_son_iguales_simple(elemento, elemento_buscar) {
+                            return Ok((Valor::Entero(indice as i64), ControlFlujo::Ninguno));
+                        }
+                    }
+                    Ok((Valor::Entero(-1), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'buscar_ultimo' solo es válido para listas"),
+                    })
+                }
+            },
+            
+            "contar" => {
+                if let Valor::Lista(lista) = valor {
+                    if argumentos.len() != 1 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'contar' requiere exactamente un argumento".to_string(),
+                        });
+                    }
+                    let elemento_buscar = &argumentos[0];
+                    let mut contador = 0i64;
+                    for elemento in lista {
+                        if self.valores_son_iguales_simple(elemento, elemento_buscar) {
+                            contador += 1;
+                        }
+                    }
+                    Ok((Valor::Entero(contador), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'contar' solo es válido para listas"),
                     })
                 }
             },
@@ -3618,6 +3773,23 @@ impl Evaluador {
                     _ => Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
                         mensaje: format!("El método 'esta_vacia' solo es válido para cadenas y listas"),
+                    })
+                }
+            },
+            
+            "absoluto" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: "El método 'absoluto' no acepta argumentos".to_string(),
+                    });
+                }
+                match valor {
+                    Valor::Entero(n) => Ok((Valor::Entero(n.abs()), ControlFlujo::Ninguno)),
+                    Valor::Numero(n) => Ok((Valor::Numero(n.abs()), ControlFlujo::Ninguno)),
+                    _ => Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'absoluto' solo es válido para números enteros y decimales"),
                     })
                 }
             },
@@ -3815,6 +3987,111 @@ impl Evaluador {
                 (Valor::Lista(ref mut lista), "limpiar") => {
                     lista.clear();
                     Ok((Valor::Vacio, ControlFlujo::Ninguno))
+                },
+                
+                (Valor::Lista(ref mut lista), "insertar") => {
+                    if argumentos.len() != 2 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'insertar' requiere exactamente dos argumentos (índice, elemento)".to_string(),
+                        });
+                    }
+                    
+                    let indice = match &argumentos[0] {
+                        Valor::Entero(i) => {
+                            if *i < 0 {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: format!("Índice negativo: {}", i),
+                                });
+                            }
+                            *i as usize
+                        },
+                        _ => {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El primer argumento de 'insertar' debe ser un número entero".to_string(),
+                            });
+                        }
+                    };
+                    
+                    if indice > lista.len() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: format!("Índice fuera de rango: {} (tamaño: {})", indice, lista.len()),
+                        });
+                    }
+                    
+                    let elemento = &argumentos[1];
+                    
+                    // Validación de tipos para listas tipadas
+                    if variable.tipo_dato.starts_with("lista<") && variable.tipo_dato.ends_with(">") {
+                        let tipo_elemento = &variable.tipo_dato[6..variable.tipo_dato.len()-1];
+                        if !self.validar_tipo_compatible(elemento, tipo_elemento) {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: format!(
+                                    "Error: No se puede insertar un valor de tipo '{}' en una lista de tipo '{}'",
+                                    self.obtener_nombre_tipo(elemento),
+                                    variable.tipo_dato
+                                ),
+                            });
+                        }
+                    }
+                    
+                    if let Valor::Vacio = elemento {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "No se puede insertar un valor vacío en la lista".to_string(),
+                        });
+                    }
+                    
+                    lista.insert(indice, elemento.clone());
+                    Ok((Valor::Vacio, ControlFlujo::Ninguno))
+                },
+                
+                (Valor::Lista(ref mut lista), "sacar") => {
+                    if argumentos.len() != 1 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'sacar' requiere exactamente un argumento (elemento a remover)".to_string(),
+                        });
+                    }
+                    
+                    let elemento_buscar = &argumentos[0];
+                    
+                    // Buscar el elemento
+                    for (indice, elemento) in lista.iter().enumerate() {
+                        if self.valores_son_iguales_simple(elemento, elemento_buscar) {
+                            let elemento_removido = lista.remove(indice);
+                            return Ok((elemento_removido, ControlFlujo::Ninguno));
+                        }
+                    }
+                    
+                    // Si no se encuentra el elemento
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: "El elemento no se encontró en la lista".to_string(),
+                    })
+                },
+                
+                (Valor::Lista(ref mut lista), "sacar_ultimo") => {
+                    if !argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'sacar_ultimo' no acepta argumentos".to_string(),
+                        });
+                    }
+                    
+                    if lista.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "No se puede sacar el último elemento de una lista vacía".to_string(),
+                        });
+                    }
+                    
+                    let elemento_removido = lista.pop().unwrap();
+                    Ok((elemento_removido, ControlFlujo::Ninguno))
                 },
                 
                 _ => {
@@ -5025,110 +5302,56 @@ impl Evaluador {
         let mut propiedades_ambiente = propiedades_publicas.clone();
         
         // Durante la construcción, el objeto 'ambiente' debe poder acceder a propiedades privadas
-        // Agregar las propiedades privadas desde el entorno del objeto
-        for miembro in &clase.miembros_privados {
-            if let Nodo::DeclaracionVariable { nombre: nombre_prop, .. } = miembro {
-                if let Some(variable_privada) = entorno_objeto.borrow().obtener_variable(nombre_prop) {
-                    propiedades_ambiente.insert(nombre_prop.clone(), variable_privada.valor.clone());
-                }
-            }
-        }
         
-        // IMPORTANTE: 'ambiente' incluye todas las propiedades durante construcción
-        let objeto_ambiente = Valor::Objeto {
+        // Crear el objeto final con las propiedades públicas
+        let objeto_final = Valor::Objeto {
             clase: nombre_clase.to_string(),
-            propiedades: propiedades_ambiente,
+            propiedades: propiedades_publicas,
             propiedades_publicas: clase.propiedades_publicas.clone(),
             metodos_publicos: clase.metodos_publicos.clone(),
         };
         
-        // Definir 'ambiente' en el entorno del objeto
-        let variable_ambiente = Variable::nueva(
-            "ambiente".to_string(),
-            objeto_ambiente,
-            TipoVariable::Variable, // 'ambiente' puede ser modificado
-            "objeto".to_string(),
-        );
-        entorno_objeto.borrow_mut().definir_variable("ambiente".to_string(), variable_ambiente)?;
-        
-        // Ejecutar constructor si existe
-        if let Some(constructor) = &clase.constructor {
-            if let Nodo::DeclaracionFuncion { parametros, cuerpo, .. } = constructor {
-                // Evaluar argumentos
-                let mut argumentos_evaluados = Vec::new();
-                for arg in argumentos {
-                    let (valor_arg, _) = self.evaluar_con_entorno(arg, entorno.clone())?;
-                    argumentos_evaluados.push(valor_arg);
+        Ok((objeto_final, ControlFlujo::Ninguno))
+    }
+    
+    /// Método auxiliar para comparar valores de forma simple
+    fn valores_son_iguales_simple(&self, a: &Valor, b: &Valor) -> bool {
+        match (a, b) {
+            (Valor::Vacio, Valor::Vacio) => true,
+            (Valor::Entero(a), Valor::Entero(b)) => a == b,
+            (Valor::Numero(a), Valor::Numero(b)) => a == b,
+            (Valor::Texto(a), Valor::Texto(b)) => a == b,
+            (Valor::Log(a), Valor::Log(b)) => a == b,
+            (Valor::Lista(a), Valor::Lista(b)) => {
+                if a.len() != b.len() {
+                    return false;
                 }
-                
-                // Verificar que el número de argumentos coincida
-                if argumentos_evaluados.len() != parametros.len() {
-                    return Err(ErrorQuetzal::ErrorEjecucion {
-                        linea,
-                        mensaje: format!("Constructor de '{}' espera {} argumentos, pero se proporcionaron {}", 
-                            nombre_clase, parametros.len(), argumentos_evaluados.len()),
-                    });
-                }
-                
-                // Definir parámetros en el entorno del objeto
-                for (parametro, valor_arg) in parametros.iter().zip(argumentos_evaluados.iter()) {
-                    let variable = Variable::nueva(
-                        parametro.nombre.clone(),
-                        valor_arg.clone(),
-                        if parametro.es_variable { TipoVariable::Variable } else { TipoVariable::Inmutable },
-                        parametro.tipo_dato.clone(),
-                    );
-                    entorno_objeto.borrow_mut().definir_variable(parametro.nombre.clone(), variable)?;
-                }
-                
-                // Ejecutar el constructor
-                let anterior_dentro_de_funcion = self.dentro_de_funcion;
-                let anterior_dentro_de_constructor = self.dentro_de_constructor;
-                self.dentro_de_funcion = true;
-                self.dentro_de_constructor = true;
-                let resultado_constructor = self.evaluar_con_entorno(cuerpo, entorno_objeto.clone());
-                self.dentro_de_funcion = anterior_dentro_de_funcion;
-                self.dentro_de_constructor = anterior_dentro_de_constructor;
-                
-                // Manejar errores del constructor
-                if let Err(e) = resultado_constructor {
-                    return Err(e);
-                }
-                
-                // Actualizar propiedades públicas después de ejecutar el constructor
-                if let Some(variable_ambiente) = entorno_objeto.borrow().obtener_variable("ambiente") {
-                    if let Valor::Objeto { propiedades, .. } = &variable_ambiente.valor {
-                        // Solo incluir las propiedades que están marcadas como públicas
-                        for nombre_prop_publica in &clase.propiedades_publicas {
-                            if let Some(valor_prop) = propiedades.get(nombre_prop_publica) {
-                                propiedades_publicas.insert(nombre_prop_publica.clone(), valor_prop.clone());
-                            }
-                        }
+                for (elem_a, elem_b) in a.iter().zip(b.iter()) {
+                    if !self.valores_son_iguales_simple(elem_a, elem_b) {
+                        return false;
                     }
                 }
-            }
-        }
-        
-        // Crear el objeto final - INCLUIR todas las propiedades (públicas y privadas)
-        // El control de acceso se maneja en evaluar_acceso_miembro
-        let mut todas_las_propiedades = propiedades_publicas.clone();
-        
-        // Agregar propiedades privadas al objeto (para acceso interno)
-        for miembro in &clase.miembros_privados {
-            if let Nodo::DeclaracionVariable { nombre: nombre_prop, .. } = miembro {
-                if let Some(variable_privada) = entorno_objeto.borrow().obtener_variable(nombre_prop) {
-                    todas_las_propiedades.insert(nombre_prop.clone(), variable_privada.valor.clone());
+                true
+            },
+            (Valor::Json(a), Valor::Json(b)) => {
+                if a.len() != b.len() {
+                    return false;
                 }
-            }
+                for (clave, valor_a) in a {
+                    if let Some(valor_b) = b.get(clave) {
+                        if !self.valores_son_iguales_simple(valor_a, valor_b) {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+                true
+            },
+            // Conversiones automáticas
+            (Valor::Entero(a), Valor::Numero(b)) => *a as f64 == *b,
+            (Valor::Numero(a), Valor::Entero(b)) => *a == *b as f64,
+            _ => false,
         }
-        
-        let objeto = Valor::Objeto {
-            clase: nombre_clase.to_string(),
-            propiedades: todas_las_propiedades,
-            propiedades_publicas: clase.propiedades_publicas.clone(),
-            metodos_publicos: clase.metodos_publicos.clone(),
-        };
-        
-        Ok((objeto, ControlFlujo::Ninguno))
     }
 }

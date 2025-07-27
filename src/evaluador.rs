@@ -261,6 +261,7 @@ pub struct Evaluador {
     profundidad_recursion: usize, // Solo para estadísticas/debugging
     dentro_de_funcion: bool,
     manejador_modulos: Option<ManejadorModulos>,
+    ruta_archivo_actual: Option<String>, // Rastrea el archivo que se está evaluando actualmente
 }
 
 impl Evaluador {
@@ -276,6 +277,7 @@ impl Evaluador {
             profundidad_recursion: 0,
             dentro_de_funcion: false,
             manejador_modulos: None,
+            ruta_archivo_actual: None,
         }
     }
     
@@ -284,7 +286,28 @@ impl Evaluador {
         let mut evaluador = Self::nuevo();
         let manejador = ManejadorModulos::nuevo(ruta_principal, evaluador.entorno_global.clone())?;
         evaluador.manejador_modulos = Some(manejador);
+        evaluador.ruta_archivo_actual = Some(ruta_principal.to_string());
         Ok(evaluador)
+    }
+    
+    /// Establece la ruta del archivo que se está evaluando actualmente
+    pub fn establecer_ruta_archivo_actual(&mut self, ruta: &str) {
+        self.ruta_archivo_actual = Some(ruta.to_string());
+    }
+    
+    /// Obtiene la ruta del archivo que se está evaluando actualmente
+    pub fn obtener_ruta_archivo_actual(&self) -> Option<&str> {
+        self.ruta_archivo_actual.as_deref()
+    }
+    
+    /// Establece temporalmente el manejador de módulos
+    pub fn establecer_manejador_modulos(&mut self, manejador: Option<ManejadorModulos>) {
+        self.manejador_modulos = manejador;
+    }
+    
+    /// Toma el manejador de módulos temporalmente
+    pub fn tomar_manejador_modulos(&mut self) -> Option<ManejadorModulos> {
+        self.manejador_modulos.take()
     }
     
     /// Compara si dos valores son iguales (para detectar cambios en objetos)
@@ -457,9 +480,9 @@ impl Evaluador {
                 Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
             
-            Nodo::DeclaracionExportar { elementos, linea } => {
-                // Manejar exportaciones usando métodos auxiliares para evitar problemas de borrowing
-                self.manejar_exportacion(elementos, *linea)?;
+            Nodo::DeclaracionExportar { elementos: _, linea: _ } => {
+                // Las exportaciones ahora se manejan externamente por el manejador de módulos
+                // durante la evaluación del módulo. Por ahora, simplemente retornamos éxito.
                 Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
             
@@ -4594,9 +4617,9 @@ impl Evaluador {
     fn manejar_exportacion(&mut self, elementos: &[String], linea: usize) -> ResultadoQuetzal<()> {
         // Extraer el manejador temporalmente para evitar problemas de préstamo
         if let Some(mut manejador) = self.manejador_modulos.take() {
-            // Para obtener la ruta actual, necesitamos extraerla del contexto
-            // Por simplicidad, usaremos una ruta temporal
-            let ruta_actual = "modulo_actual.qz"; // TODO: Obtener la ruta real del contexto
+            // Obtener la ruta actual del archivo que se está evaluando
+            let ruta_actual = self.ruta_archivo_actual.as_deref()
+                .unwrap_or("archivo_desconocido.qz");
             let resultado = manejador.procesar_exportacion(elementos, self, ruta_actual, linea);
             self.manejador_modulos = Some(manejador);
             resultado

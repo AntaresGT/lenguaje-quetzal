@@ -86,16 +86,30 @@ fn ejecutar_archivo(ruta_archivo: &str) {
         return;
     }
     
-    // Verificar que el archivo existe
-    if !Path::new(ruta_archivo).exists() {
+    // Verificar que el archivo existe y convertir a ruta absoluta
+    let ruta_path = Path::new(ruta_archivo);
+    if !ruta_path.exists() {
         eprintln!("{}[E0001]: no se pudo encontrar el archivo `{}`", "error".red().bold(), ruta_archivo);
         eprintln!(" {} {}", "-->".blue().bold(), ruta_archivo);
         eprintln!("  {} verifica que la ruta sea correcta", "=".blue().bold());
         return;
     }
     
+    // Convertir a ruta absoluta para el sistema de módulos
+    let ruta_absoluta = match ruta_path.canonicalize() {
+        Ok(ruta) => ruta,
+        Err(error) => {
+            eprintln!("{}[E0001]: error al resolver la ruta del archivo `{}`", "error".red().bold(), ruta_archivo);
+            eprintln!(" {} {}", "-->".blue().bold(), ruta_archivo);
+            eprintln!("  {} {}", "=".blue().bold(), error);
+            return;
+        }
+    };
+    
+    let ruta_absoluta_str = ruta_absoluta.to_string_lossy();
+    
     // Leer el contenido del archivo para poder pasarlo a los errores
-    let codigo_fuente = match std::fs::read_to_string(ruta_archivo) {
+    let codigo_fuente = match std::fs::read_to_string(&ruta_absoluta) {
         Ok(contenido) => contenido,
         Err(error) => {
             eprintln!("{}[E0001]: error al leer el archivo `{}`", "error".red().bold(), ruta_archivo);
@@ -105,8 +119,8 @@ fn ejecutar_archivo(ruta_archivo: &str) {
         }
     };
     
-    // Interpretar el archivo con soporte completo de módulos
-    match interprete::interpretar_archivo_con_modulos(ruta_archivo) {
+    // Interpretar el archivo con soporte completo de módulos usando la ruta absoluta
+    match interprete::interpretar_archivo_con_modulos(&ruta_absoluta_str) {
         Ok(_) => {
             // Ejecución exitosa
         },

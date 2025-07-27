@@ -62,21 +62,20 @@ impl ManejadorModulos {
         let ruta_absoluta = self.resolver_ruta_modulo(ruta_modulo, linea)?;
         
         // Cargar el módulo si no está en caché
-        if !self.modulos_cargados.contains_key(&ruta_absoluta.to_string_lossy().to_string()) {
+        let ruta_str = ruta_absoluta.to_string_lossy().to_string();
+        
+        if !self.modulos_cargados.contains_key(&ruta_str) {
             self.cargar_modulo(&ruta_absoluta, evaluador, linea)?;
         }
         
         // Obtener las exportaciones del módulo
         let modulo = self.modulos_cargados
-            .get(&ruta_absoluta.to_string_lossy().to_string())
+            .get(&ruta_str)
             .ok_or_else(|| ErrorQuetzal::ErrorCargaModulo {
                 linea,
                 ruta: ruta_modulo.to_string(),
                 detalle: "El módulo no se encuentra en el caché después de ser cargado".to_string(),
             })?;
-        
-        // Verificar elementos exportados disponibles
-        let elementos_disponibles: Vec<String> = modulo.exportaciones.keys().cloned().collect();
         
         // Importar los elementos solicitados
         for elemento in elementos {
@@ -88,6 +87,7 @@ impl ManejadorModulos {
                 evaluador.definir_variable_global(nombre_local.clone(), variable.clone())?;
             } else {
                 // Crear sugerencia de elementos disponibles
+                let elementos_disponibles: Vec<String> = modulo.exportaciones.keys().cloned().collect();
                 let sugerencia = if elementos_disponibles.is_empty() {
                     "El módulo no exporta ningún elemento. Verifica las declaraciones 'exportar' en el módulo.".to_string()
                 } else if elementos_disponibles.len() <= 5 {
@@ -352,29 +352,141 @@ impl ManejadorModulos {
         let entorno_modulo = Entorno::nuevo_hijo(self.entorno_global.clone());
         let entorno_anterior = evaluador.intercambiar_entorno(Rc::new(RefCell::new(entorno_modulo)));
         
+        // Establecer la ruta del archivo actual para las exportaciones
+        let ruta_anterior = evaluador.obtener_ruta_archivo_actual().map(|s| s.to_string());
+        evaluador.establecer_ruta_archivo_actual(&ruta.to_string_lossy());
+        
         // Evaluar el módulo
         let resultado_evaluacion = evaluador.evaluar(&ast);
+        
+        // Procesar resultado y manejar errores
+        let exportaciones_encontradas = match resultado_evaluacion {
+            Ok(_) => {
+                // Procesar las exportaciones ANTES de restaurar el entorno
+                let mut exportaciones = HashMap::new();
+                match self.recopilar_exportaciones_del_ast(&ast, evaluador, ruta, &mut exportaciones) {
+                    Ok(_) => exportaciones,
+                    Err(error) => {
+                        // Restaurar entorno y ruta antes de retornar error
+                        if let Some(ruta_anterior) = ruta_anterior {
+                            evaluador.establecer_ruta_archivo_actual(&ruta_anterior);
+                        }
+                        evaluador.intercambiar_entorno(entorno_anterior);
+                        return Err(error);
+                    }
+                }
+            }
+            Err(error) => {
+                // Restaurar entorno y ruta antes de retornar error
+                if let Some(ruta_anterior) = ruta_anterior {
+                    evaluador.establecer_ruta_archivo_actual(&ruta_anterior);
+                }
+                evaluador.intercambiar_entorno(entorno_anterior);
+                return Err(ErrorQuetzal::ErrorCargaModulo {
+                    linea,
+                    ruta: ruta.display().to_string(),
+                    detalle: format!("Error durante la evaluación del módulo: {}", error),
+                });
+            }
+        };
+        
+        // Restaurar la ruta anterior
+        if let Some(ruta_anterior) = ruta_anterior {
+            evaluador.establecer_ruta_archivo_actual(&ruta_anterior);
+        }
         
         // Restaurar el entorno anterior
         evaluador.intercambiar_entorno(entorno_anterior);
         
-        // Verificar si la evaluación fue exitosa
-        resultado_evaluacion.map_err(|error| ErrorQuetzal::ErrorCargaModulo {
-            linea,
-            ruta: ruta.display().to_string(),
-            detalle: format!("Error durante la evaluación del módulo: {}", error),
-        })?;
-        
-        // Crear información del módulo
+        // Crear información del módulo con las exportaciones recopiladas
         let modulo_info = ModuloInfo {
             ruta: ruta.to_path_buf(),
-            exportaciones: HashMap::new(), // Se llenará con las declaraciones de exportación
+            exportaciones: exportaciones_encontradas,
             ast,
         };
         
         // Agregar al caché
-        self.modulos_cargados.insert(ruta.to_string_lossy().to_string(), modulo_info);
+        let ruta_cache = ruta.to_string_lossy().to_string();
+        self.modulos_cargados.insert(ruta_cache, modulo_info);
         
+        Ok(())
+    }
+    
+    /// Procesa las exportaciones encontradas en el AST del módulo
+    fn procesar_exportaciones_del_ast(
+        &mut self,
+        ast: &Nodo,
+        evaluador: &Evaluador,
+        ruta: &Path,
+    ) -> ResultadoQuetzal<()> {
+        self.buscar_exportaciones_en_nodo(ast, evaluador, ruta)
+    }
+    
+    /// Recopila las exportaciones encontradas en el AST del módulo
+    fn recopilar_exportaciones_del_ast(
+        &mut self,
+        ast: &Nodo,
+        evaluador: &Evaluador,
+        ruta: &Path,
+        exportaciones: &mut HashMap<String, Variable>,
+    ) -> ResultadoQuetzal<()> {
+        self.recopilar_exportaciones_en_nodo(ast, evaluador, ruta, exportaciones)
+    }
+    
+    /// Busca recursivamente las declaraciones de exportación en un nodo
+    fn buscar_exportaciones_en_nodo(
+        &mut self,
+        nodo: &Nodo,
+        evaluador: &Evaluador,
+        ruta: &Path,
+    ) -> ResultadoQuetzal<()> {
+        match nodo {
+            Nodo::Programa(declaraciones) => {
+                for declaracion in declaraciones {
+                    self.buscar_exportaciones_en_nodo(declaracion, evaluador, ruta)?;
+                }
+            },
+            Nodo::DeclaracionExportar { elementos, linea } => {
+                // Procesar esta exportación
+                self.procesar_exportacion(elementos, evaluador, &ruta.to_string_lossy(), *linea)?;
+            },
+            // Para otros tipos de nodos, no hay nada que hacer
+            _ => {},
+        }
+        Ok(())
+    }
+    
+    /// Recopila recursivamente las declaraciones de exportación en un nodo
+    fn recopilar_exportaciones_en_nodo(
+        &mut self,
+        nodo: &Nodo,
+        evaluador: &Evaluador,
+        ruta: &Path,
+        exportaciones: &mut HashMap<String, Variable>,
+    ) -> ResultadoQuetzal<()> {
+        match nodo {
+            Nodo::Programa(declaraciones) => {
+                for declaracion in declaraciones {
+                    self.recopilar_exportaciones_en_nodo(declaracion, evaluador, ruta, exportaciones)?;
+                }
+            },
+            Nodo::DeclaracionExportar { elementos, linea } => {
+                // Recopilar esta exportación
+                for elemento in elementos {
+                    if let Some(variable) = evaluador.obtener_variable(elemento) {
+                        exportaciones.insert(elemento.clone(), variable);
+                    } else {
+                        return Err(ErrorQuetzal::ErrorExportacion {
+                            linea: *linea,
+                            elemento: elemento.clone(),
+                            sugerencia: format!("La variable '{}' no está definida en el entorno actual", elemento),
+                        });
+                    }
+                }
+            },
+            // Para otros tipos de nodos, no hay nada que hacer
+            _ => {},
+        }
         Ok(())
     }
     

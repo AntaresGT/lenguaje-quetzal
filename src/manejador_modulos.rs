@@ -3,7 +3,7 @@
 
 use crate::analizador_lexico::AnalizadorLexico;
 use crate::analizador_sintactico::{AnalizadorSintactico, Nodo, ElementoImportar};
-use crate::evaluador::{Evaluador, Entorno, FuncionDefinida};
+use crate::evaluador::{Evaluador, Entorno, FuncionDefinida, ClaseDefinida};
 use crate::errores::{ErrorQuetzal, ResultadoQuetzal};
 use crate::tipos_datos::Variable;
 use std::collections::HashMap;
@@ -12,11 +12,13 @@ use std::fs;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-/// Elemento exportado de un módulo (puede ser variable o función)
+/// Elemento exportado de un módulo (puede ser variable, función, clase o instancia de objeto)
 #[derive(Debug, Clone)]
 pub enum ElementoExportado {
     Variable(Variable),
     Funcion(FuncionDefinida),
+    Clase(ClaseDefinida),
+    Instancia(Variable), // Las instancias de objetos se almacenan como variables
 }
 
 /// Estructura que maneja el sistema de módulos
@@ -98,6 +100,13 @@ impl ManejadorModulos {
                     ElementoExportado::Funcion(funcion) => {
                         evaluador.definir_funcion_global(nombre_local.clone(), funcion.clone())?;
                     },
+                    ElementoExportado::Clase(clase) => {
+                        evaluador.definir_clase_global(nombre_local.clone(), clase.clone())?;
+                    },
+                    ElementoExportado::Instancia(instancia) => {
+                        // Las instancias se importan como variables
+                        evaluador.definir_variable_global(nombre_local.clone(), instancia.clone())?;
+                    },
                 }
             } else {
                 // Crear sugerencia de elementos disponibles
@@ -141,13 +150,25 @@ impl ManejadorModulos {
         for nombre in elementos {
             // Intentar obtener como variable primero
             if let Some(variable) = evaluador.obtener_variable(nombre) {
-                exportaciones.insert(nombre.clone(), ElementoExportado::Variable(variable));
+                // Verificar si es una instancia de objeto
+                match &variable.valor {
+                    crate::tipos_datos::Valor::Objeto { .. } => {
+                        exportaciones.insert(nombre.clone(), ElementoExportado::Instancia(variable));
+                    },
+                    _ => {
+                        exportaciones.insert(nombre.clone(), ElementoExportado::Variable(variable));
+                    }
+                }
             }
             // Si no es una variable, intentar obtener como función
             else if let Some(funcion) = evaluador.obtener_funcion(nombre) {
                 exportaciones.insert(nombre.clone(), ElementoExportado::Funcion(funcion));
             }
-            // Si no es ni variable ni función, dar error
+            // Si no es ni variable ni función, intentar obtener como clase
+            else if let Some(clase) = evaluador.obtener_clase(nombre) {
+                exportaciones.insert(nombre.clone(), ElementoExportado::Clase(clase));
+            }
+            // Si no es variable, función o clase, dar error
             else {
                 // Crear sugerencia con variables similares o disponibles
                 let mut sugerencias = Vec::new();
@@ -161,11 +182,11 @@ impl ManejadorModulos {
                 
                 let sugerencia = if sugerencias.is_empty() {
                     if variables_definidas.is_empty() {
-                        "No hay variables ni funciones definidas en este contexto. Define el elemento antes de exportarlo.".to_string()
+                        "No hay variables, funciones, clases o instancias definidas en este contexto. Define el elemento antes de exportarlo.".to_string()
                     } else if variables_definidas.len() <= 5 {
-                        format!("Variables disponibles: {}", variables_definidas.join(", "))
+                        format!("Elementos disponibles: {}", variables_definidas.join(", "))
                     } else {
-                        format!("Variables disponibles: {} y {} más", 
+                        format!("Elementos disponibles: {} y {} más", 
                             variables_definidas[..3].join(", "), 
                             variables_definidas.len() - 3)
                     }
@@ -176,7 +197,7 @@ impl ManejadorModulos {
                 return Err(ErrorQuetzal::ErrorExportacion {
                     linea,
                     elemento: nombre.clone(),
-                    sugerencia,
+                    sugerencia: format!("El elemento '{}' no está definido en el entorno actual (ni como variable, función, clase o instancia de objeto). {}", nombre, sugerencia),
                 });
             }
         }
@@ -496,18 +517,30 @@ impl ManejadorModulos {
                 for elemento in elementos {
                     // Intentar obtener como variable primero
                     if let Some(variable) = evaluador.obtener_variable(elemento) {
-                        exportaciones.insert(elemento.clone(), ElementoExportado::Variable(variable));
+                        // Verificar si es una instancia de objeto
+                        match &variable.valor {
+                            crate::tipos_datos::Valor::Objeto { .. } => {
+                                exportaciones.insert(elemento.clone(), ElementoExportado::Instancia(variable));
+                            },
+                            _ => {
+                                exportaciones.insert(elemento.clone(), ElementoExportado::Variable(variable));
+                            }
+                        }
                     }
                     // Si no es una variable, intentar obtener como función
                     else if let Some(funcion) = evaluador.obtener_funcion(elemento) {
                         exportaciones.insert(elemento.clone(), ElementoExportado::Funcion(funcion));
                     }
-                    // Si no es ni variable ni función, dar error
+                    // Si no es ni variable ni función, intentar obtener como clase
+                    else if let Some(clase) = evaluador.obtener_clase(elemento) {
+                        exportaciones.insert(elemento.clone(), ElementoExportado::Clase(clase));
+                    }
+                    // Si no es variable, función o clase, dar error
                     else {
                         return Err(ErrorQuetzal::ErrorExportacion {
                             linea: *linea,
                             elemento: elemento.clone(),
-                            sugerencia: format!("El elemento '{}' no está definido en el entorno actual (ni como variable ni como función)", elemento),
+                            sugerencia: format!("El elemento '{}' no está definido en el entorno actual (ni como variable, función, clase o instancia de objeto)", elemento),
                         });
                     }
                 }

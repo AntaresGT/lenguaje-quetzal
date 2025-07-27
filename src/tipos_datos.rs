@@ -28,6 +28,8 @@ pub enum Valor {
     Objeto {
         clase: String,
         propiedades: HashMap<String, Valor>,
+        propiedades_publicas: Vec<String>, // Lista de propiedades públicas
+        metodos_publicos: Vec<String>, // Lista de métodos públicos
     },
 }
 
@@ -51,7 +53,7 @@ impl Valor {
                     .collect();
                 format!("{{{}}}", pares.join(", "))
             },
-            Valor::Objeto { clase, propiedades } => {
+            Valor::Objeto { clase, propiedades, .. } => {
                 let pares: Vec<String> = propiedades.iter()
                     .map(|(clave, valor)| format!("{}: {}", clave, valor.a_texto()))
                     .collect();

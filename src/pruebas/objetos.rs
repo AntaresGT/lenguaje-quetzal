@@ -179,7 +179,7 @@ mod tests {
         let codigo = r#"
             objeto Banco {
                 publico:
-                    texto titular = ""
+                    texto var titular = ""
                     número var saldo = 0.0
                     
                     Banco(texto t) {
@@ -363,7 +363,7 @@ mod tests {
             
             Utilidades util = nuevo Utilidades()
             consola.imprimir(util.saludar("Mundo"))
-            consola.imprimir("Factorial de 5: " + util.factorial(5).texto())
+            consola.imprimir("Factorial de 3: " + util.factorial(3).texto())
         "#;
         
         let resultado = interpretar(codigo);

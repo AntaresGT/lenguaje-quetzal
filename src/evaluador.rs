@@ -41,6 +41,10 @@ pub struct ClaseDefinida {
     pub miembros_publicos: Vec<Nodo>,
     pub miembros_privados: Vec<Nodo>,
     pub constructor: Option<Nodo>,
+    pub propiedades_publicas: Vec<String>, // Lista de nombres de propiedades públicas
+    pub propiedades_privadas: Vec<String>, // Lista de nombres de propiedades privadas
+    pub metodos_publicos: Vec<String>, // Lista de nombres de métodos públicos
+    pub metodos_privados: Vec<String>, // Lista de nombres de métodos privados
 }
 
 /// Resultado del control de flujo
@@ -260,6 +264,8 @@ pub struct Evaluador {
     entorno_global: Rc<RefCell<Entorno>>,
     profundidad_recursion: usize, // Solo para estadísticas/debugging
     dentro_de_funcion: bool,
+    dentro_de_constructor: bool, // Indica si estamos ejecutando un constructor
+    dentro_de_metodo_clase: bool, // Indica si estamos ejecutando un método de clase
     manejador_modulos: Option<ManejadorModulos>,
     ruta_archivo_actual: Option<String>, // Rastrea el archivo que se está evaluando actualmente
 }
@@ -276,6 +282,8 @@ impl Evaluador {
             entorno_global: Rc::new(RefCell::new(entorno)),
             profundidad_recursion: 0,
             dentro_de_funcion: false,
+            dentro_de_constructor: false,
+            dentro_de_metodo_clase: false,
             manejador_modulos: None,
             ruta_archivo_actual: None,
         }
@@ -311,13 +319,86 @@ impl Evaluador {
     }
     
     /// Compara si dos valores son iguales (para detectar cambios en objetos)
-    fn valores_son_iguales(&self, a: &Valor, b: &Valor) -> bool {
-        match (a, b) {
-            (Valor::Objeto { clase: c1, propiedades: p1 }, Valor::Objeto { clase: c2, propiedades: p2 }) => {
-                c1 == c2 && p1.len() == p2.len() && 
-                p1.iter().all(|(k, v1)| p2.get(k).map_or(false, |v2| self.valores_son_iguales(v1, v2)))
+    fn objeto_fue_modificado(&self, original: &Valor, actual: &Valor) -> bool {
+        match (original, actual) {
+            (Valor::Objeto { propiedades: p1, .. }, Valor::Objeto { propiedades: p2, .. }) => {
+                // Comparación rápida: si el tamaño es diferente, fue modificado
+                if p1.len() != p2.len() {
+                    return true;
+                }
+                
+                // Comparación de las claves - si las claves son diferentes, fue modificado
+                let claves1: std::collections::HashSet<_> = p1.keys().collect();
+                let claves2: std::collections::HashSet<_> = p2.keys().collect();
+                if claves1 != claves2 {
+                    return true;
+                }
+                
+                // Comparación superficial de valores - solo tipos básicos para evitar recursión
+                for (clave, valor1) in p1.iter() {
+                    if let Some(valor2) = p2.get(clave) {
+                        if self.valores_diferentes_superficial(valor1, valor2) {
+                            return true;
+                        }
+                    }
+                }
+                
+                false
             },
-            _ => false, // Para simplificar, solo comparamos objetos
+            _ => !self.valores_son_iguales(original, actual),
+        }
+    }
+    
+    fn valores_diferentes_superficial(&self, a: &Valor, b: &Valor) -> bool {
+        match (a, b) {
+            (Valor::Entero(a), Valor::Entero(b)) => a != b,
+            (Valor::Numero(a), Valor::Numero(b)) => (a - b).abs() > f64::EPSILON,
+            (Valor::Texto(a), Valor::Texto(b)) => a != b,
+            (Valor::Log(a), Valor::Log(b)) => a != b,
+            (Valor::Vacio, Valor::Vacio) => false,
+            (Valor::Nulo, Valor::Nulo) => false,
+            (Valor::Lista(a), Valor::Lista(b)) => a.len() != b.len(), // Solo comparar longitud
+            (Valor::Json(a), Valor::Json(b)) => a.len() != b.len(), // Solo comparar longitud
+            (Valor::Objeto { clase: c1, .. }, Valor::Objeto { clase: c2, .. }) => c1 != c2, // Solo comparar clase
+            _ => true, // Tipos diferentes
+        }
+    }
+    
+    fn valores_son_iguales(&self, a: &Valor, b: &Valor) -> bool {
+        self.valores_son_iguales_con_profundidad(a, b, 0, 10) // máximo 10 niveles de profundidad
+    }
+    
+    fn valores_son_iguales_con_profundidad(&self, a: &Valor, b: &Valor, profundidad: usize, max_profundidad: usize) -> bool {
+        // Evitar recursión infinita
+        if profundidad > max_profundidad {
+            return false;
+        }
+        
+        match (a, b) {
+            (Valor::Objeto { clase: c1, propiedades: p1, .. }, Valor::Objeto { clase: c2, propiedades: p2, .. }) => {
+                if c1 != c2 || p1.len() != p2.len() {
+                    return false;
+                }
+                
+                // Comparar propiedades con control de profundidad
+                for (k, v1) in p1.iter() {
+                    if let Some(v2) = p2.get(k) {
+                        if !self.valores_son_iguales_con_profundidad(v1, v2, profundidad + 1, max_profundidad) {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+                true
+            },
+            (Valor::Entero(a), Valor::Entero(b)) => a == b,
+            (Valor::Numero(a), Valor::Numero(b)) => (a - b).abs() < f64::EPSILON,
+            (Valor::Texto(a), Valor::Texto(b)) => a == b,
+            (Valor::Log(a), Valor::Log(b)) => a == b,
+            (Valor::Vacio, Valor::Vacio) => true,
+            (Valor::Nulo, Valor::Nulo) => true,
+            _ => false,
         }
     }
     
@@ -798,7 +879,7 @@ impl Evaluador {
                                 
                                 Ok((nuevo_valor, ControlFlujo::Ninguno))
                             },
-                            Valor::Objeto { clase, mut propiedades } => {
+                            Valor::Objeto { clase, mut propiedades, propiedades_publicas, metodos_publicos } => {
                                 // Asignar la nueva propiedad a objeto personalizado
                                 propiedades.insert(propiedad.clone(), nuevo_valor.clone());
                                 
@@ -806,7 +887,7 @@ impl Evaluador {
                                 drop(entorno_ref); // Liberar la referencia inmutable
                                 let nueva_variable = Variable::nueva(
                                     nombre_objeto.clone(),
-                                    Valor::Objeto { clase, propiedades },
+                                    Valor::Objeto { clase, propiedades, propiedades_publicas, metodos_publicos },
                                     variable.tipo_variable,
                                     variable.tipo_dato.clone(),
                                 );
@@ -2363,10 +2444,40 @@ impl Evaluador {
     /// Evalúa acceso a miembro de objeto o método
     fn evaluar_acceso_miembro(&self, objeto: &Valor, miembro: &str, linea: usize) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
         match objeto {
-            Valor::Objeto { propiedades, .. } => {
-                if let Some(valor) = propiedades.get(miembro) {
-                    Ok((valor.clone(), ControlFlujo::Ninguno))
-                } else {
+            Valor::Objeto { propiedades, propiedades_publicas, metodos_publicos, .. } => {
+                // Verificar si el miembro es una propiedad pública
+                if propiedades_publicas.contains(&miembro.to_string()) {
+                    if let Some(valor) = propiedades.get(miembro) {
+                        Ok((valor.clone(), ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: format!("La propiedad pública '{}' no existe en el objeto", miembro),
+                        })
+                    }
+                }
+                // Si estamos dentro de un constructor o método de clase, permitir acceso a propiedades privadas también
+                else if self.dentro_de_constructor || self.dentro_de_metodo_clase {
+                    if let Some(valor) = propiedades.get(miembro) {
+                        Ok((valor.clone(), ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: format!("La propiedad '{}' no existe en el objeto", miembro),
+                        })
+                    }
+                }
+                // Verificar si el miembro es un método público (para futuras implementaciones)
+                else if metodos_publicos.contains(&miembro.to_string()) {
+                    // Por ahora, no se pueden acceder a métodos directamente
+                    // Esta funcionalidad se puede implementar más tarde
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El acceso directo a métodos no está implementado aún: '{}'", miembro),
+                    })
+                }
+                // El miembro no es público o no existe
+                else {
                     Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
                         mensaje: format!("La propiedad '{}' no existe en el objeto o es privada", miembro),
@@ -3478,16 +3589,22 @@ impl Evaluador {
                             
                             // Ejecutar el método
                             let anterior_dentro_de_funcion = self.dentro_de_funcion;
+                            let anterior_dentro_de_metodo_clase = self.dentro_de_metodo_clase;
                             self.dentro_de_funcion = true;
+                            self.dentro_de_metodo_clase = true;
                             let resultado = self.evaluar_con_entorno(cuerpo, entorno_metodo.clone());
                             self.dentro_de_funcion = anterior_dentro_de_funcion;
+                            self.dentro_de_metodo_clase = anterior_dentro_de_metodo_clase;
                             
-                            // Después de ejecutar el método, actualizar la variable original si fue modificada
+                            // Después de ejecutar el método, verificar si necesitamos actualizar la variable original
+                            // Solo actualizar para métodos que modifican propiedades del objeto (evitar recursión)
                             if let Some(nombre_var) = nombre_variable {
                                 if let Some(variable_ambiente_actualizada) = entorno_metodo.borrow().obtener_variable("ambiente") {
-                                    // Verificar si 'ambiente' fue modificado
-                                    if !self.valores_son_iguales(valor, &variable_ambiente_actualizada.valor) {
-                                        // Actualizar la variable original en el entorno
+                                    let valor_actual = &variable_ambiente_actualizada.valor;
+                                    
+                                    // Solo actualizar si los punteros son diferentes (indica modificación)
+                                    if !std::ptr::eq(valor, valor_actual) {
+                                        // Solo hacer actualización simple sin comparación profunda para evitar stack overflow
                                         let entorno_ref = entorno.borrow();
                                         if let Some(variable_original) = entorno_ref.obtener_variable(&nombre_var) {
                                             let nueva_variable = Variable::nueva(
@@ -3496,7 +3613,7 @@ impl Evaluador {
                                                 variable_original.tipo_variable,
                                                 variable_original.tipo_dato.clone(),
                                             );
-                                            drop(entorno_ref); // Liberar referencia inmutable
+                                            drop(entorno_ref);
                                             entorno.borrow_mut().variables.insert(nombre_var.clone(), nueva_variable);
                                         }
                                     }
@@ -4657,17 +4774,21 @@ impl Evaluador {
         let mut miembros_publicos = Vec::new();
         let mut miembros_privados = Vec::new();
         let mut constructor = None;
+        let mut propiedades_publicas = Vec::new();
+        let mut propiedades_privadas = Vec::new();
+        let mut metodos_publicos = Vec::new();
+        let mut metodos_privados = Vec::new();
         
         let mut es_seccion_publica = true; // Por defecto todo es público
         
         for miembro in miembros {
             match miembro {
                 // Detectar marcadores de sección
-                Nodo::Identificador(palabra) if palabra == "publico" => {
+                Nodo::Identificador(palabra) if palabra == "publico" || palabra == "__seccion_publica__" => {
                     es_seccion_publica = true;
                     continue;
                 },
-                Nodo::Identificador(palabra) if palabra == "privado" => {
+                Nodo::Identificador(palabra) if palabra == "privado" || palabra == "__seccion_privada__" => {
                     es_seccion_publica = false;
                     continue;
                 },
@@ -4675,6 +4796,28 @@ impl Evaluador {
                 // Verificar si es un constructor (función con el mismo nombre de la clase)
                 Nodo::DeclaracionFuncion { nombre: nombre_funcion, .. } if nombre_funcion == nombre => {
                     constructor = Some(miembro.clone());
+                },
+                
+                // Recopilar nombres de propiedades
+                Nodo::DeclaracionVariable { nombre: nombre_prop, .. } => {
+                    if es_seccion_publica {
+                        miembros_publicos.push(miembro.clone());
+                        propiedades_publicas.push(nombre_prop.clone());
+                    } else {
+                        miembros_privados.push(miembro.clone());
+                        propiedades_privadas.push(nombre_prop.clone());
+                    }
+                },
+                
+                // Recopilar nombres de métodos
+                Nodo::DeclaracionFuncion { nombre: nombre_metodo, .. } => {
+                    if es_seccion_publica {
+                        miembros_publicos.push(miembro.clone());
+                        metodos_publicos.push(nombre_metodo.clone());
+                    } else {
+                        miembros_privados.push(miembro.clone());
+                        metodos_privados.push(nombre_metodo.clone());
+                    }
                 },
                 
                 // Cualquier otro miembro
@@ -4693,6 +4836,10 @@ impl Evaluador {
             miembros_publicos,
             miembros_privados,
             constructor,
+            propiedades_publicas: propiedades_publicas.clone(),
+            propiedades_privadas: propiedades_privadas.clone(),
+            metodos_publicos,
+            metodos_privados,
         };
         
         entorno.borrow_mut().definir_clase(nombre.to_string(), clase)?;
@@ -4782,10 +4929,25 @@ impl Evaluador {
             }
         }
         
-        // Crear el objeto preliminar para 'ambiente'
+        // Crear el objeto preliminar para 'ambiente' que incluye todas las propiedades durante construcción
+        let mut propiedades_ambiente = propiedades_publicas.clone();
+        
+        // Durante la construcción, el objeto 'ambiente' debe poder acceder a propiedades privadas
+        // Agregar las propiedades privadas desde el entorno del objeto
+        for miembro in &clase.miembros_privados {
+            if let Nodo::DeclaracionVariable { nombre: nombre_prop, .. } = miembro {
+                if let Some(variable_privada) = entorno_objeto.borrow().obtener_variable(nombre_prop) {
+                    propiedades_ambiente.insert(nombre_prop.clone(), variable_privada.valor.clone());
+                }
+            }
+        }
+        
+        // IMPORTANTE: 'ambiente' incluye todas las propiedades durante construcción
         let objeto_ambiente = Valor::Objeto {
             clase: nombre_clase.to_string(),
-            propiedades: propiedades_publicas.clone(),
+            propiedades: propiedades_ambiente,
+            propiedades_publicas: clase.propiedades_publicas.clone(),
+            metodos_publicos: clase.metodos_publicos.clone(),
         };
         
         // Definir 'ambiente' en el entorno del objeto
@@ -4829,9 +4991,12 @@ impl Evaluador {
                 
                 // Ejecutar el constructor
                 let anterior_dentro_de_funcion = self.dentro_de_funcion;
+                let anterior_dentro_de_constructor = self.dentro_de_constructor;
                 self.dentro_de_funcion = true;
+                self.dentro_de_constructor = true;
                 let resultado_constructor = self.evaluar_con_entorno(cuerpo, entorno_objeto.clone());
                 self.dentro_de_funcion = anterior_dentro_de_funcion;
+                self.dentro_de_constructor = anterior_dentro_de_constructor;
                 
                 // Manejar errores del constructor
                 if let Err(e) = resultado_constructor {
@@ -4841,16 +5006,35 @@ impl Evaluador {
                 // Actualizar propiedades públicas después de ejecutar el constructor
                 if let Some(variable_ambiente) = entorno_objeto.borrow().obtener_variable("ambiente") {
                     if let Valor::Objeto { propiedades, .. } = &variable_ambiente.valor {
-                        propiedades_publicas = propiedades.clone();
+                        // Solo incluir las propiedades que están marcadas como públicas
+                        for nombre_prop_publica in &clase.propiedades_publicas {
+                            if let Some(valor_prop) = propiedades.get(nombre_prop_publica) {
+                                propiedades_publicas.insert(nombre_prop_publica.clone(), valor_prop.clone());
+                            }
+                        }
                     }
                 }
             }
         }
         
-        // Crear el objeto final
+        // Crear el objeto final - INCLUIR todas las propiedades (públicas y privadas)
+        // El control de acceso se maneja en evaluar_acceso_miembro
+        let mut todas_las_propiedades = propiedades_publicas.clone();
+        
+        // Agregar propiedades privadas al objeto (para acceso interno)
+        for miembro in &clase.miembros_privados {
+            if let Nodo::DeclaracionVariable { nombre: nombre_prop, .. } = miembro {
+                if let Some(variable_privada) = entorno_objeto.borrow().obtener_variable(nombre_prop) {
+                    todas_las_propiedades.insert(nombre_prop.clone(), variable_privada.valor.clone());
+                }
+            }
+        }
+        
         let objeto = Valor::Objeto {
             clase: nombre_clase.to_string(),
-            propiedades: propiedades_publicas,
+            propiedades: todas_las_propiedades,
+            propiedades_publicas: clase.propiedades_publicas.clone(),
+            metodos_publicos: clase.metodos_publicos.clone(),
         };
         
         Ok((objeto, ControlFlujo::Ninguno))

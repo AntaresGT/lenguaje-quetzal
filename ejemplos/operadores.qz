@@ -1,0 +1,99 @@
+// Operadores
+
+// Operadores aritméticos
+entero suma(entero a, entero b) {
+    retornar a + b
+}
+
+entero resta(entero a, entero b) {
+    retornar a - b
+}
+
+// Operadores lógicos
+log es_verdadero(log valor) {
+    retornar valor
+}
+
+log es_falso(log valor) {
+    retornar !valor
+}
+
+// Operadores de comparación
+log es_igual(entero a, entero b) {
+    retornar a == b
+}
+
+log es_diferente(entero a, entero b) {
+    retornar a != b
+}
+
+log es_mayor(entero a, entero b) {
+    retornar a > b
+}
+
+log es_menor(entero a, entero b) {
+    retornar a < b
+}
+
+log es_mayor_igual(entero a, entero b) {
+    retornar a >= b
+}
+
+log es_menor_igual(entero a, entero b) {
+    retornar a <= b
+}
+
+// Operadores de asignación
+entero asignacion(entero valor) {
+    entero resultado = valor
+    retornar resultado
+}
+
+// Operadores de concatenación
+texto concatenacion(texto var palabra) {
+    palabra += " concatenado"
+    retornar palabra
+}
+
+// Operadores de incremento y decremento
+entero incremento(entero var valor) {
+    valor++
+    retornar valor
+}
+
+entero decremento(entero var valor) {
+    valor--
+    retornar valor
+}
+
+// Operadores compuestos
+entero suma_compuesta(entero var valor, entero incremento) {
+    valor += incremento
+    retornar valor
+}
+
+entero resta_compuesta(entero var valor, entero decremento) {
+    valor -= decremento
+    retornar valor
+}
+
+entero multiplicacion_compuesta(entero var valor, entero factor) {
+    valor *= factor
+    retornar valor
+}
+
+entero division_compuesta(entero var valor, entero divisor) {
+    valor /= divisor
+    retornar valor
+}
+
+entero modulo_compuesta(entero var valor, entero divisor) {
+    valor %= divisor
+    retornar valor
+}
+
+// Operadores de cadena
+texto agregar_texto(texto var palabra, texto agregado) {
+    palabra += agregado
+    retornar palabra
+}

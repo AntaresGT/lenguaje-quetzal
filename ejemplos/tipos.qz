@@ -1,0 +1,56 @@
+// Acá están todos los tipos soportados por Quetzal v0.0.2
+// Por defecto, las variables siempre son constantes, a menos que se use la palabra clave 'var' para definirlas como variables mutables
+// Tipos primitivos
+entero valor_entero = 3
+número valor_numero = 3.1416
+texto valor_texto = "Hola, Quetzal"
+log valor_logico = verdadero
+// Lista no tipada
+lista valor_lista = [1, 2, "Texto", verdadero, [1, "otra lista"]]
+// Lista tipada
+lista<entero> valor_lista_tipada = [1, 2, 3, 4, 5]
+// El tipo vacio no puede ser usado como variable, pero si como función
+vacio funcion_vacia() {}
+
+// JSON nativo
+jsn valor_json = {
+    valor_entero: 42,
+    valor_numero: 2.718,
+    valor_texto: "Texto en JSON",
+    valor_logico: falso,
+    valor_lista: [1, 2, 3],
+    valor_otro_json: {
+        clave: "valor",
+        otro: [1, 2, 3]
+    }
+}
+
+// Tipos mutables
+entero var valor_entero_mutable = 10
+número var valor_numero_mutable = 2.71828
+texto var valor_texto_mutable = "Texto mutable"
+log var valor_logico_mutable = falso
+// Lista mutable no tipada
+lista var valor_lista_mutable = [1, 2, 3]
+// Lista mutable tipada
+lista<entero> var valor_lista_tipada_mutable = [1, 2, 3, 4, 5]
+// JSON mutable
+jsn var valor_json_mutable = {
+    clave: "valor",
+    lista_ejemplo: [1, 2, 3],
+    objeto_ejemplo: {
+        subclave: "subvalor"
+    }
+}
+
+// nulo, este es un valor que se le puede asignar a cualquier tipo de dato, indicando que no tiene valor
+entero valor_entero_nulo = nulo
+número valor_numero_nulo = nulo
+texto valor_texto_nulo = nulo
+log valor_logico_nulo = nulo
+// Lista no tipada nula
+lista valor_lista_nula = nulo
+// Lista tipada nula
+lista<entero> valor_lista_tipada_nula = nulo
+// JSON nulo
+jsn valor_json_nulo = nulo

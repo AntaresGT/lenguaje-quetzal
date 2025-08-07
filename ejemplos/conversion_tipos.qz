@@ -1,0 +1,19 @@
+// Acá están todos los ejemplos de conversión de tipos
+
+// Textos a los otros tipos
+entero valor_entero = "1234".entero()
+número valor_numero = "1234.56".número()
+log valor_logico = "verdadero".log()
+jsn valor_json = "{\"clave\": \"valor\"}".jsn()
+lista<entero> lista_desde_texto = "1,2,3".lista()
+
+// Todas las conversiones a texto
+texto desde_entero = 1234.texto()
+texto desde_numero = 1234.56.texto()
+texto desde_logico = falso.texto()
+jsn valor_json2 = {
+    clave: "valor"
+}
+texto desde_json = valor_json2.texto()
+lista<entero> lista_enteros = [1, 2, 3]
+texto desde_lista = lista_enteros.texto()

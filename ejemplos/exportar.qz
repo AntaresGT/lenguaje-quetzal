@@ -1,0 +1,41 @@
+
+entero sumar_entero(entero a, entero b) {
+    retornar a + b
+}
+
+objeto Usuario {
+    privado:
+        texto nombre
+        entero edad
+
+    publico:
+        Usuario(texto nombre, entero edad) {
+            ambiente.nombre = nombre
+            ambiente.edad = edad
+        }
+
+        texto obtener_nombre() {
+            retornar ambiente.nombre
+        }
+
+        entero obtener_edad() {
+            retornar ambiente.edad
+        }
+}
+
+// Instancia de objeto
+Usuario instancia_usuario = Usuario("Juan", 30)
+
+// Declaración variable
+texto saludo = "Hola, Quetzal!"
+
+exportar {
+    // Exportar función
+    sumar_entero,
+    // Exportar definición de objeto
+    Usuario,
+    // Exportar instancia de objeto
+    instancia_usuario,
+    // Exportar variable
+    saludo
+}

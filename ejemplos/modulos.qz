@@ -1,0 +1,11 @@
+// Importar funciones de otro archivo
+importar {
+    // Importar función
+    sumar_entero,
+    // Importar definición de objeto
+    Usuario,
+    // Importar instancia de objeto
+    instancia_usuario,
+    // Importar variable y colocar otro nombre "un alias"
+    saludo como texto_saludo
+} desde "exportar.qz"

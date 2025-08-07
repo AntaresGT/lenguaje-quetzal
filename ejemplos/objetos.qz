@@ -1,0 +1,68 @@
+// Declaración de objetos en Quetzal
+
+// Declaración común de un objeto
+objeto Usuario {
+    privado:
+        // Atributos privados del objeto
+        texto nombre
+        entero edad
+
+        // Funciones privadas del objeto
+        // Estas funciones solo pueden ser llamadas desde dentro del objeto
+        texto obtener_nombre_privado() {
+            retornar ambiente.nombre
+        }
+
+    publico:
+        // Constructor del objeto
+        Usuario(texto nombre, entero edad) {
+            // La palabra clave 'ambiente' se usa para referirse a las variables del objeto o funciones del objeto
+            // Se usa unicamente dentro del objeto
+            ambiente.nombre = nombre
+            ambiente.edad = edad
+        }
+
+        texto obtener_nombre() {
+            retornar ambiente.obtener_nombre_privado()
+        }
+
+        entero obtener_edad() {
+            retornar ambiente.edad
+        }
+}
+
+// Instantia un objeto
+Usuario usuario1 = Usuario("Juan", 30)
+
+// Los objetos que no se especifican las etiquetas de acceso son públicos por defecto
+objeto DefinicionUsuario {
+    texto nombre
+    entero edad
+
+    DefinicionUsuario(texto nombre, entero edad) {
+        ambiente.nombre = nombre
+        ambiente.edad = edad
+    }
+
+    texto obtener_nombre() {
+        retornar ambiente.nombre
+    }
+
+    entero obtener_edad() {
+        retornar ambiente.edad
+    }
+}
+
+// Instantia un objeto
+DefinicionUsuario usuario2 = DefinicionUsuario("Juan", 30)
+
+// Objeto con funciones libres
+objeto UsuarioLibre {
+
+    libre entero absoluto(entero valor) {
+        retornar valor < 0 ? -valor : valor
+    }
+}
+
+// Las funciones libres se pueden llamar sin necesidad de instanciar el objeto
+entero valor_absoluto = UsuarioLibre.absoluto(-10)

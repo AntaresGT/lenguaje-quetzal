@@ -1,0 +1,27 @@
+// Las excepciones son eventos que ocurren durante la ejecución de un programa y que interrumpen su flujo normal.
+// En este ejemplo, se muestra cómo manejar excepciones en un programa de Quetzal.
+
+// Definimos una función que puede lanzar una excepción
+número dividir(número numerador, número denominador){
+    si (denominador == 0) {
+        lanzar "Error: División por cero no permitida"
+    }
+
+    retornar numerador / denominador
+}
+
+// Tratar la excepción al llamar a la función
+intentar {
+    número resultado = dividir(10, 0)
+    consola.imprimir("Resultado: " + resultado)
+} capturar (excepción e){
+    // Obtenemos el mensaje de la excepción y lo imprimimos en la consola
+    consola.imprimir(e.mensaje)
+    // También podemos imprimir la pila de llamadas para ver dónde ocurrió la excepción
+    consola.imprimir("Pila de llamadas:" + e.llamadas.texto())
+}
+finalmente {
+    // Este bloque se ejecuta siempre, independientemente de si ocurrió una excepción o no
+    // No es obligatorio, pero es útil para limpiar recursos o imprimir mensajes finales
+    consola.imprimir("Fin del manejo de excepciones.")
+}

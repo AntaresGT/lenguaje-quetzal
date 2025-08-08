@@ -109,12 +109,12 @@ code --install-extension AntaresGT.lenguaje-quetzal-vscode-extension
 // Tipos básicos
 entero edad = 25
 número precio = 99.99
-cadena nombre = "María García"
-bool activo = verdadero
+texto nombre = "María García"
+log activo = verdadero
 
 // Listas
 lista<entero> numeros = [1, 2, 3, 4, 5]
-lista<cadena> colores = ["rojo", "verde", "azul"]
+lista<texto> colores = ["rojo", "verde", "azul"]
 
 // JSON nativo
 jsn persona = {
@@ -134,12 +134,12 @@ entero sumar(entero a, entero b) {
 }
 
 // Función sin retorno
-vacio saludar(cadena nombre) {
-    imprimir("¡Hola " + nombre + "!")
+vacio saludar(texto nombre) {
+    consola.mostrar("¡Hola " + nombre + "!")
 }
 
 // Función asíncrona
-asincrono cadena obtener_datos(cadena url) {
+asincrono texto obtener_datos(texto url) {
     // Código asíncrono
     retornar "Datos obtenidos"
 }
@@ -150,14 +150,14 @@ asincrono cadena obtener_datos(cadena url) {
 ```qz
 // Condicionales
 si (edad >= 18) {
-    imprimir("Es mayor de edad")
+    consola.mostrar("Es mayor de edad")
 } sino {
-    imprimir("Es menor de edad")
+    consola.mostrar("Es menor de edad")
 }
 
 // Bucles
 para (entero i = 1; i <= 10; i++) {
-    imprimir("Número: " + i.cadena())
+    consola.mostrar("Número: " + i.texto())
 }
 
 mientras (condicion) {
@@ -165,8 +165,8 @@ mientras (condicion) {
 }
 
 // Foreach
-para (cadena color en colores) {
-    imprimir("Color: " + color)
+para (texto color en colores) {
+    consola.mostrar("Color: " + color)
 }
 ```
 
@@ -174,24 +174,24 @@ para (cadena color en colores) {
 
 ```qz
 // Salida básica
-imprimir("Mensaje normal")
+consola.mostrar("Mensaje normal")
 
 // Salida con colores
-imprimir_error("❌ Error: Algo salió mal")
-imprimir_advertencia("⚠️ Advertencia: Revisa este valor")
-imprimir_exito("✅ Operación completada exitosamente")
-imprimir_informacion("ℹ️ Información importante")
+consola.mostrar_error("❌ Error: Algo salió mal")
+consola.mostrar_advertencia("⚠️ Advertencia: Revisa este valor")
+consola.mostrar_exito("✅ Operación completada exitosamente")
+consola.mostrar_informacion("ℹ️ Información importante")
 ```
 
 ### Ejemplo Completo: Calculadora
 
 ```qz
 // Programa de calculadora básica
-cadena operacion = "suma"
+texto operacion = "suma"
 entero num1 = 10
 entero num2 = 5
 
-entero calcular(cadena op, entero a, entero b) {
+entero calcular(texto op, entero a, entero b) {
     si (op == "suma") {
         retornar a + b
     } sino si (op == "resta") {
@@ -202,18 +202,18 @@ entero calcular(cadena op, entero a, entero b) {
         si (b != 0) {
             retornar a / b
         } sino {
-            imprimir_error("Error: División por cero")
+            consola.mostrar_error("Error: División por cero")
             retornar 0
         }
     } sino {
-        imprimir_advertencia("Operación no válida")
+        consola.mostrar_advertencia("Operación no válida")
         retornar 0
     }
 }
 
 // Usar la función
 entero resultado = calcular(operacion, num1, num2)
-imprimir_exito("Resultado: " + resultado.cadena())
+consola.mostrar_exito("Resultado: " + resultado.texto())
 ```
 
 ### Manejo de Datos JSON
@@ -232,12 +232,12 @@ jsn configuracion = {
 }
 
 // Acceder a propiedades
-cadena tema = configuracion.configuraciones.tema
-imprimir("Tema actual: " + tema)
+texto tema = configuracion.configuraciones.tema
+consola.mostrar("Tema actual: " + tema)
 
 // Iterar sobre lista
-para (cadena modulo en configuracion.modulos) {
-    imprimir_informacion("Módulo cargado: " + modulo)
+para (texto modulo en configuracion.modulos) {
+    consola.mostrar_informacion("Módulo cargado: " + modulo)
 }
 ```
 
@@ -282,17 +282,17 @@ El proyecto incluye una suite completa de pruebas para validar todas las caracte
 
 ```bash
 # Ejecutar todas las pruebas
-cargo run pruebas/prueba-maestro.qz
+cargo run ejemplos/prueba-maestro.qz
 
-# Ejecutar pruebas específicas
-cargo run pruebas/prueba-tipos.qz
-cargo run pruebas/prueba-funciones.qz
-cargo run pruebas/prueba-bucles.qz
-cargo run pruebas/prueba-condicionales.qz
-cargo run pruebas/prueba-json.qz
-cargo run pruebas/prueba-operadores.qz
-cargo run pruebas/prueba-listas.qz
-cargo run pruebas/prueba-conversiones.qz
+# Ejecutar ejemplos específicas
+cargo run ejemplos/prueba-tipos.qz
+cargo run ejemplos/prueba-funciones.qz
+cargo run ejemplos/prueba-bucles.qz
+cargo run ejemplos/prueba-condicionales.qz
+cargo run ejemplos/prueba-json.qz
+cargo run ejemplos/prueba-operadores.qz
+cargo run ejemplos/prueba-listas.qz
+cargo run ejemplos/prueba-conversiones.qz
 ```
 
 ---

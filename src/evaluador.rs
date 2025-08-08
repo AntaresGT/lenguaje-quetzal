@@ -1284,28 +1284,28 @@ impl Evaluador {
         // Funciones globales especiales
         match nombre {
             "imprimir" => {
-                return self.evaluar_funcion_consola("consola.imprimir", argumentos, linea, entorno);
+                return self.evaluar_funcion_consola("consola.mostrar", argumentos, linea, entorno);
             },
             "imprimir_error" => {
-                return self.evaluar_funcion_consola("consola.imprimir_error", argumentos, linea, entorno);
+                return self.evaluar_funcion_consola("consola.mostrar_error", argumentos, linea, entorno);
             },
             "imprimir_advertencia" => {
-                return self.evaluar_funcion_consola("consola.imprimir_advertencia", argumentos, linea, entorno);
+                return self.evaluar_funcion_consola("consola.mostrar_advertencia", argumentos, linea, entorno);
             },
             "imprimir_informacion" => {
-                return self.evaluar_funcion_consola("consola.imprimir_informacion", argumentos, linea, entorno);
+                return self.evaluar_funcion_consola("consola.mostrar_informacion", argumentos, linea, entorno);
             },
             "imprimir_exito" => {
-                return self.evaluar_funcion_consola("consola.imprimir_exito", argumentos, linea, entorno);
+                return self.evaluar_funcion_consola("consola.mostrar_exito", argumentos, linea, entorno);
             },
             "imprimir_depurar" => {
-                return self.evaluar_funcion_consola("consola.imprimir_depurar", argumentos, linea, entorno);
+                return self.evaluar_funcion_consola("consola.mostrar_depurar", argumentos, linea, entorno);
             },
             "imprimir_alerta" => {
-                return self.evaluar_funcion_consola("consola.imprimir_alerta", argumentos, linea, entorno);
+                return self.evaluar_funcion_consola("consola.mostrar_alerta", argumentos, linea, entorno);
             },
             "imprimir_confirmacion" => {
-                return self.evaluar_funcion_consola("consola.imprimir_confirmacion", argumentos, linea, entorno);
+                return self.evaluar_funcion_consola("consola.mostrar_confirmacion", argumentos, linea, entorno);
             },
             _ => {}
         }
@@ -1446,7 +1446,7 @@ impl Evaluador {
     /// Evalúa funciones de consola
     fn evaluar_funcion_consola(&mut self, nombre: &str, argumentos: &[Nodo], linea: usize, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
         match nombre {
-            "consola.imprimir" => {
+            "consola.imprimir" | "consola.mostrar" => {
                 // Evaluar primer argumento (mensaje)
                 let mensaje = if !argumentos.is_empty() {
                     let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
@@ -1454,88 +1454,77 @@ impl Evaluador {
                 } else {
                     String::new()
                 };
-                CONSOLA_GLOBAL.imprimir(&mensaje);
+                CONSOLA_GLOBAL.mostrar(&mensaje);
                 Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
-            "consola.mostrar" => {
-                // Evaluar primer argumento (mensaje)
+            "consola.imprimir_error" | "consola.mostrar_error" => {
                 let mensaje = if !argumentos.is_empty() {
                     let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
                     valor.a_cadena()
                 } else {
                     String::new()
                 };
-                CONSOLA_GLOBAL.imprimir(&mensaje);
+                CONSOLA_GLOBAL.mostrar_error(&mensaje);
                 Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
-            "consola.imprimir_error" => {
+            "consola.imprimir_advertencia" | "consola.mostrar_advertencia" => {
                 let mensaje = if !argumentos.is_empty() {
                     let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
                     valor.a_cadena()
                 } else {
                     String::new()
                 };
-                CONSOLA_GLOBAL.imprimir_error(&mensaje);
+                CONSOLA_GLOBAL.mostrar_advertencia(&mensaje);
                 Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
-            "consola.imprimir_advertencia" => {
+            "consola.imprimir_informacion" | "consola.mostrar_informacion" => {
                 let mensaje = if !argumentos.is_empty() {
                     let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
                     valor.a_cadena()
                 } else {
                     String::new()
                 };
-                CONSOLA_GLOBAL.imprimir_advertencia(&mensaje);
+                CONSOLA_GLOBAL.mostrar_informacion(&mensaje);
                 Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
-            "consola.imprimir_informacion" => {
+            "consola.imprimir_depurar" | "consola.mostrar_depurar" => {
                 let mensaje = if !argumentos.is_empty() {
                     let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
                     valor.a_cadena()
                 } else {
                     String::new()
                 };
-                CONSOLA_GLOBAL.imprimir_informacion(&mensaje);
+                CONSOLA_GLOBAL.mostrar_depurar(&mensaje);
                 Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
-            "consola.imprimir_depurar" => {
+            "consola.imprimir_exito" | "consola.mostrar_exito" => {
                 let mensaje = if !argumentos.is_empty() {
                     let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
                     valor.a_cadena()
                 } else {
                     String::new()
                 };
-                CONSOLA_GLOBAL.imprimir_depurar(&mensaje);
+                CONSOLA_GLOBAL.mostrar_exito(&mensaje);
                 Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
-            "consola.imprimir_exito" => {
+            "consola.imprimir_alerta" | "consola.mostrar_alerta" => {
                 let mensaje = if !argumentos.is_empty() {
                     let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
                     valor.a_cadena()
                 } else {
                     String::new()
                 };
-                CONSOLA_GLOBAL.imprimir_exito(&mensaje);
+                CONSOLA_GLOBAL.mostrar_alerta(&mensaje);
                 Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
-            "consola.imprimir_alerta" => {
+            "consola.imprimir_confirmacion" | "consola.mostrar_confirmacion" => {
                 let mensaje = if !argumentos.is_empty() {
                     let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
                     valor.a_cadena()
                 } else {
                     String::new()
                 };
-                CONSOLA_GLOBAL.imprimir_alerta(&mensaje);
-                Ok((Valor::Vacio, ControlFlujo::Ninguno))
-            },
-            "consola.imprimir_confirmacion" => {
-                let mensaje = if !argumentos.is_empty() {
-                    let (valor, _) = self.evaluar_con_entorno(&argumentos[0], entorno)?;
-                    valor.a_cadena()
-                } else {
-                    String::new()
-                };
-                CONSOLA_GLOBAL.imprimir_confirmacion(&mensaje);
+                CONSOLA_GLOBAL.mostrar_confirmacion(&mensaje);
                 Ok((Valor::Vacio, ControlFlujo::Ninguno))
             },
             "consola.pedir" => {
@@ -1558,12 +1547,7 @@ impl Evaluador {
                 let entrada_secreta = CONSOLA_GLOBAL.pedir_secreto(&mensaje);
                 Ok((Valor::Texto(entrada_secreta), ControlFlujo::Ninguno))
             },
-            _ => {
-                return Err(ErrorQuetzal::FuncionNoDefinida {
-                    linea,
-                    nombre: nombre.to_string(),
-                });
-            }
+            _ => Err(ErrorQuetzal::FuncionNoDefinida { linea, nombre: nombre.to_string() })
         }
     }
     

@@ -1,0 +1,122 @@
+// Metodos para listas
+
+// Acceso por indice (obtener elemento en posición)
+lista<texto> mi_lista = ["manzana", "banana", "cereza"]
+texto elemento = mi_lista[1]  // "banana" (índice 1)
+// Acceso por indice con índice negativo (desde el final)
+texto ultimo_elemento = mi_lista[-1]  // "cereza" (último elemento)
+
+// Acceso seguro (evita error si el índice no existe)
+texto elemento_seguro = mi_lista[5]  // Error
+
+// Longitud de la lista
+entero longitud = mi_lista.longitud()  // 3
+
+// Verificar si la lista está vacía
+log esta_vacia = mi_lista.esta_vacia()  // falso
+
+// Agregar un elemento al final de la lista
+// La lista debe ser mutable
+lista<texto> var lista_mutable = ["manzana", "banana"]
+lista_mutable.agregar("cereza")  // lista_mutable ahora es ["manzana", "banana", "cereza"]
+
+// Insertar un elemento en una posición específica
+lista_mutable.insertar(1, "naranja")  // lista_mutable ahora es ["manzana", "naranja", "banana", "cereza"]
+
+// Remover primera ocurrencia de un elemento
+lista_mutable.remover("banana")  // lista_mutable ahora es ["manzana", "naranja", "cereza"]
+
+// Remover elemento en una posición específica
+lista_mutable.quitar_en(0)  // lista_mutable ahora es ["naranja", "cereza"]
+
+// Vaciar la lista
+lista_mutable.limpiar()  // lista_mutable ahora es []
+
+// Verificar si un elemento está en la lista
+log contiene_elemento = mi_lista.contiene("banana")  // verdadero
+
+// Encontrar la posición de un elemento en la lista
+entero posicion_elemento = mi_lista.buscar("cereza")  // 2
+
+// Buscar último elemento coincidente
+entero posicion_ultimo = mi_lista.buscar_ultimo("manzana")  // 0 (posición de la última "manzana")
+
+// Contar ocurrencias de un elemento en la lista
+entero ocurrencias = mi_lista.contar("banana")  // 1
+
+// Ordenar ascendentemente
+// La lista debe ser mutable
+// Si la lista contiene elementos que no son comparables, lanzará un error
+lista<entero> var numeros = [3, 1, 4, 2]
+numeros.ordenar()  // numeros ahora es [1, 2, 3, 4]
+
+// Ordenar descendentemente
+numeros.ordenar_descendente()  // numeros ahora es [4, 3, 2, 1]
+
+// Crear una nueva lista ordenada sin modificar la original
+lista<entero> numeros_ordenados = numeros.ordenado()  // numeros_ordenados es [1, 2, 3, 4]
+
+// Invertir el orden de los elementos
+numeros.invertir()  // numeros ahora es [4, 3, 2, 1] (invertido)
+
+// Obtener primer elemento de la lista
+texto primer_elemento = mi_lista.primero()  // "manzana"
+
+// Obtener último elemento de la lista
+texto ultimo_elemento = mi_lista.ultimo()  // "cereza"
+
+// Primeros N elementos de la lista
+lista<texto> primeros_n = mi_lista.tomar(2)  // ["manzana", "banana"]
+
+// Omitir primeros N elementos de la lista
+lista<texto> omitidos_n = mi_lista.saltar(1)  // ["banana", "cereza"]
+
+// Sublista por rango
+lista<texto> sublista = mi_lista.sublista(0, 2)  // ["manzana", "banana"] (desde índice 0 hasta 2, sin incluir el 2)
+
+// Sumar todos los elementos de una lista de números
+lista<entero> numeros_lista = [1, 2, 3, 4, 5]
+entero suma = numeros_lista.sumar()  // 15
+
+// Sumar números
+lista<número> numeros_flotantes = [1.5, 2.5, 3.0]
+número suma_flotantes = numeros_flotantes.sumar()  // 7.0
+
+// Promedio de los elementos de una lista de números
+número promedio = numeros_lista.promedio()  // 3.0
+
+// Maximo de una lista de números
+entero maximo = numeros_lista.maximo()  // 5
+
+// Minimo de una lista de números
+entero minimo = numeros_lista.minimo()  // 1
+
+// Unir elementos como texto
+lista<texto> palabras = ["Hola", "mundo"]
+texto frase = palabras.unir(" ")  // "Hola mundo"
+
+// Concatenar dos listas
+lista<texto> lista1 = ["A", "B"]
+lista<texto> lista2 = ["C", "D"]
+lista<texto> concatenada = lista1.concatenar(lista2)  // ["A", "B", "C", "D"]
+
+// Extender una lista con otra lista
+lista<texto> lista_base = ["A", "B"]
+lista<texto> lista_extender = ["C", "D"]
+lista_base.extender(lista_extender)  // lista_base ahora es ["A", "B", "C", "D"]
+
+// Convertir lista a texto
+texto lista_a_texto = mi_lista.texto() // "[manzana, banana, cereza]"
+
+// Convertir lista a json
+lista lista_objetos = [
+    {"nombre": "Juan", "edad": 30},
+    {"nombre": "Ana", "edad": 25}
+]
+texto lista_a_json = lista_objetos.json()  // '[{"nombre":"Juan","edad":30},{"nombre":"Ana","edad":25}]'
+
+// Convertir lista a valor lógico
+log lista_a_logico = mi_lista.logico()  // verdadero (si la lista no está vacía)
+
+// Crear lista de números consecutivos
+lista rango_numeros = rango(1, 10)  // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]

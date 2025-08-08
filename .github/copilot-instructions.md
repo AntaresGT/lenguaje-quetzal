@@ -87,7 +87,7 @@ número variable_decimal = 3.14159
 texto variable_texto = "Hola mundo"
 log variable_booleana = verdadero
 lista variable_lista = [1, 2, 3]
-jsn variable_json = {"clave": "valor"}
+jsn variable_json = {clave: "valor"}
 ```
 
 ### Mutabilidad
@@ -208,10 +208,10 @@ línea | código que causó el error
 
 ### Objeto Consola Global
 ```qz
-consola.imprimir("Mensaje normal")
-consola.imprimir_error("Mensaje de error")
-consola.imprimir_advertencia("Mensaje de advertencia")
-consola.imprimir_exito("Mensaje de éxito")
+consola.mostrar("Mensaje normal")
+consola.mostrar_error("Mensaje de error")
+consola.mostrar_advertencia("Mensaje de advertencia")
+consola.mostrar_exito("Mensaje de éxito")
 
 texto entrada = consola.pedir("Ingresa tu nombre: ")
 texto secreto = consola.pedir_secreto("Contraseña: ")

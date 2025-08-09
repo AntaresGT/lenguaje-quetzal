@@ -14,9 +14,7 @@ base64 = "0.21"
 urlencoding = "2.1"
 rpassword = "7.0"
 inquire = "0.7.5"
-# Librerías para manejar recursión profunda y memoria segura
 stacker = "0.1"
-recursive = "0.1"
 bumpalo = { version = "3.16", features = ["collections"] }
 
 [[bin]]

@@ -5,6 +5,7 @@
 
 use std::env;
 use std::path::Path;
+use std::thread;
 use colored::Colorize;
 
 // Módulos del intérprete
@@ -25,6 +26,17 @@ const VERSION: &str = "0.0.2";
 
 /// Función principal del intérprete Quetzal
 fn main() {
+    // Crear un hilo con stack más grande para manejar recursión profunda
+    let builder = thread::Builder::new().stack_size(16 * 1024 * 1024); // 16MB stack
+    
+    let handle = builder.spawn(|| {
+        ejecutar_principal()
+    }).expect("No se pudo crear el hilo principal");
+    
+    handle.join().expect("Error en el hilo principal");
+}
+
+fn ejecutar_principal() {
     // Configurar codificación UTF-8 en Windows
     #[cfg(windows)]
     {

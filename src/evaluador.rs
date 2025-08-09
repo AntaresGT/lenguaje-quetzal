@@ -9,7 +9,6 @@ use crate::manejador_modulos::ManejadorModulos;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
-use stacker::{maybe_grow, remaining_stack};
 
 /// Entorno de ejecución que mantiene el estado de variables y funciones
 #[derive(Debug, Clone)]
@@ -426,36 +425,19 @@ impl Evaluador {
     
     /// Evalúa un nodo del AST
     pub fn evaluar(&mut self, nodo: &Nodo) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
-        // Usar stacker para proteger contra stack overflow
-        // Si queda menos de 128KB de stack, crecer a 8MB
-        let limite_stack_minimo = 128 * 1024; // 128KB
-        let tamaño_stack_nuevo = 8 * 1024 * 1024; // 8MB
-        
-        if remaining_stack().unwrap_or(0) < limite_stack_minimo {
-            maybe_grow(limite_stack_minimo, tamaño_stack_nuevo, || {
-                self.evaluar_con_entorno(nodo, self.entorno_global.clone())
-            })
-        } else {
-            self.evaluar_con_entorno(nodo, self.entorno_global.clone())
-        }
+        self.evaluar_con_entorno(nodo, self.entorno_global.clone())
     }
     
     /// Evalúa un nodo con un entorno específico
     fn evaluar_con_entorno(&mut self, nodo: &Nodo, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
-        // Control adicional de recursión con crecimiento dinámico de stack
-        let limite_stack_minimo = 64 * 1024; // 64KB mínimo
-        let tamaño_stack_nuevo = 4 * 1024 * 1024; // 4MB para llamadas internas
-        
-        if remaining_stack().unwrap_or(0) < limite_stack_minimo {
-            maybe_grow(limite_stack_minimo, tamaño_stack_nuevo, || {
-                self.evaluar_nodo_interno(nodo, entorno)
-            })
-        } else {
+        // Usar stacker para crecer el stack automáticamente cuando sea necesario
+        // Valores más grandes para evitar stack overflow
+        stacker::maybe_grow(1024 * 1024, 8 * 1024 * 1024, || {
             self.evaluar_nodo_interno(nodo, entorno)
-        }
+        })
     }
-    
-    /// Método interno para evaluar nodos sin control de recursión
+
+    /// Evaluación interna del nodo
     fn evaluar_nodo_interno(&mut self, nodo: &Nodo, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
         match nodo {
             Nodo::Programa(declaraciones) => {
@@ -630,22 +612,12 @@ impl Evaluador {
             },
             
             Nodo::LlamadaFuncion { nombre, argumentos, linea } => {
-                // Incrementar contador para estadísticas (opcional)
+                if self.profundidad_recursion >= 4096 {
+                    return Err(ErrorQuetzal::ErrorEjecucion { linea: *linea, mensaje: "profundidad máxima de llamadas excedida (límite: 4096)".to_string() });
+                }
                 self.profundidad_recursion += 1;
-                
-                // Usar stacker para manejar recursión profunda en funciones
-                let limite_stack_funcion = 96 * 1024; // 96KB mínimo para funciones
-                let tamaño_stack_funcion = 6 * 1024 * 1024; // 6MB para funciones recursivas
-                
-                let resultado = if remaining_stack().unwrap_or(0) < limite_stack_funcion {
-                    maybe_grow(limite_stack_funcion, tamaño_stack_funcion, || {
-                        self.evaluar_llamada_funcion(nombre, argumentos, *linea, entorno)
-                    })
-                } else {
-                    self.evaluar_llamada_funcion(nombre, argumentos, *linea, entorno)
-                };
-                
-                self.profundidad_recursion -= 1;
+                let resultado = self.evaluar_llamada_funcion(nombre, argumentos, *linea, entorno);
+                self.profundidad_recursion = self.profundidad_recursion.saturating_sub(1);
                 resultado
             },
             
@@ -1414,10 +1386,10 @@ impl Evaluador {
                 entorno_funcion.borrow_mut().definir_variable(parametro.nombre.clone(), variable)?;
             }
             
-            // Ejecutar cuerpo de la función
+            // Ejecutar cuerpo de la función con trampolina para evitar stack overflow
             let estado_anterior = self.dentro_de_funcion;
             self.dentro_de_funcion = true;
-            let resultado = self.evaluar_con_entorno(&funcion.cuerpo, entorno_funcion);
+            let resultado = self.evaluar_con_trampolina(&funcion.cuerpo, entorno_funcion);
             self.dentro_de_funcion = estado_anterior;
             
             let (valor, control) = resultado?;
@@ -1441,6 +1413,14 @@ impl Evaluador {
                 nombre: nombre.to_string(),
             })
         }
+    }
+    
+    /// Evalúa un nodo usando stacker para evitar stack overflow en recursión
+    fn evaluar_con_trampolina(&mut self, nodo: &Nodo, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
+        // Usar stacker para crecer el stack automáticamente cuando sea necesario
+        stacker::maybe_grow(32 * 1024, 1024 * 1024, || {
+            self.evaluar_con_entorno(nodo, entorno)
+        })
     }
     
     /// Evalúa funciones de consola
@@ -2899,9 +2879,39 @@ impl Evaluador {
                             }
                             
                             // Definir 'ambiente' que referencia al objeto
+                            let valor_ambiente = if let Valor::Objeto { clase: clase_nombre, propiedades, propiedades_publicas, metodos_publicos } = valor.clone() {
+                                // Fusionar propiedades existentes con privadas definidas en la clase
+                                let mut todas_propiedades = propiedades.clone();
+                                if let Some(def_clase) = { self.entorno_global.borrow().obtener_clase(&clase_nombre) } {
+                                    for miembro_priv in &def_clase.miembros_privados {
+                                        if let Nodo::DeclaracionVariable { nombre: nombre_prop, tipo_dato, .. } = miembro_priv {
+                                            if !todas_propiedades.contains_key(nombre_prop) {
+                                                let defecto = match tipo_dato.as_str() {
+                                                    "entero" => Valor::Entero(0),
+                                                    "número" => Valor::Numero(0.0),
+                                                    "texto" => Valor::Texto(String::new()),
+                                                    "log" => Valor::Log(false),
+                                                    "lista" => Valor::Lista(Vec::new()),
+                                                    "jsn" => Valor::Json(HashMap::new()),
+                                                    _ => Valor::Vacio,
+                                                };
+                                                todas_propiedades.insert(nombre_prop.clone(), defecto);
+                                            }
+                                        }
+                                    }
+                                }
+                                Valor::Objeto {
+                                    clase: clase_nombre,
+                                    propiedades: todas_propiedades,
+                                    propiedades_publicas: propiedades_publicas,
+                                    metodos_publicos: metodos_publicos,
+                                }
+                            } else {
+                                valor.clone()
+                            };
                             let variable_ambiente = Variable::nueva(
                                 "ambiente".to_string(),
-                                valor.clone(),
+                                valor_ambiente,
                                 TipoVariable::Variable, // 'ambiente' puede ser modificado en métodos
                                 "objeto".to_string(),
                             );

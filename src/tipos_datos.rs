@@ -183,3 +183,51 @@ impl Variable {
         self.es_variable()
     }
 }
+
+// Implementación manual de Hash para Valor (necesario para la VM universal)
+impl std::hash::Hash for Valor {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Valor::Vacio => 0u8.hash(state),
+            Valor::Nulo => 1u8.hash(state),
+            Valor::Entero(n) => {
+                2u8.hash(state);
+                n.hash(state);
+            },
+            Valor::Numero(f) => {
+                3u8.hash(state);
+                // Para f64, usamos la representación en bits
+                f.to_bits().hash(state);
+            },
+            Valor::Texto(s) => {
+                4u8.hash(state);
+                s.hash(state);
+            },
+            Valor::Log(b) => {
+                5u8.hash(state);
+                b.hash(state);
+            },
+            Valor::Lista(lista) => {
+                6u8.hash(state);
+                lista.hash(state);
+            },
+            Valor::Json(mapa) => {
+                7u8.hash(state);
+                // Para HashMap, ordenamos las claves para hash consistente
+                let mut items: Vec<_> = mapa.iter().collect();
+                items.sort_by_key(|(k, _)| *k);
+                items.hash(state);
+            },
+            Valor::Objeto { clase, propiedades, propiedades_publicas, metodos_publicos } => {
+                8u8.hash(state);
+                clase.hash(state);
+                propiedades_publicas.hash(state);
+                metodos_publicos.hash(state);
+                // Para HashMap, ordenamos las claves para hash consistente
+                let mut items: Vec<_> = propiedades.iter().collect();
+                items.sort_by_key(|(k, _)| *k);
+                items.hash(state);
+            },
+        }
+    }
+}

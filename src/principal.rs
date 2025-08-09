@@ -17,6 +17,7 @@ mod evaluador;
 mod errores;
 mod consola;
 mod manejador_modulos;
+mod maquina_virtual;
 
 // Módulo de pruebas
 #[cfg(test)]

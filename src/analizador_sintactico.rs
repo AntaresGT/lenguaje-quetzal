@@ -286,6 +286,11 @@ impl AnalizadorSintactico {
     
     /// Analiza una declaración
     fn declaracion(&mut self) -> ResultadoQuetzal<Nodo> {
+        // Saltar saltos de línea al principio
+        while self.coincidir(&TipoToken::NuevaLinea) {
+            continue;
+        }
+        
         // Verificar si es una declaración de importación
         if self.coincidir(&TipoToken::Importar) {
             return self.declaracion_importar();

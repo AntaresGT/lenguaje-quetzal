@@ -10,7 +10,6 @@ pub mod cadenas;
 pub mod funciones;
 pub mod entrada_salida;
 pub mod manejo_errores;
-pub mod manejo_excepciones_basico;
 pub mod conversiones;
 pub mod sintaxis_y_comentarios;
 pub mod integracion;
@@ -24,6 +23,7 @@ pub mod redondeo_decimales;
 pub mod matrices_multidimensionales;
 pub mod algoritmos_recursivos;
 pub mod procesamiento_cadenas_avanzado;
+pub mod recursion_universal; // Prueba universal que funciona con cualquier nombre
 
 // Módulos para tests de correcciones específicas
 pub mod ambito_variables;

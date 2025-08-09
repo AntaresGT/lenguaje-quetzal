@@ -16,6 +16,7 @@ rpassword = "7.0"
 inquire = "0.7.5"
 stacker = "0.1"
 bumpalo = { version = "3.16", features = ["collections"] }
+sys-info = "0.9"
 
 [[bin]]
 name = "quetzal"

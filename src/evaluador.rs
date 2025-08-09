@@ -6,6 +6,7 @@ use crate::tipos_datos::{Valor, Variable, TipoVariable};
 use crate::errores::{ErrorQuetzal, ResultadoQuetzal};
 use crate::consola::CONSOLA_GLOBAL;
 use crate::manejador_modulos::ManejadorModulos;
+use crate::maquina_virtual::MaquinaVirtualRecursion;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -267,6 +268,7 @@ pub struct Evaluador {
     dentro_de_metodo_clase: bool, // Indica si estamos ejecutando un método de clase
     manejador_modulos: Option<ManejadorModulos>,
     ruta_archivo_actual: Option<String>, // Rastrea el archivo que se está evaluando actualmente
+    vm_recursion: MaquinaVirtualRecursion,
 }
 
 impl Evaluador {
@@ -285,6 +287,7 @@ impl Evaluador {
             dentro_de_metodo_clase: false,
             manejador_modulos: None,
             ruta_archivo_actual: None,
+            vm_recursion: MaquinaVirtualRecursion::nueva(),
         }
     }
     
@@ -421,6 +424,21 @@ impl Evaluador {
         
         // Ignorar el error si la variable ya existe
         let _ = entorno.definir_variable("consola".to_string(), consola_variable);
+    }
+    
+    /// Obtiene el valor de una variable del entorno global (para pruebas)
+    pub fn obtener_valor_variable(&self, nombre: &str) -> Option<Valor> {
+        self.entorno_global.borrow().variables.get(nombre).map(|v| v.valor.clone())
+    }
+    
+    /// Obtiene estadísticas de la VM (memoria, profundidad, etc.)
+    pub fn obtener_estadisticas_vm(&self) -> String {
+        format!(
+            "VM Universal - Límite actual: {} | Memoria: {}KB | Funciones activas: {}",
+            self.vm_recursion.obtener_limite_actual(),
+            self.vm_recursion.obtener_memoria_actual() / 1024,
+            self.vm_recursion.obtener_profundidad_actual()
+        )
     }
     
     /// Evalúa un nodo del AST
@@ -612,6 +630,8 @@ impl Evaluador {
             },
             
             Nodo::LlamadaFuncion { nombre, argumentos, linea } => {
+                // Usar la VM híbrida para manejar la recursión automáticamente cuando esté configurada
+                // Por ahora, usar el método estándar con stacker como respaldo
                 if self.profundidad_recursion >= 4096 {
                     return Err(ErrorQuetzal::ErrorEjecucion { linea: *linea, mensaje: "profundidad máxima de llamadas excedida (límite: 4096)".to_string() });
                 }
@@ -1223,7 +1243,7 @@ impl Evaluador {
     }
     
     /// Evalúa una llamada a función
-    fn evaluar_llamada_funcion(&mut self, nombre: &str, argumentos: &[Nodo], linea: usize, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
+    pub fn evaluar_llamada_funcion(&mut self, nombre: &str, argumentos: &[Nodo], linea: usize, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
         // Detectar métodos de objeto (formato: "variable.metodo")
         if let Some(punto_pos) = nombre.rfind('.') {
             let nombre_variable = &nombre[..punto_pos];
@@ -2879,36 +2899,7 @@ impl Evaluador {
                             }
                             
                             // Definir 'ambiente' que referencia al objeto
-                            let valor_ambiente = if let Valor::Objeto { clase: clase_nombre, propiedades, propiedades_publicas, metodos_publicos } = valor.clone() {
-                                // Fusionar propiedades existentes con privadas definidas en la clase
-                                let mut todas_propiedades = propiedades.clone();
-                                if let Some(def_clase) = { self.entorno_global.borrow().obtener_clase(&clase_nombre) } {
-                                    for miembro_priv in &def_clase.miembros_privados {
-                                        if let Nodo::DeclaracionVariable { nombre: nombre_prop, tipo_dato, .. } = miembro_priv {
-                                            if !todas_propiedades.contains_key(nombre_prop) {
-                                                let defecto = match tipo_dato.as_str() {
-                                                    "entero" => Valor::Entero(0),
-                                                    "número" => Valor::Numero(0.0),
-                                                    "texto" => Valor::Texto(String::new()),
-                                                    "log" => Valor::Log(false),
-                                                    "lista" => Valor::Lista(Vec::new()),
-                                                    "jsn" => Valor::Json(HashMap::new()),
-                                                    _ => Valor::Vacio,
-                                                };
-                                                todas_propiedades.insert(nombre_prop.clone(), defecto);
-                                            }
-                                        }
-                                    }
-                                }
-                                Valor::Objeto {
-                                    clase: clase_nombre,
-                                    propiedades: todas_propiedades,
-                                    propiedades_publicas: propiedades_publicas,
-                                    metodos_publicos: metodos_publicos,
-                                }
-                            } else {
-                                valor.clone()
-                            };
+                            let valor_ambiente = valor.clone(); // Usar directamente el objeto con todas sus propiedades
                             let variable_ambiente = Variable::nueva(
                                 "ambiente".to_string(),
                                 valor_ambiente,
@@ -5255,7 +5246,8 @@ impl Evaluador {
             }
         }
         
-        // Inicializar propiedades privadas en el entorno del objeto
+        // Inicializar propiedades privadas
+        let mut propiedades_privadas = HashMap::new();
         for miembro in &clase.miembros_privados {
             if let Nodo::DeclaracionVariable { nombre: nombre_prop, tipo_dato, es_variable, valor, .. } = miembro {
                 let valor_inicial = if let Some(expr_valor) = valor {
@@ -5275,6 +5267,8 @@ impl Evaluador {
                     }
                 };
                 
+                propiedades_privadas.insert(nombre_prop.clone(), valor_inicial.clone());
+                
                 let tipo_variable = if *es_variable {
                     TipoVariable::Variable
                 } else {
@@ -5292,15 +5286,14 @@ impl Evaluador {
             }
         }
         
-        // Crear el objeto preliminar para 'ambiente' que incluye todas las propiedades durante construcción
-        let mut propiedades_ambiente = propiedades_publicas.clone();
+        // Crear todas las propiedades del objeto (públicas + privadas) para ambiente
+        let mut todas_las_propiedades = propiedades_publicas.clone();
+        todas_las_propiedades.extend(propiedades_privadas);
         
-        // Durante la construcción, el objeto 'ambiente' debe poder acceder a propiedades privadas
-        
-        // Crear el objeto final con las propiedades públicas
+        // Crear el objeto final con todas las propiedades para que ambiente funcione
         let objeto_final = Valor::Objeto {
             clase: nombre_clase.to_string(),
-            propiedades: propiedades_publicas,
+            propiedades: todas_las_propiedades,
             propiedades_publicas: clase.propiedades_publicas.clone(),
             metodos_publicos: clase.metodos_publicos.clone(),
         };

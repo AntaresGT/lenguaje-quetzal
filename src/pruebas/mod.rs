@@ -47,5 +47,11 @@ pub mod metodo_mayusculas_texto;
 // Módulo para tests del método minusculas() para tipos texto
 pub mod metodo_minusculas_texto;
 
+// Módulo para tests del método recortar_inicio() para tipos texto
+pub mod metodo_recortar_inicio_texto;
+
+// Módulo para tests del método recortar_final() para tipos texto
+pub mod metodo_recortar_final_texto;
+
 // Módulo para tests de interpolación de texto
 pub mod interpolacion_texto;

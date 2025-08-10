@@ -2314,6 +2314,26 @@ impl Evaluador {
                 Ok((Valor::Texto(cadena.trim().to_string()), ControlFlujo::Ninguno))
             },
             
+            "recortar_inicio" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'recortar_inicio' no acepta argumentos".to_string(),
+                    });
+                }
+                Ok((Valor::Texto(cadena.trim_start().to_string()), ControlFlujo::Ninguno))
+            },
+            
+            "recortar_final" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'recortar_final' no acepta argumentos".to_string(),
+                    });
+                }
+                Ok((Valor::Texto(cadena.trim_end().to_string()), ControlFlujo::Ninguno))
+            },
+            
             "invertir" => {
                 if !argumentos.is_empty() {
                     return Err(ErrorQuetzal::ErrorEjecucion {

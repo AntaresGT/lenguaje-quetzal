@@ -41,7 +41,7 @@ log tiene_dpi = persona.datos_personales.contiene_clave("dpi")  // verdadero
 lista<texto> claves_persona = persona.claves()  // ["nombre", "datos_personales", "direcciones", "telefonos", "activo"]
 
 // Obtener una lista de valores
-lista<texto> valores_persona = persona.valores()  // ["Ana", {...}, ["casa", "trabajo"], ["555-1234", "555-5678"], verdadero]
+lista valores_persona = persona.valores()  // ["Ana", {...}, ["casa", "trabajo"], ["555-1234", "555-5678"], verdadero]
 
 // Modificar una propiedad
 persona.nombre = "María"  // Cambia el nombre a "María"

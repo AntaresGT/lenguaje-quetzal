@@ -650,7 +650,8 @@ impl Evaluador {
                 }
                 
                 // Métodos que modifican la variable original (como agregar)
-                if metodo == "agregar" || metodo == "quitar" || metodo == "limpiar" || metodo == "insertar" || metodo == "sacar" || metodo == "sacar_ultimo" {
+                if metodo == "agregar" || metodo == "quitar" || metodo == "limpiar" || metodo == "insertar" || metodo == "sacar" || metodo == "sacar_ultimo" || metodo == "establecer" || metodo == "eliminar" {
+                    eprintln!("Debug - Método mutante detectado: {}", metodo);
                     match objeto.as_ref() {
                         Nodo::Identificador(nombre_var) => {
                             return self.evaluar_metodo_mutante(nombre_var, metodo, &args_evaluados, *linea, entorno);
@@ -1331,7 +1332,7 @@ impl Evaluador {
                 }
                 
                 // Verificar si es un método que modifica la variable (mutante)
-                if nombre_metodo == "agregar" || nombre_metodo == "quitar" || nombre_metodo == "limpiar" || nombre_metodo == "insertar" || nombre_metodo == "sacar" || nombre_metodo == "sacar_ultimo" {
+                if nombre_metodo == "agregar" || nombre_metodo == "quitar" || nombre_metodo == "limpiar" || nombre_metodo == "insertar" || nombre_metodo == "sacar" || nombre_metodo == "sacar_ultimo" || nombre_metodo == "establecer" || nombre_metodo == "eliminar" {
                     return self.evaluar_metodo_mutante(nombre_variable, nombre_metodo, &args_evaluados, linea, entorno);
                 }
                 
@@ -3042,6 +3043,13 @@ impl Evaluador {
                             .collect();
                         Valor::Texto(format!("[{}]", elementos.join(", ")))
                     },
+                    Valor::Json(mapa) => {
+                        // Convertir JSON a texto (formato compacto)
+                        match serde_json::to_string(mapa) {
+                            Ok(json_str) => Valor::Texto(json_str),
+                            Err(_) => Valor::Texto("{}".to_string()), // JSON vacío como fallback
+                        }
+                    },
                     _ => Valor::Texto(valor.to_string()),
                 };
                 Ok((resultado, ControlFlujo::Ninguno))
@@ -3899,9 +3907,10 @@ impl Evaluador {
                 match valor {
                     Valor::Lista(lista) => Ok((Valor::Entero(lista.len() as i64), ControlFlujo::Ninguno)),
                     Valor::Texto(cadena) => Ok((Valor::Entero(cadena.chars().count() as i64), ControlFlujo::Ninguno)),
+                    Valor::Json(mapa) => Ok((Valor::Entero(mapa.len() as i64), ControlFlujo::Ninguno)),
                     _ => Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
-                        mensaje: format!("El método 'longitud' solo es válido para cadenas y listas"),
+                        mensaje: format!("El método 'longitud' solo es válido para cadenas, listas y objetos JSON"),
                     })
                 }
             },
@@ -3913,6 +3922,130 @@ impl Evaluador {
                     _ => Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
                         mensaje: format!("El método 'esta_vacia' solo es válido para cadenas y listas"),
+                    })
+                }
+            },
+            
+            // Métodos específicos de JSON
+            "contiene_clave" => {
+                if let Valor::Json(mapa) = valor {
+                    if argumentos.len() != 1 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'contiene_clave' requiere exactamente una clave como argumento".to_string(),
+                        });
+                    }
+                    
+                    if let Valor::Texto(clave) = &argumentos[0] {
+                        Ok((Valor::Log(mapa.contains_key(clave)), ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "La clave para 'contiene_clave' debe ser una cadena".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'contiene_clave' solo es válido para objetos JSON"),
+                    })
+                }
+            },
+            
+            "obtener" => {
+                if let Valor::Json(mapa) = valor {
+                    if argumentos.len() != 1 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'obtener' requiere exactamente una clave como argumento".to_string(),
+                        });
+                    }
+                    
+                    if let Valor::Texto(clave) = &argumentos[0] {
+                        let valor_obtenido = mapa.get(clave).cloned().unwrap_or(Valor::Vacio);
+                        Ok((valor_obtenido, ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "La clave para 'obtener' debe ser una cadena".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'obtener' solo es válido para objetos JSON"),
+                    })
+                }
+            },
+
+            "claves" => {
+                if let Valor::Json(mapa) = valor {
+                    let claves: Vec<Valor> = mapa.keys()
+                        .map(|k| Valor::Texto(k.clone()))
+                        .collect();
+                    Ok((Valor::Lista(claves), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'claves' solo es válido para objetos JSON"),
+                    })
+                }
+            },
+            
+            "valores" => {
+                if let Valor::Json(mapa) = valor {
+                    let valores: Vec<Valor> = mapa.values().cloned().collect();
+                    Ok((Valor::Lista(valores), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'valores' solo es válido para objetos JSON"),
+                    })
+                }
+            },
+            
+            "fusionar" => {
+                if let Valor::Json(mapa1) = valor {
+                    if argumentos.len() != 1 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'fusionar' requiere exactamente un objeto JSON como argumento".to_string(),
+                        });
+                    }
+                    
+                    if let Valor::Json(mapa2) = &argumentos[0] {
+                        let mut mapa_fusionado = mapa1.clone();
+                        for (clave, valor) in mapa2 {
+                            mapa_fusionado.insert(clave.clone(), valor.clone());
+                        }
+                        Ok((Valor::Json(mapa_fusionado), ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El argumento para 'fusionar' debe ser un objeto JSON".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'fusionar' solo es válido para objetos JSON"),
+                    })
+                }
+            },
+            
+            "texto_formateado" => {
+                if let Valor::Json(mapa) = valor {
+                    match serde_json::to_string_pretty(mapa) {
+                        Ok(json_str) => Ok((Valor::Texto(json_str), ControlFlujo::Ninguno)),
+                        Err(_) => Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "Error al formatear JSON a texto".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'texto_formateado' solo es válido para objetos JSON"),
                     })
                 }
             },
@@ -4232,6 +4365,53 @@ impl Evaluador {
                     
                     let elemento_removido = lista.pop().unwrap();
                     Ok((elemento_removido, ControlFlujo::Ninguno))
+                },
+                
+                // Métodos mutantes para objetos JSON
+                (Valor::Json(ref mut mapa), "establecer") => {
+                    if argumentos.len() != 2 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'establecer' requiere exactamente dos argumentos (clave, valor)".to_string(),
+                        });
+                    }
+                    
+                    let clave = match &argumentos[0] {
+                        Valor::Texto(s) => s.clone(),
+                        _ => {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "La clave debe ser un texto".to_string(),
+                            });
+                        }
+                    };
+                    
+                    let valor = argumentos[1].clone();
+                    mapa.insert(clave, valor);
+                    Ok((Valor::Vacio, ControlFlujo::Ninguno))
+                },
+                
+                (Valor::Json(ref mut mapa), "eliminar") => {
+                    if argumentos.len() != 1 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'eliminar' requiere exactamente un argumento (clave)".to_string(),
+                        });
+                    }
+                    
+                    let clave = match &argumentos[0] {
+                        Valor::Texto(s) => s.clone(),
+                        _ => {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "La clave debe ser un texto".to_string(),
+                            });
+                        }
+                    };
+                    
+                    let valor_eliminado = mapa.remove(&clave);
+                    let resultado = valor_eliminado.unwrap_or(Valor::Vacio);
+                    Ok((resultado, ControlFlujo::Ninguno))
                 },
                 
                 _ => {

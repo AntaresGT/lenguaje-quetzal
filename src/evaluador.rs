@@ -40,11 +40,14 @@ pub struct ClaseDefinida {
     pub nombre: String,
     pub miembros_publicos: Vec<Nodo>,
     pub miembros_privados: Vec<Nodo>,
+    pub miembros_libres: Vec<Nodo>, // Miembros estáticos (libres)
     pub constructor: Option<Nodo>,
     pub propiedades_publicas: Vec<String>, // Lista de nombres de propiedades públicas
     pub propiedades_privadas: Vec<String>, // Lista de nombres de propiedades privadas
+    pub propiedades_libres: Vec<String>, // Lista de nombres de propiedades libres
     pub metodos_publicos: Vec<String>, // Lista de nombres de métodos públicos
     pub metodos_privados: Vec<String>, // Lista de nombres de métodos privados
+    pub metodos_libres: Vec<String>, // Lista de nombres de métodos libres
 }
 
 /// Resultado del control de flujo
@@ -579,6 +582,11 @@ impl Evaluador {
                 let entorno_ref = entorno.borrow();
                 if let Some(variable) = entorno_ref.obtener_variable(nombre) {
                     Ok((variable.valor.clone(), ControlFlujo::Ninguno))
+                } else if entorno_ref.obtener_clase(nombre).is_some() {
+                    // Si es una clase definida, permitir el acceso para miembros libres
+                    // Devolvemos un valor especial que indica que es una clase
+                    drop(entorno_ref);
+                    Ok((Valor::Texto(format!("__clase__{}", nombre)), ControlFlujo::Ninguno))
                 } else {
                     Err(ErrorQuetzal::VariableNoDefinida {
                         linea: 0,
@@ -646,15 +654,110 @@ impl Evaluador {
             },
             
             Nodo::LlamadaMetodo { objeto, metodo, argumentos, linea } => {
+                // Verificar si es una llamada a consola
+                if let Nodo::Identificador(nombre_objeto) = objeto.as_ref() {
+                    if nombre_objeto == "consola" {
+                        // Evaluar argumentos para consola
+                        let mut args_evaluados = Vec::new();
+                        for arg in argumentos {
+                            let (valor_arg, _) = self.evaluar_con_entorno(arg, entorno.clone())?;
+                            args_evaluados.push(valor_arg);
+                        }
+                        
+                        // Manejar funciones de consola directamente
+                        match metodo.as_str() {
+                            "imprimir" | "mostrar" => {
+                                let mensaje = if !args_evaluados.is_empty() {
+                                    args_evaluados[0].a_cadena()
+                                } else {
+                                    String::new()
+                                };
+                                CONSOLA_GLOBAL.mostrar(&mensaje);
+                                return Ok((Valor::Vacio, ControlFlujo::Ninguno));
+                            },
+                            "imprimir_error" | "mostrar_error" => {
+                                let mensaje = if !args_evaluados.is_empty() {
+                                    args_evaluados[0].a_cadena()
+                                } else {
+                                    String::new()
+                                };
+                                CONSOLA_GLOBAL.mostrar_error(&mensaje);
+                                return Ok((Valor::Vacio, ControlFlujo::Ninguno));
+                            },
+                            _ => {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea: *linea,
+                                    mensaje: format!("Método '{}' no reconocido para consola", metodo),
+                                });
+                            }
+                        }
+                    }
+                }
+                
+                // Verificar si es una llamada a método libre de una clase
+                if let Nodo::Identificador(nombre_clase) = objeto.as_ref() {
+                    let entorno_ref = entorno.borrow();
+                    if let Some(clase) = entorno_ref.obtener_clase(nombre_clase) {
+                        // Es una clase, verificar si el método es libre
+                        if clase.metodos_libres.contains(&metodo.to_string()) {
+                            // Buscar la función libre en los miembros libres
+                            for miembro_libre in &clase.miembros_libres {
+                                if let Nodo::DeclaracionFuncion { nombre: nombre_metodo, .. } = miembro_libre {
+                                    if nombre_metodo == metodo {
+                                        drop(entorno_ref); // Soltar la referencia antes de evaluar
+                                        // Evaluar argumentos
+                                        let mut args_evaluados = Vec::new();
+                                        for arg in argumentos {
+                                            let (valor_arg, _) = self.evaluar_con_entorno(arg, entorno.clone())?;
+                                            args_evaluados.push(valor_arg);
+                                        }
+                                        // Llamar al método libre como una función estática
+                                        return self.evaluar_funcion_libre(miembro_libre, &args_evaluados, *linea, entorno);
+                                    }
+                                }
+                            }
+                        }
+                        drop(entorno_ref);
+                    }
+                }
+                
+                // También verificar si al evaluar el objeto obtenemos una marca de clase
+                let (valor_objeto, _) = self.evaluar_con_entorno(objeto, entorno.clone())?;
+                if let Valor::Texto(texto_clase) = &valor_objeto {
+                    if texto_clase.starts_with("__clase__") {
+                        let nombre_clase = &texto_clase[9..]; // Remover "__clase__"
+                        let entorno_ref = entorno.borrow();
+                        if let Some(clase) = entorno_ref.obtener_clase(nombre_clase) {
+                            // Es una clase, verificar si el método es libre
+                            if clase.metodos_libres.contains(&metodo.to_string()) {
+                                // Buscar la función libre en los miembros libres
+                                for miembro_libre in &clase.miembros_libres {
+                                    if let Nodo::DeclaracionFuncion { nombre: nombre_metodo, .. } = miembro_libre {
+                                        if nombre_metodo == metodo {
+                                            drop(entorno_ref); // Soltar la referencia antes de evaluar
+                                            // Evaluar argumentos
+                                            let mut args_evaluados = Vec::new();
+                                            for arg in argumentos {
+                                                let (valor_arg, _) = self.evaluar_con_entorno(arg, entorno.clone())?;
+                                                args_evaluados.push(valor_arg);
+                                            }
+                                            // Llamar al método libre como una función estática
+                                            return self.evaluar_funcion_libre(miembro_libre, &args_evaluados, *linea, entorno);
+                                        }
+                                    }
+                                }
+                            }
+                            drop(entorno_ref);
+                        }
+                    }
+                }
+                
                 // Evaluar argumentos primero
                 let mut args_evaluados = Vec::new();
                 for arg in argumentos {
                     let (valor_arg, _) = self.evaluar_con_entorno(arg, entorno.clone())?;
                     args_evaluados.push(valor_arg);
                 }
-                
-                // Evaluar el objeto para obtener su valor y tipo
-                let (valor_objeto, _) = self.evaluar_con_entorno(objeto, entorno.clone())?;
                 
                 // Métodos que modifican la variable original (como agregar)
                 if metodo == "agregar" || metodo == "quitar" || metodo == "limpiar" || metodo == "insertar" || metodo == "sacar" || metodo == "sacar_ultimo" || metodo == "establecer" || metodo == "eliminar" || metodo == "remover" || metodo == "quitar_en" || metodo == "ordenar" || metodo == "ordenar_descendente" || metodo == "extender" || (metodo == "invertir" && matches!(valor_objeto, Valor::Lista(_))) {
@@ -697,6 +800,37 @@ impl Evaluador {
                         let nombre_funcion = format!("consola.{}", miembro);
                         return self.evaluar_llamada_funcion(&nombre_funcion, &[], *linea, entorno);
                     }
+                    
+                    // Verificar si es acceso a miembro libre de una clase
+                    let entorno_ref = entorno.borrow();
+                    if let Some(clase) = entorno_ref.obtener_clase(nombre_objeto) {
+                        // Es una clase, verificar si el miembro es libre
+                        if clase.propiedades_libres.contains(&miembro.to_string()) {
+                            // Buscar la propiedad libre en las variables globales
+                            let nombre_global = format!("{}LibrE{}", nombre_objeto, miembro);
+                            if let Some(variable) = entorno_ref.obtener_variable(&nombre_global) {
+                                return Ok((variable.valor, ControlFlujo::Ninguno));
+                            } else {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea: *linea,
+                                    mensaje: format!("La propiedad libre '{}' no está definida", miembro),
+                                });
+                            }
+                        }
+                        
+                        if clase.metodos_libres.contains(&miembro.to_string()) {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea: *linea,
+                                mensaje: format!("Para llamar al método libre '{}', use '{}.{}()'", miembro, nombre_objeto, miembro),
+                            });
+                        }
+                        
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea: *linea,
+                            mensaje: format!("El miembro '{}' no es libre en la clase '{}'", miembro, nombre_objeto),
+                        });
+                    }
+                    drop(entorno_ref);
                 }
                 
                 let (valor_objeto, _) = self.evaluar_con_entorno(objeto, entorno.clone())?;
@@ -1524,6 +1658,88 @@ impl Evaluador {
         })
     }
     
+    /// Evalúa una función libre (método estático de clase)
+    fn evaluar_funcion_libre(&mut self, nodo_funcion: &Nodo, argumentos: &[Valor], linea: usize, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
+        if let Nodo::DeclaracionFuncion { nombre, parametros, cuerpo, tipo_retorno, .. } = nodo_funcion {
+            // Contar parámetros obligatorios (sin valor por defecto)
+            let parametros_obligatorios = parametros.iter()
+                .filter(|p| p.valor_defecto.is_none())
+                .count();
+            
+            // Verificar número de argumentos
+            if argumentos.len() < parametros_obligatorios || argumentos.len() > parametros.len() {
+                return Err(ErrorQuetzal::ArgumentosIncorrectos {
+                    linea,
+                    esperados: parametros.len(),
+                    recibidos: argumentos.len(),
+                });
+            }
+            
+            // Crear entorno para la función libre
+            let entorno_funcion = Rc::new(RefCell::new(Entorno::nuevo_hijo(entorno)));
+            
+            // Asignar parámetros
+            for (i, parametro) in parametros.iter().enumerate() {
+                let tipo_variable = if parametro.es_variable {
+                    TipoVariable::Variable
+                } else {
+                    TipoVariable::Inmutable
+                };
+                
+                // Determinar el valor a usar
+                let valor = if i < argumentos.len() {
+                    // Usar argumento proporcionado
+                    argumentos[i].clone()
+                } else if let Some(valor_defecto) = &parametro.valor_defecto {
+                    // Usar valor por defecto
+                    valor_defecto.clone()
+                } else {
+                    return Err(ErrorQuetzal::ArgumentosIncorrectos {
+                        linea,
+                        esperados: parametros_obligatorios,
+                        recibidos: argumentos.len(),
+                    });
+                };
+                
+                let variable = Variable::nueva(
+                    parametro.nombre.clone(),
+                    valor,
+                    tipo_variable,
+                    parametro.tipo_dato.clone(),
+                );
+                
+                entorno_funcion.borrow_mut().definir_variable(parametro.nombre.clone(), variable)?;
+            }
+            
+            // Ejecutar cuerpo de la función
+            let estado_anterior = self.dentro_de_funcion;
+            self.dentro_de_funcion = true;
+            let resultado = self.evaluar_con_trampolina(cuerpo, entorno_funcion);
+            self.dentro_de_funcion = estado_anterior;
+            
+            let (valor, control) = resultado?;
+            
+            match control {
+                ControlFlujo::Retornar(valor_retorno) => Ok((valor_retorno, ControlFlujo::Ninguno)),
+                _ => {
+                    // Si no hay retorno explícito y la función no es de tipo vacio, es un error
+                    if tipo_retorno != "vacio" {
+                        return Err(ErrorQuetzal::ErrorSintaxis {
+                            linea,
+                            mensaje: format!("La función libre '{}' debe retornar un valor de tipo '{}'", nombre, tipo_retorno),
+                        });
+                    }
+                    Ok((valor, ControlFlujo::Ninguno))
+                }
+            }
+        } else {
+            Err(ErrorQuetzal::ErrorEjecucion {
+                linea,
+                mensaje: "Error interno: nodo no es una función".to_string(),
+            })
+        }
+    }
+
     /// Evalúa funciones de consola
     fn evaluar_funcion_consola(&mut self, nombre: &str, argumentos: &[Nodo], linea: usize, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
         match nombre {
@@ -6307,13 +6523,17 @@ impl Evaluador {
     fn evaluar_declaracion_objeto(&mut self, nombre: &str, miembros: &[Nodo], _linea: usize, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
         let mut miembros_publicos = Vec::new();
         let mut miembros_privados = Vec::new();
+        let mut miembros_libres = Vec::new();
         let mut constructor = None;
         let mut propiedades_publicas = Vec::new();
         let mut propiedades_privadas = Vec::new();
+        let mut propiedades_libres = Vec::new();
         let mut metodos_publicos = Vec::new();
         let mut metodos_privados = Vec::new();
+        let mut metodos_libres = Vec::new();
         
         let mut es_seccion_publica = true; // Por defecto todo es público
+        let mut siguiente_es_libre = false; // Indica si el siguiente miembro es libre
         
         for miembro in miembros {
             match miembro {
@@ -6327,56 +6547,112 @@ impl Evaluador {
                     continue;
                 },
                 
+                // Detectar marcadores de miembros libres
+                Nodo::Identificador(palabra) if palabra.starts_with("__libre_variable__") => {
+                    siguiente_es_libre = true;
+                    continue;
+                },
+                Nodo::Identificador(palabra) if palabra.starts_with("__libre_funcion__") => {
+                    siguiente_es_libre = true;
+                    continue;
+                },
+                
                 // Verificar si es un constructor (función con el mismo nombre de la clase)
                 Nodo::DeclaracionFuncion { nombre: nombre_funcion, .. } if nombre_funcion == nombre => {
                     constructor = Some(miembro.clone());
+                    siguiente_es_libre = false;
                 },
                 
                 // Recopilar nombres de propiedades
                 Nodo::DeclaracionVariable { nombre: nombre_prop, .. } => {
-                    if es_seccion_publica {
+                    if siguiente_es_libre {
+                        miembros_libres.push(miembro.clone());
+                        propiedades_libres.push(nombre_prop.clone());
+                    } else if es_seccion_publica {
                         miembros_publicos.push(miembro.clone());
                         propiedades_publicas.push(nombre_prop.clone());
                     } else {
                         miembros_privados.push(miembro.clone());
                         propiedades_privadas.push(nombre_prop.clone());
                     }
+                    siguiente_es_libre = false;
                 },
                 
                 // Recopilar nombres de métodos
                 Nodo::DeclaracionFuncion { nombre: nombre_metodo, .. } => {
-                    if es_seccion_publica {
+                    if siguiente_es_libre {
+                        miembros_libres.push(miembro.clone());
+                        metodos_libres.push(nombre_metodo.clone());
+                    } else if es_seccion_publica {
                         miembros_publicos.push(miembro.clone());
                         metodos_publicos.push(nombre_metodo.clone());
                     } else {
                         miembros_privados.push(miembro.clone());
                         metodos_privados.push(nombre_metodo.clone());
                     }
+                    siguiente_es_libre = false;
                 },
                 
                 // Cualquier otro miembro
                 _ => {
-                    if es_seccion_publica {
+                    if siguiente_es_libre {
+                        miembros_libres.push(miembro.clone());
+                    } else if es_seccion_publica {
                         miembros_publicos.push(miembro.clone());
                     } else {
                         miembros_privados.push(miembro.clone());
                     }
+                    siguiente_es_libre = false;
                 }
             }
         }
+        
+        // Crear una copia para usar después de crear la clase
+        let miembros_libres_copia = miembros_libres.clone();
         
         let clase = ClaseDefinida {
             nombre: nombre.to_string(),
             miembros_publicos,
             miembros_privados,
+            miembros_libres,
             constructor,
             propiedades_publicas: propiedades_publicas.clone(),
             propiedades_privadas: propiedades_privadas.clone(),
+            propiedades_libres: propiedades_libres.clone(),
             metodos_publicos,
             metodos_privados,
+            metodos_libres: metodos_libres.clone(),
         };
         
         entorno.borrow_mut().definir_clase(nombre.to_string(), clase)?;
+        
+        // Registrar propiedades libres como variables globales
+        for miembro in &miembros_libres_copia {
+            match miembro {
+                Nodo::DeclaracionVariable { nombre: nombre_variable, valor, .. } => {
+                    let valor_variable = if let Some(valor_nodo) = valor {
+                        let (valor_eval, _) = self.evaluar_con_entorno(valor_nodo, entorno.clone())?;
+                        valor_eval
+                    } else {
+                        Valor::Vacio
+                    };
+                    
+                    // Crear variable con el valor evaluado
+                    let variable = Variable::nueva(
+                        nombre_variable.clone(),
+                        valor_variable,
+                        TipoVariable::Variable, // Las propiedades libres son mutables
+                        "".to_string(), // Tipo inferido
+                    );
+                    
+                    // Registrar con el nombre de la clase como prefijo para identificación
+                    let nombre_global = format!("{}LibrE{}", nombre, nombre_variable);
+                    entorno.borrow_mut().definir_variable(nombre_global, variable)?;
+                },
+                _ => {}
+            }
+        }
+        
         Ok((Valor::Vacio, ControlFlujo::Ninguno))
     }
     

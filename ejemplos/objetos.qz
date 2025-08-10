@@ -32,7 +32,7 @@ objeto Usuario {
 }
 
 // Instantia un objeto
-Usuario usuario1 = Usuario("Juan", 30)
+Usuario usuario1 = nuevo Usuario("Juan", 30)
 
 // Los objetos que no se especifican las etiquetas de acceso son públicos por defecto
 objeto DefinicionUsuario {
@@ -54,15 +54,47 @@ objeto DefinicionUsuario {
 }
 
 // Instantia un objeto
-DefinicionUsuario usuario2 = DefinicionUsuario("Juan", 30)
+DefinicionUsuario usuario2 = nuevo DefinicionUsuario("Juan", 30)
 
-// Objeto con funciones libres
+// Objeto con funciones libres y atributos libres
 objeto UsuarioLibre {
+
+    libre texto nombre
+    libre entero edad
 
     libre entero absoluto(entero valor) {
         retornar valor < 0 ? -valor : valor
     }
 }
 
+
+// Los atributos libres y metodos libres se pueden acceder sin instanciar el objeto
+// Los metodos y atributos libres no pueden comunicarse con los atributos y metodos del objeto que si se instancian
+objeto UsuarioLibre2 {
+    privado:
+        // Atributos privados del objeto sin instanciar
+        // Los atributos privados no se pueden acceder desde afuera
+        libre texto var nombre = "Sin nombre"
+        libre entero var edad = 0
+
+        libre texto obtener_nombre() {
+            retornar ambiente.nombre
+        }
+
+        libre entero obtener_edad() {
+            retornar ambiente.edad
+        }
+    publico:
+
+        // Metodos que se pueden accerder desde afuera sin instanciar el objeto
+        libre vacio concatenar_apellido(texto nuevo_apellido) {
+            texto actual_nombre = ambiente.obtener_nombre()
+            ambiente.nombre = actual_nombre + " " + nuevo_apellido
+        }
+}
+
 // Las funciones libres se pueden llamar sin necesidad de instanciar el objeto
 entero valor_absoluto = UsuarioLibre.absoluto(-10)
+
+// Operar con el objeto libre
+UsuarioLibre2.concatenar_apellido("Pérez")

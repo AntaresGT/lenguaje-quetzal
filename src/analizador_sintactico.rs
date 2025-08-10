@@ -787,6 +787,32 @@ impl AnalizadorSintactico {
                 miembros.push(Nodo::Identificador("__seccion_privada__".to_string()));
                 continue;
             }
+
+            // Verificar modificador libre (para miembros estáticos)
+            if self.coincidir(&TipoToken::Libre) {
+                // El modificador libre va antes del tipo de dato o palabra clave de función
+                // Necesitamos determinar si es una variable o función
+                let es_funcion = self.verificar_declaracion_funcion();
+                
+                if es_funcion {
+                    // Es una función libre
+                    let funcion = self.declaracion_funcion()?;
+                    if let Nodo::DeclaracionFuncion { nombre, parametros, tipo_retorno, cuerpo, es_asincrona, linea } = funcion {
+                        // Crear un identificador especial para marcar como libre
+                        miembros.push(Nodo::Identificador(format!("__libre_funcion__{}", nombre)));
+                        miembros.push(Nodo::DeclaracionFuncion { nombre, parametros, tipo_retorno, cuerpo, es_asincrona, linea });
+                    }
+                } else {
+                    // Es una variable libre
+                    let variable = self.declaracion_variable()?;
+                    if let Nodo::DeclaracionVariable { nombre, tipo_dato, es_variable, valor, linea } = variable {
+                        // Crear un identificador especial para marcar como libre
+                        miembros.push(Nodo::Identificador(format!("__libre_variable__{}", nombre)));
+                        miembros.push(Nodo::DeclaracionVariable { nombre, tipo_dato, es_variable, valor, linea });
+                    }
+                }
+                continue;
+            }
             
             // Verificar si es un constructor (nombre de clase seguido de paréntesis o palabra clave "constructor")
             if let TipoToken::Identificador(nombre_posible) = &self.token_actual().tipo {
@@ -1416,26 +1442,13 @@ impl AnalizadorSintactico {
                     }
                     
                     // Crear nodo de llamada a método
-                    match &expresion {
-                        Nodo::Identificador(var_name) => {
-                            // Para variables, usar llamada a función tradicional
-                            let nombre_metodo = format!("{}.{}", var_name, miembro);
-                            expresion = Nodo::LlamadaFuncion {
-                                nombre: nombre_metodo,
-                                argumentos,
-                                linea,
-                            };
-                        },
-                        _ => {
-                            // Para expresiones complejas, usar el nuevo nodo LlamadaMetodo
-                            expresion = Nodo::LlamadaMetodo {
-                                objeto: Box::new(expresion),
-                                metodo: miembro,
-                                argumentos,
-                                linea,
-                            };
-                        }
-                    }
+                    // Siempre usar LlamadaMetodo para llamadas objeto.metodo()
+                    expresion = Nodo::LlamadaMetodo {
+                        objeto: Box::new(expresion),
+                        metodo: miembro,
+                        argumentos,
+                        linea,
+                    };
                 } else {
                     // Es acceso simple a miembro
                     expresion = Nodo::AccesoMiembro {

@@ -9,3 +9,5 @@ importar {
     // Importar variable y colocar otro nombre "un alias"
     saludo como texto_saludo
 } desde "exportar.qz"
+
+

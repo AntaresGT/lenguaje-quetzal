@@ -1826,6 +1826,57 @@ impl Evaluador {
             "log" => {
                 Ok((Valor::Log(valor.a_bool()), ControlFlujo::Ninguno))
             },
+            "jsn" => {
+                match valor {
+                    Valor::Texto(s) => {
+                        // Intentar parsear el JSON
+                        match serde_json::from_str::<serde_json::Value>(&s) {
+                            Ok(valor_json) => {
+                                // Convertir el valor JSON a nuestro tipo HashMap
+                                let mapa = self.convertir_json_value_a_hashmap(valor_json)?;
+                                Ok((Valor::Json(mapa), ControlFlujo::Ninguno))
+                            },
+                            Err(_) => Err(ErrorQuetzal::ErrorConversion {
+                                linea: 0,
+                                mensaje: "No se puede convertir cadena a JSON: formato inválido".to_string(),
+                            }),
+                        }
+                    },
+                    _ => Err(ErrorQuetzal::ErrorConversion {
+                        linea: 0,
+                        mensaje: format!("No se puede convertir {} a JSON", valor.tipo_como_cadena()),
+                    }),
+                }
+            },
+            "lista" => {
+                match valor {
+                    Valor::Texto(s) => {
+                        // Dividir por comas y crear lista
+                        let elementos: Vec<Valor> = s.split(',')
+                            .map(|elemento| {
+                                let trimmed = elemento.trim();
+                                // Intentar convertir a número si es posible
+                                if let Ok(entero) = trimmed.parse::<i64>() {
+                                    Valor::Entero(entero)
+                                } else if let Ok(numero) = trimmed.parse::<f64>() {
+                                    Valor::Numero(numero)
+                                } else if trimmed.eq_ignore_ascii_case("verdadero") {
+                                    Valor::Log(true)
+                                } else if trimmed.eq_ignore_ascii_case("falso") {
+                                    Valor::Log(false)
+                                } else {
+                                    Valor::Texto(trimmed.to_string())
+                                }
+                            })
+                            .collect();
+                        Ok((Valor::Lista(elementos), ControlFlujo::Ninguno))
+                    },
+                    _ => Err(ErrorQuetzal::ErrorConversion {
+                        linea: 0,
+                        mensaje: format!("No se puede convertir {} a lista", valor.tipo_como_cadena()),
+                    }),
+                }
+            },
             
             // Métodos de cadenas avanzadas
             _ => {
@@ -2292,6 +2343,57 @@ impl Evaluador {
                     .map(|linea| Valor::Texto(linea.to_string()))
                     .collect();
                 Ok((Valor::Lista(lineas), ControlFlujo::Ninguno))
+            },
+            
+            "jsn" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'jsn' no acepta argumentos".to_string(),
+                    });
+                }
+                
+                // Intentar parsear el JSON
+                match serde_json::from_str::<serde_json::Value>(cadena) {
+                    Ok(valor_json) => {
+                        // Convertir el valor JSON a nuestro tipo HashMap
+                        let mapa = self.convertir_json_value_a_hashmap(valor_json)?;
+                        Ok((Valor::Json(mapa), ControlFlujo::Ninguno))
+                    },
+                    Err(_) => Err(ErrorQuetzal::ErrorConversion {
+                        linea: 0,
+                        mensaje: "No se puede convertir cadena a JSON: formato inválido".to_string(),
+                    }),
+                }
+            },
+            
+            "lista" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'lista' no acepta argumentos".to_string(),
+                    });
+                }
+                
+                // Dividir por comas y crear lista
+                let elementos: Vec<Valor> = cadena.split(',')
+                    .map(|elemento| {
+                        let trimmed = elemento.trim();
+                        // Intentar convertir a número si es posible
+                        if let Ok(entero) = trimmed.parse::<i64>() {
+                            Valor::Entero(entero)
+                        } else if let Ok(numero) = trimmed.parse::<f64>() {
+                            Valor::Numero(numero)
+                        } else if trimmed.eq_ignore_ascii_case("verdadero") {
+                            Valor::Log(true)
+                        } else if trimmed.eq_ignore_ascii_case("falso") {
+                            Valor::Log(false)
+                        } else {
+                            Valor::Texto(trimmed.to_string())
+                        }
+                    })
+                    .collect();
+                Ok((Valor::Lista(elementos), ControlFlujo::Ninguno))
             },
             
             _ => Err(ErrorQuetzal::ErrorEjecucion {
@@ -3014,6 +3116,59 @@ impl Evaluador {
                     }),
                 };
                 Ok((resultado, ControlFlujo::Ninguno))
+            },
+            
+            "jsn" => {
+                match valor {
+                    Valor::Texto(s) => {
+                        // Intentar parsear el JSON
+                        match serde_json::from_str::<serde_json::Value>(s) {
+                            Ok(valor_json) => {
+                                // Convertir el valor JSON a nuestro tipo HashMap
+                                let mapa = self.convertir_json_value_a_hashmap(valor_json)?;
+                                Ok((Valor::Json(mapa), ControlFlujo::Ninguno))
+                            },
+                            Err(_) => Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "No se puede convertir cadena a JSON: formato inválido".to_string(),
+                            }),
+                        }
+                    },
+                    _ => Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("No se puede convertir {} a JSON", valor.tipo_como_cadena()),
+                    }),
+                }
+            },
+            
+            "lista" => {
+                match valor {
+                    Valor::Texto(s) => {
+                        // Dividir por comas y crear lista
+                        let elementos: Vec<Valor> = s.split(',')
+                            .map(|elemento| {
+                                let trimmed = elemento.trim();
+                                // Intentar convertir a número si es posible
+                                if let Ok(entero) = trimmed.parse::<i64>() {
+                                    Valor::Entero(entero)
+                                } else if let Ok(numero) = trimmed.parse::<f64>() {
+                                    Valor::Numero(numero)
+                                } else if trimmed.eq_ignore_ascii_case("verdadero") {
+                                    Valor::Log(true)
+                                } else if trimmed.eq_ignore_ascii_case("falso") {
+                                    Valor::Log(false)
+                                } else {
+                                    Valor::Texto(trimmed.to_string())
+                                }
+                            })
+                            .collect();
+                        Ok((Valor::Lista(elementos), ControlFlujo::Ninguno))
+                    },
+                    _ => Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("No se puede convertir {} a lista", valor.tipo_como_cadena()),
+                    }),
+                }
             },
             
             "mayuscula" => {
@@ -5339,6 +5494,62 @@ impl Evaluador {
             (Valor::Entero(a), Valor::Numero(b)) => *a as f64 == *b,
             (Valor::Numero(a), Valor::Entero(b)) => *a == *b as f64,
             _ => false,
+        }
+    }
+    
+    /// Convierte un valor JSON de serde_json a nuestro HashMap interno
+    fn convertir_json_value_a_hashmap(&self, valor: serde_json::Value) -> ResultadoQuetzal<HashMap<String, Valor>> {
+        let mut mapa = HashMap::new();
+        
+        match valor {
+            serde_json::Value::Object(objeto) => {
+                for (clave, valor_json) in objeto {
+                    let valor_quetzal = self.convertir_json_value_a_valor(valor_json)?;
+                    mapa.insert(clave, valor_quetzal);
+                }
+                Ok(mapa)
+            },
+            _ => Err(ErrorQuetzal::ErrorConversion {
+                linea: 0,
+                mensaje: "El JSON debe ser un objeto".to_string(),
+            }),
+        }
+    }
+    
+    /// Convierte un valor JSON de serde_json a nuestro tipo Valor
+    fn convertir_json_value_a_valor(&self, valor: serde_json::Value) -> ResultadoQuetzal<Valor> {
+        match valor {
+            serde_json::Value::Null => Ok(Valor::Vacio),
+            serde_json::Value::Bool(b) => Ok(Valor::Log(b)),
+            serde_json::Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    Ok(Valor::Entero(i))
+                } else if let Some(f) = n.as_f64() {
+                    Ok(Valor::Numero(f))
+                } else {
+                    Err(ErrorQuetzal::ErrorConversion {
+                        linea: 0,
+                        mensaje: "Número JSON fuera del rango soportado".to_string(),
+                    })
+                }
+            },
+            serde_json::Value::String(s) => Ok(Valor::Texto(s)),
+            serde_json::Value::Array(arr) => {
+                let mut lista = Vec::new();
+                for elemento in arr {
+                    let valor_quetzal = self.convertir_json_value_a_valor(elemento)?;
+                    lista.push(valor_quetzal);
+                }
+                Ok(Valor::Lista(lista))
+            },
+            serde_json::Value::Object(objeto) => {
+                let mut mapa = HashMap::new();
+                for (clave, valor_json) in objeto {
+                    let valor_quetzal = self.convertir_json_value_a_valor(valor_json)?;
+                    mapa.insert(clave, valor_quetzal);
+                }
+                Ok(Valor::Json(mapa))
+            },
         }
     }
 }

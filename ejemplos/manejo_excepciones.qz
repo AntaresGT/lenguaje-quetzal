@@ -14,7 +14,7 @@ número dividir(número numerador, número denominador){
 intentar {
     número resultado = dividir(10, 0)
     consola.imprimir("Resultado: " + resultado)
-} capturar (excepción e){
+} capturar (excepcion e){
     // Obtenemos el mensaje de la excepción y lo imprimimos en la consola
     consola.imprimir(e.mensaje)
     // También podemos imprimir la pila de llamadas para ver dónde ocurrió la excepción

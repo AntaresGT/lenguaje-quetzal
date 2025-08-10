@@ -417,13 +417,49 @@ impl AnalizadorSintactico {
             pos += 1;
         }
         
-        // Debe haber un tipo de dato
-        if pos >= self.tokens.len() || !self.es_tipo_dato(&self.tokens[pos].tipo) {
+        // Debe haber un tipo de dato o identificador (para tipos personalizados)
+        if pos >= self.tokens.len() {
             return false;
         }
-        pos += 1;
         
-        // Debe haber un identificador
+        let es_tipo_valido = self.es_tipo_dato(&self.tokens[pos].tipo) || 
+                            matches!(self.tokens[pos].tipo, TipoToken::Identificador(_));
+        
+        if !es_tipo_valido {
+            return false;
+        }
+        
+        // Si es un tipo básico, avanzar
+        if self.es_tipo_dato(&self.tokens[pos].tipo) {
+            pos += 1;
+            
+            // Si es lista, verificar si hay parámetros genéricos
+            if matches!(self.tokens[pos - 1].tipo, TipoToken::TipoLista) {
+                if pos < self.tokens.len() && matches!(self.tokens[pos].tipo, TipoToken::Menor) {
+                    pos += 1; // Saltar <
+                    
+                    // Saltar el tipo interno (puede ser otro tipo o identificador)
+                    if pos < self.tokens.len() && 
+                       (self.es_tipo_dato(&self.tokens[pos].tipo) || 
+                        matches!(self.tokens[pos].tipo, TipoToken::Identificador(_))) {
+                        pos += 1;
+                    } else {
+                        return false;
+                    }
+                    
+                    // Debe haber >
+                    if pos >= self.tokens.len() || !matches!(self.tokens[pos].tipo, TipoToken::Mayor) {
+                        return false;
+                    }
+                    pos += 1;
+                }
+            }
+        } else {
+            // Es un identificador (tipo personalizado)
+            pos += 1;
+        }
+        
+        // Debe haber un identificador (nombre de función)
         if pos >= self.tokens.len() || !matches!(self.tokens[pos].tipo, TipoToken::Identificador(_)) {
             return false;
         }
@@ -440,27 +476,8 @@ impl AnalizadorSintactico {
         // Verificar si es asíncrona
         let es_asincrona = self.coincidir(&TipoToken::Asincrono);
         
-        // Tipo de retorno
-        let tipo_retorno = if self.es_tipo_dato(&self.token_actual().tipo) {
-            match &self.token_actual().tipo {
-                TipoToken::TipoVacio => { self.avanzar(); "vacio".to_string() },
-                TipoToken::TipoEntero => { self.avanzar(); "entero".to_string() },
-                TipoToken::TipoNumero => { self.avanzar(); "número".to_string() },
-                TipoToken::TipoTexto => { self.avanzar(); "texto".to_string() },
-                TipoToken::TipoLog => { self.avanzar(); "log".to_string() },
-                TipoToken::TipoLista => { self.avanzar(); "lista".to_string() },
-                TipoToken::TipoJson => { self.avanzar(); "jsn".to_string() },
-                _ => return Err(ErrorQuetzal::ErrorSintaxis {
-                    linea: self.token_actual().linea,
-                    mensaje: "Se esperaba un tipo de dato para la función".to_string(),
-                }),
-            }
-        } else {
-            return Err(ErrorQuetzal::ErrorSintaxis {
-                linea: self.token_actual().linea,
-                mensaje: "Se esperaba un tipo de retorno para la función".to_string(),
-            });
-        };
+        // Tipo de retorno con soporte para genéricos
+        let tipo_retorno = self.parsear_tipo()?;
         
         // Nombre de la función
         let nombre = if let TipoToken::Identificador(nom) = &self.token_actual().tipo {
@@ -667,62 +684,8 @@ impl AnalizadorSintactico {
     
     /// Analiza un parámetro de función
     fn parametro_funcion(&mut self) -> ResultadoQuetzal<Parametro> {
-        // Tipo del parámetro
-        let tipo_dato = if self.es_tipo_dato(&self.token_actual().tipo) {
-            match &self.token_actual().tipo {
-                TipoToken::TipoVacio => { self.avanzar(); "vacio".to_string() },
-                TipoToken::TipoEntero => { self.avanzar(); "entero".to_string() },
-                TipoToken::TipoNumero => { self.avanzar(); "número".to_string() },
-                TipoToken::TipoTexto => { self.avanzar(); "texto".to_string() },
-                TipoToken::TipoLog => { self.avanzar(); "log".to_string() },
-                TipoToken::TipoLista => { 
-                    self.avanzar(); 
-                    // Verificar si hay un tipo genérico <tipo>
-                    if self.coincidir(&TipoToken::Menor) {
-                        // Leer el tipo interno
-                        let tipo_interno = if self.es_tipo_dato(&self.token_actual().tipo) {
-                            match &self.token_actual().tipo {
-                                TipoToken::TipoEntero => { self.avanzar(); "entero" },
-                                TipoToken::TipoNumero => { self.avanzar(); "número" },
-                                TipoToken::TipoTexto => { self.avanzar(); "texto" },
-                                TipoToken::TipoLog => { self.avanzar(); "log" },
-                                _ => return Err(ErrorQuetzal::ErrorSintaxis {
-                                    linea: self.token_actual().linea,
-                                    mensaje: "Tipo genérico no válido para lista en parámetro".to_string(),
-                                }),
-                            }
-                        } else {
-                            return Err(ErrorQuetzal::ErrorSintaxis {
-                                linea: self.token_actual().linea,
-                                mensaje: "Se esperaba un tipo para la lista en parámetro".to_string(),
-                            });
-                        };
-                        
-                        // Esperar el cierre >
-                        if !self.coincidir(&TipoToken::Mayor) {
-                            return Err(ErrorQuetzal::ErrorSintaxis {
-                                linea: self.token_actual().linea,
-                                mensaje: "Se esperaba '>' después del tipo de lista en parámetro".to_string(),
-                            });
-                        }
-                        
-                        format!("lista<{}>", tipo_interno)
-                    } else {
-                        "lista".to_string()
-                    }
-                },
-                TipoToken::TipoJson => { self.avanzar(); "jsn".to_string() },
-                _ => return Err(ErrorQuetzal::ErrorSintaxis {
-                    linea: self.token_actual().linea,
-                    mensaje: "Se esperaba un tipo de dato para el parámetro".to_string(),
-                }),
-            }
-        } else {
-            return Err(ErrorQuetzal::ErrorSintaxis {
-                linea: self.token_actual().linea,
-                mensaje: "Se esperaba un tipo de dato para el parámetro".to_string(),
-            });
-        };
+        // Tipo del parámetro con soporte para genéricos
+        let tipo_dato = self.parsear_tipo()?;
         
         // Verificar si es variable (antes era mutable)
         let es_variable = self.coincidir(&TipoToken::Var);
@@ -1773,6 +1736,12 @@ impl AnalizadorSintactico {
                             if !self.coincidir(&TipoToken::Coma) {
                                 break;
                             }
+                            
+                            // Permitir comas finales: si después de la coma viene '}'
+                            // entonces salir del bucle sin error
+                            if self.verificar(&TipoToken::LlaveCierra) {
+                                break;
+                            }
                         }
                     }
                     
@@ -1867,6 +1836,57 @@ impl AnalizadorSintactico {
             TipoToken::TipoTexto | TipoToken::TipoLog | TipoToken::TipoLista |
             TipoToken::TipoJson
         )
+    }
+    
+    /// Parsea un tipo de dato, incluyendo tipos genéricos como lista<entero>
+    fn parsear_tipo(&mut self) -> ResultadoQuetzal<String> {
+        if !self.es_tipo_dato(&self.token_actual().tipo) {
+            // Verificar si es un tipo de objeto personalizado (identificador)
+            if let TipoToken::Identificador(nombre_tipo) = &self.token_actual().tipo {
+                let tipo = nombre_tipo.clone();
+                self.avanzar();
+                return Ok(tipo);
+            } else {
+                return Err(ErrorQuetzal::ErrorSintaxis {
+                    linea: self.token_actual().linea,
+                    mensaje: "Se esperaba un tipo de dato".to_string(),
+                });
+            }
+        }
+        
+        let tipo_base = match &self.token_actual().tipo {
+            TipoToken::TipoVacio => { self.avanzar(); "vacio".to_string() },
+            TipoToken::TipoEntero => { self.avanzar(); "entero".to_string() },
+            TipoToken::TipoNumero => { self.avanzar(); "número".to_string() },
+            TipoToken::TipoTexto => { self.avanzar(); "texto".to_string() },
+            TipoToken::TipoLog => { self.avanzar(); "log".to_string() },
+            TipoToken::TipoJson => { self.avanzar(); "jsn".to_string() },
+            TipoToken::TipoLista => {
+                self.avanzar();
+                
+                // Verificar si hay parámetros genéricos <tipo>
+                if self.coincidir(&TipoToken::Menor) {
+                    let tipo_interno = self.parsear_tipo()?;
+                    
+                    if !self.coincidir(&TipoToken::Mayor) {
+                        return Err(ErrorQuetzal::ErrorSintaxis {
+                            linea: self.token_actual().linea,
+                            mensaje: "Se esperaba '>' después del tipo de lista".to_string(),
+                        });
+                    }
+                    
+                    format!("lista<{}>", tipo_interno)
+                } else {
+                    "lista".to_string()
+                }
+            },
+            _ => return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.token_actual().linea,
+                mensaje: "Tipo de dato no reconocido".to_string(),
+            }),
+        };
+        
+        Ok(tipo_base)
     }
     
     /// Verifica si el siguiente token es una asignación
@@ -2014,7 +2034,12 @@ impl AnalizadorSintactico {
                 self.avanzar();
             }
             
-            // Si hay identificador seguido de 'cada', es foreach
+            // Saltar 'var' si existe
+            if self.verificar(&TipoToken::Var) {
+                self.avanzar();
+            }
+            
+            // Si hay identificador seguido de 'cada' o 'en', es foreach
             if let TipoToken::Identificador(_) = &self.token_actual().tipo {
                 self.avanzar();
                 if self.verificar(&TipoToken::Cada) || self.verificar(&TipoToken::En) {
@@ -2044,6 +2069,9 @@ impl AnalizadorSintactico {
                 } else {
                     None
                 };
+                
+                // Verificar si es variable (var)
+                let _es_variable = self.coincidir(&TipoToken::Var);
                 
                 // Variable del bucle
                 let variable = if let TipoToken::Identificador(nom) = &self.token_actual().tipo {

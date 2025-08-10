@@ -22,7 +22,7 @@ jsn var persona = {
         }
     ],
     telefonos: ["555-1234", "555-5678"],
-    activo: verdadero,
+    activo: verdadero
 }
 
 // Acceso directo a propiedades

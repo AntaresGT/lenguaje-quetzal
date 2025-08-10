@@ -2391,7 +2391,9 @@ impl Evaluador {
                     });
                 }
                 use base64::{Engine as _, engine::general_purpose};
-                match general_purpose::STANDARD.decode(cadena) {
+                // Eliminar espacios y caracteres de nueva línea antes de decodificar
+                let cadena_limpia = cadena.trim().replace(" ", "");
+                match general_purpose::STANDARD.decode(&cadena_limpia) {
                     Ok(bytes) => match String::from_utf8(bytes) {
                         Ok(resultado) => Ok((Valor::Texto(resultado), ControlFlujo::Ninguno)),
                         Err(_) => Err(ErrorQuetzal::ErrorEjecucion {
@@ -2401,7 +2403,7 @@ impl Evaluador {
                     },
                     Err(_) => Err(ErrorQuetzal::ErrorEjecucion {
                         linea: 0,
-                        mensaje: "Error al decodificar base64: formato inválido".to_string(),
+                        mensaje: "Cadena Base64 inválida".to_string(),
                     }),
                 }
             },
@@ -2516,6 +2518,188 @@ impl Evaluador {
                 }
                 Ok((Valor::Texto(cadena.to_lowercase()), ControlFlujo::Ninguno))
             },
+            
+            "encontrar" => {
+                if argumentos.len() != 1 {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'encontrar' requiere exactamente un argumento".to_string(),
+                    });
+                }
+                let buscar = argumentos[0].a_cadena();
+                let posicion = match cadena.find(&buscar) {
+                    Some(pos) => pos as i64,
+                    None => -1,
+                };
+                Ok((Valor::Entero(posicion), ControlFlujo::Ninguno))
+            },
+            
+            "reemplazar_primero" => {
+                if argumentos.len() != 2 {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'reemplazar_primero' requiere exactamente dos argumentos".to_string(),
+                    });
+                }
+                let buscar = argumentos[0].a_cadena();
+                let reemplazar = argumentos[1].a_cadena();
+                let resultado = cadena.replacen(&buscar, &reemplazar, 1);
+                Ok((Valor::Texto(resultado), ControlFlujo::Ninguno))
+            },
+            
+
+            
+            "subtexto" => {
+                if argumentos.len() != 2 {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'subtexto' requiere exactamente dos argumentos".to_string(),
+                    });
+                }
+                let inicio = match &argumentos[0] {
+                    Valor::Entero(i) => *i as usize,
+                    _ => return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El primer argumento de 'subtexto' debe ser un entero".to_string(),
+                    }),
+                };
+                let fin = match &argumentos[1] {
+                    Valor::Entero(i) => *i as usize,
+                    _ => return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El segundo argumento de 'subtexto' debe ser un entero".to_string(),
+                    }),
+                };
+                
+                let chars: Vec<char> = cadena.chars().collect();
+                if inicio >= chars.len() || fin > chars.len() || inicio >= fin {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "Índices de subtexto fuera de rango".to_string(),
+                    });
+                }
+                
+                let resultado: String = chars[inicio..fin].iter().collect();
+                Ok((Valor::Texto(resultado), ControlFlujo::Ninguno))
+            },
+            
+            "izquierda" => {
+                if argumentos.len() != 1 {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'izquierda' requiere exactamente un argumento".to_string(),
+                    });
+                }
+                let cantidad = match &argumentos[0] {
+                    Valor::Entero(i) => *i as usize,
+                    _ => return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El argumento de 'izquierda' debe ser un entero".to_string(),
+                    }),
+                };
+                
+                let chars: Vec<char> = cadena.chars().collect();
+                let resultado: String = chars.iter().take(cantidad).collect();
+                Ok((Valor::Texto(resultado), ControlFlujo::Ninguno))
+            },
+            
+            "derecha" => {
+                if argumentos.len() != 1 {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'derecha' requiere exactamente un argumento".to_string(),
+                    });
+                }
+                let cantidad = match &argumentos[0] {
+                    Valor::Entero(i) => *i as usize,
+                    _ => return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El argumento de 'derecha' debe ser un entero".to_string(),
+                    }),
+                };
+                
+                let chars: Vec<char> = cadena.chars().collect();
+                let inicio = if cantidad >= chars.len() { 0 } else { chars.len() - cantidad };
+                let resultado: String = chars[inicio..].iter().collect();
+                Ok((Valor::Texto(resultado), ControlFlujo::Ninguno))
+            },
+            
+            "es_numero" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'es_numero' no acepta argumentos".to_string(),
+                    });
+                }
+                let es_numero = cadena.parse::<f64>().is_ok();
+                Ok((Valor::Log(es_numero), ControlFlujo::Ninguno))
+            },
+            
+            "es_entero" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'es_entero' no acepta argumentos".to_string(),
+                    });
+                }
+                let es_entero = cadena.parse::<i64>().is_ok();
+                Ok((Valor::Log(es_entero), ControlFlujo::Ninguno))
+            },
+            
+            "es_alfanumerico" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'es_alfanumerico' no acepta argumentos".to_string(),
+                    });
+                }
+                let es_alfanumerico = cadena.chars().all(|c| c.is_alphanumeric());
+                Ok((Valor::Log(es_alfanumerico), ControlFlujo::Ninguno))
+            },
+            
+            "a_base64" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'a_base64' no acepta argumentos".to_string(),
+                    });
+                }
+                use base64::{Engine as _, engine::general_purpose};
+                let resultado = general_purpose::STANDARD.encode(cadena.as_bytes());
+                Ok((Valor::Texto(resultado), ControlFlujo::Ninguno))
+            },
+            
+
+            
+            "a_url" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'a_url' no acepta argumentos".to_string(),
+                    });
+                }
+                let resultado = urlencoding::encode(cadena).to_string();
+                Ok((Valor::Texto(resultado), ControlFlujo::Ninguno))
+            },
+            
+            "decodificar_url" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'decodificar_url' no acepta argumentos".to_string(),
+                    });
+                }
+                match urlencoding::decode(cadena) {
+                    Ok(resultado) => Ok((Valor::Texto(resultado.to_string()), ControlFlujo::Ninguno)),
+                    Err(_) => Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "Error al decodificar URL: formato inválido".to_string(),
+                    }),
+                }
+            },
+            
+            
+
             
             _ => Err(ErrorQuetzal::ErrorEjecucion {
                 linea: 0,
@@ -2933,7 +3117,9 @@ impl Evaluador {
                     "decodificar_base64" => {
                         // Implementación básica de base64
                         use base64::Engine;
-                        match base64::engine::general_purpose::STANDARD.decode(cadena) {
+                        // Eliminar espacios y caracteres de nueva línea antes de decodificar
+                        let cadena_limpia = cadena.trim().replace(" ", "");
+                        match base64::engine::general_purpose::STANDARD.decode(&cadena_limpia) {
                             Ok(decoded) => {
                                 match String::from_utf8(decoded) {
                                     Ok(s) => Ok((Valor::Texto(s), ControlFlujo::Ninguno)),
@@ -3868,7 +4054,9 @@ impl Evaluador {
             "decodificar_base64" => {
                 if let Valor::Texto(s) = valor {
                     use base64::{Engine as _, engine::general_purpose};
-                    match general_purpose::STANDARD.decode(s) {
+                    // Eliminar espacios y caracteres de nueva línea antes de decodificar
+                    let cadena_limpia = s.trim().replace(" ", "");
+                    match general_purpose::STANDARD.decode(&cadena_limpia) {
                         Ok(bytes) => match String::from_utf8(bytes) {
                             Ok(decoded) => Ok((Valor::Texto(decoded), ControlFlujo::Ninguno)),
                             Err(_) => Err(ErrorQuetzal::ErrorEjecucion {
@@ -3977,48 +4165,85 @@ impl Evaluador {
             },
             
             "buscar_ultimo" => {
-                if let Valor::Lista(lista) = valor {
-                    if argumentos.len() != 1 {
-                        return Err(ErrorQuetzal::ErrorEjecucion {
-                            linea,
-                            mensaje: "El método 'buscar_ultimo' requiere exactamente un argumento".to_string(),
-                        });
-                    }
-                    let elemento_buscar = &argumentos[0];
-                    for (indice, elemento) in lista.iter().enumerate().rev() {
-                        if self.valores_son_iguales_simple(elemento, elemento_buscar) {
-                            return Ok((Valor::Entero(indice as i64), ControlFlujo::Ninguno));
+                match valor {
+                    Valor::Lista(lista) => {
+                        if argumentos.len() != 1 {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El método 'buscar_ultimo' requiere exactamente un argumento".to_string(),
+                            });
                         }
-                    }
-                    Ok((Valor::Entero(-1), ControlFlujo::Ninguno))
-                } else {
-                    Err(ErrorQuetzal::ErrorEjecucion {
+                        let elemento_buscar = &argumentos[0];
+                        for (indice, elemento) in lista.iter().enumerate().rev() {
+                            if self.valores_son_iguales_simple(elemento, elemento_buscar) {
+                                return Ok((Valor::Entero(indice as i64), ControlFlujo::Ninguno));
+                            }
+                        }
+                        Ok((Valor::Entero(-1), ControlFlujo::Ninguno))
+                    },
+                    Valor::Texto(cadena) => {
+                        if argumentos.len() != 1 {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El método 'buscar_ultimo' requiere exactamente un argumento".to_string(),
+                            });
+                        }
+                        let buscar = argumentos[0].a_cadena();
+                        let posicion = match cadena.rfind(&buscar) {
+                            Some(pos) => pos as i64,
+                            None => -1,
+                        };
+                        Ok((Valor::Entero(posicion), ControlFlujo::Ninguno))
+                    },
+                    _ => Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
-                        mensaje: format!("El método 'buscar_ultimo' solo es válido para listas"),
+                        mensaje: format!("El método 'buscar_ultimo' solo es válido para listas y cadenas"),
                     })
                 }
             },
             
             "contar" => {
-                if let Valor::Lista(lista) = valor {
-                    if argumentos.len() != 1 {
-                        return Err(ErrorQuetzal::ErrorEjecucion {
-                            linea,
-                            mensaje: "El método 'contar' requiere exactamente un argumento".to_string(),
-                        });
-                    }
-                    let elemento_buscar = &argumentos[0];
-                    let mut contador = 0i64;
-                    for elemento in lista {
-                        if self.valores_son_iguales_simple(elemento, elemento_buscar) {
-                            contador += 1;
+                match valor {
+                    Valor::Lista(lista) => {
+                        if argumentos.len() != 1 {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El método 'contar' requiere exactamente un argumento".to_string(),
+                            });
                         }
-                    }
-                    Ok((Valor::Entero(contador), ControlFlujo::Ninguno))
-                } else {
-                    Err(ErrorQuetzal::ErrorEjecucion {
+                        let elemento_buscar = &argumentos[0];
+                        let mut contador = 0i64;
+                        for elemento in lista {
+                            if self.valores_son_iguales_simple(elemento, elemento_buscar) {
+                                contador += 1;
+                            }
+                        }
+                        Ok((Valor::Entero(contador), ControlFlujo::Ninguno))
+                    },
+                    Valor::Texto(cadena) => {
+                        if argumentos.len() != 1 {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El método 'contar' requiere exactamente un argumento".to_string(),
+                            });
+                        }
+                        let buscar = argumentos[0].a_cadena();
+                        let mut cuenta = 0;
+                        let mut inicio = 0;
+                        
+                        while let Some(pos) = cadena[inicio..].find(&buscar) {
+                            cuenta += 1;
+                            inicio += pos + buscar.len();
+                            if inicio >= cadena.len() {
+                                break;
+                            }
+                        }
+                        
+                        Ok((Valor::Entero(cuenta), ControlFlujo::Ninguno))
+                    },
+                    _ => Err(ErrorQuetzal::ErrorEjecucion {
                         linea,
-                        mensaje: format!("El método 'contar' solo es válido para listas"),
+                        mensaje: format!("El método 'contar' solo es válido para listas y cadenas"),
                     })
                 }
             },

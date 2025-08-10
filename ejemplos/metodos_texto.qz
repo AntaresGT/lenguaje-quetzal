@@ -195,4 +195,4 @@ texto tabulado")
 
 // Interpolacion con escape de llaves
 entero numero_especial = 42
-consola.mostrar(t"El valor es {numero_especial} y esto son llaves literales: \\{y}")
+consola.mostrar(t"El valor es {numero_especial} y esto son llaves literales: \\{valor2}")

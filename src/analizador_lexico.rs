@@ -3,6 +3,15 @@
 
 use crate::errores::{ErrorQuetzal, ResultadoQuetzal};
 
+/// Segmento de texto interpolado
+#[derive(Debug, Clone, PartialEq)]
+pub enum SegmentoTexto {
+    /// Texto literal sin interpolación
+    TextoLiteral(String),
+    /// Expresión a interpolar (contenido entre llaves)
+    Expresion(String),
+}
+
 /// Tipos de tokens del lenguaje Quetzal
 #[derive(Debug, Clone, PartialEq)]
 pub enum TipoToken {
@@ -111,6 +120,9 @@ pub enum TipoToken {
     
     // Concatenación de cadenas
     ConcatenacionVar,   // c"..."
+    
+    // Interpolación de texto
+    InterpolacionTexto(Vec<SegmentoTexto>), // t"texto {expresion} texto"
     
     // Literales
     LiteralEntero(i64),
@@ -352,6 +364,12 @@ impl AnalizadorLexico {
                 resultado.tipo = TipoToken::ConcatenacionVar;
                 resultado.lexema = format!("c{}", resultado.lexema);
                 Ok(resultado)
+            },
+            
+            // Interpolación de texto
+            't' if self.mirar() == Some('"') => {
+                self.avanzar(); // Saltar la 't'
+                self.interpolacion_texto()
             },
             
             // Números
@@ -693,6 +711,170 @@ impl AnalizadorLexico {
                 break;
             }
         }
+    }
+    
+    /// Procesa interpolación de texto (t"texto {expresion} texto")
+    fn interpolacion_texto(&mut self) -> ResultadoQuetzal<Token> {
+        let linea = self.linea_actual;
+        let columna = self.columna_actual - 2; // Retroceder por 't"'
+        let mut segmentos = Vec::new();
+        let mut lexema_completo = String::from("t\"");
+        
+        // Avanzar para pasar la comilla inicial
+        self.avanzar(); // Pasar la "
+        
+        while self.mirar() != Some('"') && !self.esta_al_final() {
+            let mut texto_actual = String::new();
+            
+            // Leer texto literal hasta encontrar { o el final
+            while let Some(c) = self.mirar() {
+                if c == '"' {
+                    break;
+                } else if c == '{' {
+                    break;
+                } else if c == '\\' {
+                    // Manejar secuencias de escape
+                    self.avanzar(); // Consumir \
+                    if let Some(escape) = self.mirar() {
+                        match escape {
+                            '"' => {
+                                texto_actual.push('"');
+                                lexema_completo.push('\\');
+                                lexema_completo.push('"');
+                                self.avanzar();
+                            },
+                            '\\' => {
+                                texto_actual.push('\\');
+                                lexema_completo.push('\\');
+                                lexema_completo.push('\\');
+                                self.avanzar();
+                            },
+                            'n' => {
+                                texto_actual.push('\n');
+                                lexema_completo.push('\\');
+                                lexema_completo.push('n');
+                                self.avanzar();
+                            },
+                            't' => {
+                                texto_actual.push('\t');
+                                lexema_completo.push('\\');
+                                lexema_completo.push('t');
+                                self.avanzar();
+                            },
+                            'r' => {
+                                texto_actual.push('\r');
+                                lexema_completo.push('\\');
+                                lexema_completo.push('r');
+                                self.avanzar();
+                            },
+                            '{' => {
+                                texto_actual.push('{');
+                                lexema_completo.push('\\');
+                                lexema_completo.push('{');
+                                self.avanzar();
+                            },
+                            '}' => {
+                                texto_actual.push('}');
+                                lexema_completo.push('\\');
+                                lexema_completo.push('}');
+                                self.avanzar();
+                            },
+                            _ => {
+                                return Err(ErrorQuetzal::ErrorSintaxis {
+                                    linea: self.linea_actual,
+                                    mensaje: format!("Secuencia de escape no válida en interpolación: \\{}", escape),
+                                });
+                            }
+                        }
+                    } else {
+                        return Err(ErrorQuetzal::ErrorSintaxis {
+                            linea: self.linea_actual,
+                            mensaje: "Secuencia de escape incompleta en interpolación".to_string(),
+                        });
+                    }
+                } else {
+                    if c == '\n' {
+                        self.linea_actual += 1;
+                        self.columna_actual = 1;
+                    }
+                    texto_actual.push(c);
+                    lexema_completo.push(c);
+                    self.avanzar();
+                }
+            }
+            
+            // Si tenemos texto literal, agregarlo como segmento
+            if !texto_actual.is_empty() {
+                segmentos.push(SegmentoTexto::TextoLiteral(texto_actual));
+            }
+            
+            // Si encontramos una llave de apertura, procesar expresión
+            if self.mirar() == Some('{') {
+                self.avanzar(); // Consumir {
+                lexema_completo.push('{');
+                
+                let mut expresion = String::new();
+                let mut nivel_llaves = 1;
+                
+                // Leer la expresión dentro de las llaves
+                while nivel_llaves > 0 && !self.esta_al_final() {
+                    if let Some(c) = self.mirar() {
+                        if c == '{' {
+                            nivel_llaves += 1;
+                        } else if c == '}' {
+                            nivel_llaves -= 1;
+                        }
+                        
+                        if nivel_llaves > 0 {
+                            if c == '\n' {
+                                self.linea_actual += 1;
+                                self.columna_actual = 1;
+                            }
+                            expresion.push(c);
+                            lexema_completo.push(c);
+                        } else {
+                            lexema_completo.push(c); // Incluir la } de cierre
+                        }
+                        
+                        self.avanzar();
+                    } else {
+                        return Err(ErrorQuetzal::ErrorSintaxis {
+                            linea: self.linea_actual,
+                            mensaje: "Expresión de interpolación sin cerrar (falta '}')".to_string(),
+                        });
+                    }
+                }
+                
+                // Agregar la expresión como segmento
+                if !expresion.trim().is_empty() {
+                    segmentos.push(SegmentoTexto::Expresion(expresion.trim().to_string()));
+                } else {
+                    return Err(ErrorQuetzal::ErrorSintaxis {
+                        linea: self.linea_actual,
+                        mensaje: "Expresión de interpolación vacía".to_string(),
+                    });
+                }
+            }
+        }
+        
+        // Verificar que la cadena esté cerrada
+        if self.esta_al_final() {
+            return Err(ErrorQuetzal::ErrorSintaxis {
+                linea: self.linea_actual,
+                mensaje: "Cadena de interpolación sin cerrar".to_string(),
+            });
+        }
+        
+        // Consumir la comilla de cierre
+        self.avanzar(); // Pasar la "
+        lexema_completo.push('"');
+        
+        Ok(Token::nuevo(
+            TipoToken::InterpolacionTexto(segmentos),
+            lexema_completo,
+            linea,
+            columna,
+        ))
     }
 }
 

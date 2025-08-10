@@ -1,7 +1,7 @@
 // Evaluador del AST para el lenguaje Quetzal
 // Ejecuta el Árbol de Sintaxis Abstracta y maneja el entorno de ejecución
 
-use crate::analizador_sintactico::{Nodo, Parametro};
+use crate::analizador_sintactico::{Nodo, Parametro, SegmentoInterpolacion};
 use crate::tipos_datos::{Valor, Variable, TipoVariable};
 use crate::errores::{ErrorQuetzal, ResultadoQuetzal};
 use crate::consola::CONSOLA_GLOBAL;
@@ -569,6 +569,10 @@ impl Evaluador {
             
             Nodo::Literal(valor) => {
                 Ok((valor.clone(), ControlFlujo::Ninguno))
+            },
+            
+            Nodo::InterpolacionTexto { segmentos, linea } => {
+                self.evaluar_interpolacion_texto(segmentos, *linea, entorno)
             },
             
             Nodo::Identificador(nombre) => {
@@ -2471,6 +2475,26 @@ impl Evaluador {
                     })
                     .collect();
                 Ok((Valor::Lista(elementos), ControlFlujo::Ninguno))
+            },
+            
+            "mayusculas" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'mayusculas' no acepta argumentos".to_string(),
+                    });
+                }
+                Ok((Valor::Texto(cadena.to_uppercase()), ControlFlujo::Ninguno))
+            },
+            
+            "minusculas" => {
+                if !argumentos.is_empty() {
+                    return Err(ErrorQuetzal::ErrorEjecucion {
+                        linea: 0,
+                        mensaje: "El método 'minusculas' no acepta argumentos".to_string(),
+                    });
+                }
+                Ok((Valor::Texto(cadena.to_lowercase()), ControlFlujo::Ninguno))
             },
             
             _ => Err(ErrorQuetzal::ErrorEjecucion {
@@ -4515,7 +4539,12 @@ impl Evaluador {
                 }
             },
 
+            // Delegar métodos específicos de texto a evaluar_metodo_cadena
             _ => {
+                if let Valor::Texto(cadena) = valor {
+                    return self.evaluar_metodo_cadena(cadena, metodo, argumentos);
+                }
+                
                 Err(ErrorQuetzal::ErrorEjecucion {
                     linea,
                     mensaje: format!("Método '{}' no reconocido para tipo {}", metodo, valor.tipo_como_cadena()),
@@ -6372,5 +6401,91 @@ impl Evaluador {
             },
             Valor::Objeto { .. } => serde_json::Value::String("[Objeto]".to_string()), // Representación simplificada
         }
+    }
+    
+    /// Evalúa interpolación de texto combinando segmentos literales y expresiones
+    fn evaluar_interpolacion_texto(
+        &mut self, 
+        segmentos: &[SegmentoInterpolacion], 
+        linea: usize, 
+        entorno: Rc<RefCell<Entorno>>
+    ) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
+        let mut resultado = String::new();
+        
+        for segmento in segmentos {
+            match segmento {
+                SegmentoInterpolacion::TextoLiteral(texto) => {
+                    resultado.push_str(texto);
+                },
+                SegmentoInterpolacion::Expresion(expresion) => {
+                    // Evaluar la expresión
+                    let (valor, _) = self.evaluar_con_entorno(expresion, entorno.clone())?;
+                    
+                    // Convertir el valor a texto
+                    let texto_valor = match valor {
+                        Valor::Texto(s) => s,
+                        Valor::Entero(n) => n.to_string(),
+                        Valor::Numero(n) => {
+                            // Formatear números de manera limpia
+                            if n.fract() == 0.0 {
+                                format!("{}", n as i64)
+                            } else {
+                                format!("{}", n)
+                            }
+                        },
+                        Valor::Log(b) => if b { "verdadero".to_string() } else { "falso".to_string() },
+                        Valor::Lista(lista) => {
+                            // Representar listas como [elem1, elem2, ...]
+                            let elementos: Vec<String> = lista.iter().map(|v| {
+                                match v {
+                                    Valor::Texto(s) => format!("\"{}\"", s),
+                                    Valor::Entero(n) => n.to_string(),
+                                    Valor::Numero(n) => {
+                                        if n.fract() == 0.0 {
+                                            format!("{}", *n as i64)
+                                        } else {
+                                            format!("{}", n)
+                                        }
+                                    },
+                                    Valor::Log(b) => if *b { "verdadero".to_string() } else { "falso".to_string() },
+                                    _ => "[objeto complejo]".to_string(),
+                                }
+                            }).collect();
+                            format!("[{}]", elementos.join(", "))
+                        },
+                        Valor::Json(mapa) => {
+                            // Representar objetos JSON de manera simple
+                            if mapa.is_empty() {
+                                "{}".to_string()
+                            } else {
+                                let campos: Vec<String> = mapa.iter().take(3).map(|(k, v)| {
+                                    let valor_str = match v {
+                                        Valor::Texto(s) => format!("\"{}\"", s),
+                                        Valor::Entero(n) => n.to_string(),
+                                        Valor::Numero(n) => n.to_string(),
+                                        Valor::Log(b) => if *b { "verdadero".to_string() } else { "falso".to_string() },
+                                        _ => "[complejo]".to_string(),
+                                    };
+                                    format!("\"{}\": {}", k, valor_str)
+                                }).collect();
+                                
+                                if mapa.len() > 3 {
+                                    format!("{{ {}, ... }}", campos.join(", "))
+                                } else {
+                                    format!("{{ {} }}", campos.join(", "))
+                                }
+                            }
+                        },
+                        Valor::Objeto { .. } => "[Objeto]".to_string(),
+                        Valor::Vacio => "".to_string(),
+                        Valor::Nulo => "nulo".to_string(),
+                    };
+                    
+                    resultado.push_str(&texto_valor);
+                }
+            }
+        }
+        
+        Ok((Valor::Texto(resultado), ControlFlujo::Ninguno))
     }
 }

@@ -1,7 +1,7 @@
 // Analizador sintáctico para el lenguaje Quetzal
 // Convierte la secuencia de tokens en un Árbol de Sintaxis Abstracta (AST)
 
-use crate::analizador_lexico::{Token, TipoToken};
+use crate::analizador_lexico::{Token, TipoToken, SegmentoTexto};
 use crate::errores::{ErrorQuetzal, ResultadoQuetzal};
 use crate::tipos_datos::Valor;
 use std::collections::HashMap;
@@ -211,6 +211,12 @@ pub enum Nodo {
         linea: usize,
     },
     
+    // Interpolación de texto t"texto {expresion} texto"
+    InterpolacionTexto {
+        segmentos: Vec<SegmentoInterpolacion>,
+        linea: usize,
+    },
+    
     // Módulos
     DeclaracionImportar {
         elementos: Vec<ElementoImportar>,
@@ -246,6 +252,15 @@ pub struct BloqueCapturar {
     pub tipo_excepcion: String,
     pub nombre_variable: String,
     pub bloque: Nodo,
+}
+
+/// Segmento de interpolación de texto
+#[derive(Debug, Clone, PartialEq)]
+pub enum SegmentoInterpolacion {
+    /// Texto literal
+    TextoLiteral(String),
+    /// Expresión a evaluar
+    Expresion(Box<Nodo>),
 }
 
 /// Analizador sintáctico que convierte tokens en AST
@@ -1589,6 +1604,12 @@ impl AnalizadorSintactico {
                 self.avanzar();
                 Ok(Nodo::Literal(Valor::Texto(valor)))
             },
+            TipoToken::InterpolacionTexto(segmentos) => {
+                let segs = segmentos.clone();
+                let linea = self.token_actual().linea;
+                self.avanzar();
+                self.procesar_interpolacion_texto(segs, linea)
+            },
             TipoToken::Identificador(nombre) => {
                 let nom = nombre.clone();
                 self.avanzar();
@@ -2428,6 +2449,45 @@ impl AnalizadorSintactico {
         
         Ok(Nodo::Lanzar {
             excepcion,
+            linea,
+        })
+    }
+    
+    /// Procesa interpolación de texto convirtiendo segmentos en nodos
+    fn procesar_interpolacion_texto(&mut self, segmentos: Vec<SegmentoTexto>, linea: usize) -> ResultadoQuetzal<Nodo> {
+        let mut segmentos_procesados = Vec::new();
+        
+        for segmento in segmentos {
+            match segmento {
+                SegmentoTexto::TextoLiteral(texto) => {
+                    segmentos_procesados.push(SegmentoInterpolacion::TextoLiteral(texto));
+                },
+                SegmentoTexto::Expresion(expresion_str) => {
+                    // Crear un mini-analizador para la expresión
+                    let mut analizador_expresion = crate::analizador_lexico::AnalizadorLexico::nuevo(&expresion_str);
+                    let tokens_expresion = analizador_expresion.analizar().map_err(|_| {
+                        ErrorQuetzal::ErrorSintaxis {
+                            linea,
+                            mensaje: format!("Error en la expresión de interpolación: '{}'", expresion_str),
+                        }
+                    })?;
+                    
+                    // Crear un analizador sintáctico para la expresión
+                    let mut analizador_sintactico_expresion = AnalizadorSintactico::nuevo(tokens_expresion);
+                    let nodo_expresion = analizador_sintactico_expresion.expresion().map_err(|_| {
+                        ErrorQuetzal::ErrorSintaxis {
+                            linea,
+                            mensaje: format!("Error al analizar la expresión de interpolación: '{}'", expresion_str),
+                        }
+                    })?;
+                    
+                    segmentos_procesados.push(SegmentoInterpolacion::Expresion(Box::new(nodo_expresion)));
+                }
+            }
+        }
+        
+        Ok(Nodo::InterpolacionTexto {
+            segmentos: segmentos_procesados,
             linea,
         })
     }

@@ -37,3 +37,15 @@ pub mod tipo_nulo;
 
 // Módulo para tests de validación de tipos en listas tipadas
 pub mod validacion_tipos_lista;
+
+// Módulo para tests del método esta_vacia() para tipos texto
+pub mod metodo_esta_vacia_texto;
+
+// Módulo para tests del método mayusculas() para tipos texto
+pub mod metodo_mayusculas_texto;
+
+// Módulo para tests del método minusculas() para tipos texto
+pub mod metodo_minusculas_texto;
+
+// Módulo para tests de interpolación de texto
+pub mod interpolacion_texto;

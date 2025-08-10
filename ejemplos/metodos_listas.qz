@@ -4,10 +4,14 @@
 lista<texto> mi_lista = ["manzana", "banana", "cereza"]
 texto elemento = mi_lista[1]  // "banana" (índice 1)
 // Acceso por indice con índice negativo (desde el final)
-texto ultimo_elemento = mi_lista[-1]  // "cereza" (último elemento)
+texto ultimo_elemento2 = mi_lista[-1]  // "cereza" (último elemento)
 
 // Acceso seguro (evita error si el índice no existe)
-texto elemento_seguro = mi_lista[5]  // Error
+intentar {
+    texto elemento_seguro = mi_lista[5]  // Error
+} capturar(excepcion ex){
+    consola.mostrar("Error al acceder a la lista: " + ex.mensaje)
+}
 
 // Longitud de la lista
 entero longitud = mi_lista.longitud()  // 3
@@ -101,7 +105,7 @@ lista<texto> lista2 = ["C", "D"]
 lista<texto> concatenada = lista1.concatenar(lista2)  // ["A", "B", "C", "D"]
 
 // Extender una lista con otra lista
-lista<texto> lista_base = ["A", "B"]
+lista<texto> var lista_base = ["A", "B"]
 lista<texto> lista_extender = ["C", "D"]
 lista_base.extender(lista_extender)  // lista_base ahora es ["A", "B", "C", "D"]
 

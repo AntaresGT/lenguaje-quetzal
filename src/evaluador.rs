@@ -649,9 +649,11 @@ impl Evaluador {
                     args_evaluados.push(valor_arg);
                 }
                 
+                // Evaluar el objeto para obtener su valor y tipo
+                let (valor_objeto, _) = self.evaluar_con_entorno(objeto, entorno.clone())?;
+                
                 // Métodos que modifican la variable original (como agregar)
-                if metodo == "agregar" || metodo == "quitar" || metodo == "limpiar" || metodo == "insertar" || metodo == "sacar" || metodo == "sacar_ultimo" || metodo == "establecer" || metodo == "eliminar" {
-                    eprintln!("Debug - Método mutante detectado: {}", metodo);
+                if metodo == "agregar" || metodo == "quitar" || metodo == "limpiar" || metodo == "insertar" || metodo == "sacar" || metodo == "sacar_ultimo" || metodo == "establecer" || metodo == "eliminar" || metodo == "remover" || metodo == "quitar_en" || metodo == "ordenar" || metodo == "ordenar_descendente" || metodo == "extender" || (metodo == "invertir" && matches!(valor_objeto, Valor::Lista(_))) {
                     match objeto.as_ref() {
                         Nodo::Identificador(nombre_var) => {
                             return self.evaluar_metodo_mutante(nombre_var, metodo, &args_evaluados, *linea, entorno);
@@ -669,18 +671,18 @@ impl Evaluador {
                 }
                 
                 // Métodos que no modifican (como longitud, primero, ultimo, etc.) o métodos de objeto
-                let (valor_objeto_original, _) = self.evaluar_con_entorno(objeto, entorno.clone())?;
+                // Ya tenemos valor_objeto evaluado arriba, lo reutilizamos
                 
                 // Verificar si es un método de objeto que puede modificar el objeto
-                if let Valor::Objeto { .. } = valor_objeto_original {
+                if let Valor::Objeto { .. } = valor_objeto {
                     if let Nodo::Identificador(nombre_var) = objeto.as_ref() {
                         // Es un método de objeto llamado en una variable - usar versión especial que puede actualizar la variable
-                        return self.evaluar_metodo_en_valor_con_actualizacion(&valor_objeto_original, metodo, &args_evaluados, *linea, entorno, Some(nombre_var.clone()));
+                        return self.evaluar_metodo_en_valor_con_actualizacion(&valor_objeto, metodo, &args_evaluados, *linea, entorno, Some(nombre_var.clone()));
                     }
                 }
                 
                 // Para otros casos (no objetos o no variables), comportamiento normal
-                self.evaluar_metodo_en_valor(&valor_objeto_original, metodo, &args_evaluados, *linea)
+                self.evaluar_metodo_en_valor(&valor_objeto, metodo, &args_evaluados, *linea)
             },
             
             Nodo::AccesoMiembro { objeto, miembro, linea } => {
@@ -1066,10 +1068,15 @@ impl Evaluador {
                 match (&valor_objeto, &valor_indice) {
                     (Valor::Lista(lista), Valor::Entero(i)) => {
                         let indice_usize = if *i < 0 {
-                            return Err(ErrorQuetzal::ErrorEjecucion {
-                                linea: *linea,
-                                mensaje: format!("Índice negativo: {}", i),
-                            });
+                            // Índice negativo: cuenta desde el final
+                            let indice_desde_final = (-*i) as usize;
+                            if indice_desde_final > lista.len() {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea: *linea,
+                                    mensaje: format!("Índice negativo fuera de rango: {} (tamaño: {})", i, lista.len()),
+                                });
+                            }
+                            lista.len() - indice_desde_final
                         } else {
                             *i as usize
                         };
@@ -1085,16 +1092,21 @@ impl Evaluador {
                     },
                     
                     (Valor::Texto(cadena), Valor::Entero(i)) => {
+                        let chars: Vec<char> = cadena.chars().collect();
                         let indice_usize = if *i < 0 {
-                            return Err(ErrorQuetzal::ErrorEjecucion {
-                                linea: *linea,
-                                mensaje: format!("Índice negativo: {}", i),
-                            });
+                            // Índice negativo: cuenta desde el final
+                            let indice_desde_final = (-*i) as usize;
+                            if indice_desde_final > chars.len() {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea: *linea,
+                                    mensaje: format!("Índice negativo fuera de rango: {} (tamaño: {})", i, chars.len()),
+                                });
+                            }
+                            chars.len() - indice_desde_final
                         } else {
                             *i as usize
                         };
                         
-                        let chars: Vec<char> = cadena.chars().collect();
                         if indice_usize >= chars.len() {
                             return Err(ErrorQuetzal::ErrorEjecucion {
                                 linea: *linea,
@@ -1300,6 +1312,70 @@ impl Evaluador {
             "imprimir_confirmacion" => {
                 return self.evaluar_funcion_consola("consola.mostrar_confirmacion", argumentos, linea, entorno);
             },
+            "rango" => {
+                // Evaluar argumentos primero
+                let mut args_evaluados = Vec::new();
+                for arg in argumentos {
+                    let (valor_arg, _) = self.evaluar_con_entorno(arg, entorno.clone())?;
+                    args_evaluados.push(valor_arg);
+                }
+                
+                // La función rango puede recibir 1 o 2 argumentos
+                match args_evaluados.len() {
+                    1 => {
+                        // rango(n) - del 0 a n (exclusivo)
+                        if let Valor::Entero(fin) = &args_evaluados[0] {
+                            if *fin < 0 {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: "El argumento de 'rango' no puede ser negativo".to_string(),
+                                });
+                            }
+                            
+                            let mut lista = Vec::new();
+                            for i in 0..*fin {
+                                lista.push(Valor::Entero(i));
+                            }
+                            
+                            return Ok((Valor::Lista(lista), ControlFlujo::Ninguno));
+                        } else {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El argumento de 'rango' debe ser un número entero".to_string(),
+                            });
+                        }
+                    },
+                    2 => {
+                        // rango(inicio, fin) - del inicio al fin (exclusivo)
+                        if let (Valor::Entero(inicio), Valor::Entero(fin)) = (&args_evaluados[0], &args_evaluados[1]) {
+                            if *inicio > *fin {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: "El inicio del rango no puede ser mayor que el fin".to_string(),
+                                });
+                            }
+                            
+                            let mut lista = Vec::new();
+                            for i in *inicio..*fin {
+                                lista.push(Valor::Entero(i));
+                            }
+                            
+                            return Ok((Valor::Lista(lista), ControlFlujo::Ninguno));
+                        } else {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "Los argumentos de 'rango' deben ser números enteros".to_string(),
+                            });
+                        }
+                    },
+                    _ => {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "La función 'rango' requiere 1 o 2 argumentos".to_string(),
+                        });
+                    }
+                }
+            },
             _ => {}
         }
         
@@ -1332,7 +1408,7 @@ impl Evaluador {
                 }
                 
                 // Verificar si es un método que modifica la variable (mutante)
-                if nombre_metodo == "agregar" || nombre_metodo == "quitar" || nombre_metodo == "limpiar" || nombre_metodo == "insertar" || nombre_metodo == "sacar" || nombre_metodo == "sacar_ultimo" || nombre_metodo == "establecer" || nombre_metodo == "eliminar" {
+                if nombre_metodo == "agregar" || nombre_metodo == "quitar" || nombre_metodo == "limpiar" || nombre_metodo == "insertar" || nombre_metodo == "sacar" || nombre_metodo == "sacar_ultimo" || nombre_metodo == "establecer" || nombre_metodo == "eliminar" || nombre_metodo == "remover" || nombre_metodo == "quitar_en" || nombre_metodo == "ordenar" || nombre_metodo == "ordenar_descendente" || nombre_metodo == "extender" || (nombre_metodo == "invertir" && matches!(valor_variable, Valor::Lista(_))) {
                     return self.evaluar_metodo_mutante(nombre_variable, nombre_metodo, &args_evaluados, linea, entorno);
                 }
                 
@@ -4067,6 +4143,378 @@ impl Evaluador {
                 }
             },
             
+            "concatenar" => {
+                if let Valor::Lista(lista1) = valor {
+                    if argumentos.len() != 1 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'concatenar' requiere exactamente un argumento (otra lista)".to_string(),
+                        });
+                    }
+                    
+                    if let Valor::Lista(lista2) = &argumentos[0] {
+                        let mut lista_concatenada = lista1.clone();
+                        lista_concatenada.extend(lista2.iter().cloned());
+                        Ok((Valor::Lista(lista_concatenada), ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El argumento para 'concatenar' debe ser una lista".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'concatenar' solo es válido para listas"),
+                    })
+                }
+            },
+            
+            "logico" => {
+                if let Valor::Lista(lista) = valor {
+                    if !argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'logico' no acepta argumentos".to_string(),
+                        });
+                    }
+                    
+                    // Una lista es verdadera si no está vacía
+                    Ok((Valor::Log(!lista.is_empty()), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'logico' solo es válido para listas"),
+                    })
+                }
+            },
+            
+            "json" => {
+                if let Valor::Lista(lista) = valor {
+                    if !argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'json' no acepta argumentos".to_string(),
+                        });
+                    }
+                    
+                    // Convertir la lista a JSON válido
+                    let json_elementos: Vec<serde_json::Value> = lista.iter()
+                        .map(|elemento| self.valor_a_json(elemento))
+                        .collect();
+                    
+                    match serde_json::to_string(&json_elementos) {
+                        Ok(json_str) => Ok((Valor::Texto(json_str), ControlFlujo::Ninguno)),
+                        Err(_) => Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "Error al convertir la lista a JSON".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'json' solo es válido para listas"),
+                    })
+                }
+            },
+            
+            "ordenado" => {
+                if let Valor::Lista(lista) = valor {
+                    if !argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'ordenado' no acepta argumentos".to_string(),
+                        });
+                    }
+                    
+                    let mut lista_ordenada = lista.clone();
+                    lista_ordenada.sort_by(|a, b| {
+                        self.comparar_valores_para_ordenamiento(a, b)
+                    });
+                    
+                    Ok((Valor::Lista(lista_ordenada), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'ordenado' solo es válido para listas"),
+                    })
+                }
+            },
+            
+            "tomar" => {
+                if let Valor::Lista(lista) = valor {
+                    if argumentos.len() != 1 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'tomar' requiere exactamente un argumento (número de elementos)".to_string(),
+                        });
+                    }
+                    
+                    if let Valor::Entero(n) = &argumentos[0] {
+                        if *n < 0 {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El número de elementos a tomar no puede ser negativo".to_string(),
+                            });
+                        }
+                        
+                        let n_usize = *n as usize;
+                        let elementos_tomados: Vec<Valor> = lista.iter().take(n_usize).cloned().collect();
+                        Ok((Valor::Lista(elementos_tomados), ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El argumento de 'tomar' debe ser un número entero".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'tomar' solo es válido para listas"),
+                    })
+                }
+            },
+            
+            "saltar" => {
+                if let Valor::Lista(lista) = valor {
+                    if argumentos.len() != 1 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'saltar' requiere exactamente un argumento (número de elementos)".to_string(),
+                        });
+                    }
+                    
+                    if let Valor::Entero(n) = &argumentos[0] {
+                        if *n < 0 {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El número de elementos a saltar no puede ser negativo".to_string(),
+                            });
+                        }
+                        
+                        let n_usize = *n as usize;
+                        let elementos_restantes: Vec<Valor> = lista.iter().skip(n_usize).cloned().collect();
+                        Ok((Valor::Lista(elementos_restantes), ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El argumento de 'saltar' debe ser un número entero".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'saltar' solo es válido para listas"),
+                    })
+                }
+            },
+            
+            "sublista" => {
+                if let Valor::Lista(lista) = valor {
+                    if argumentos.len() != 2 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'sublista' requiere exactamente dos argumentos (inicio, fin)".to_string(),
+                        });
+                    }
+                    
+                    if let (Valor::Entero(inicio), Valor::Entero(fin)) = (&argumentos[0], &argumentos[1]) {
+                        if *inicio < 0 || *fin < 0 {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "Los índices de 'sublista' no pueden ser negativos".to_string(),
+                            });
+                        }
+                        
+                        let inicio_usize = *inicio as usize;
+                        let fin_usize = *fin as usize;
+                        
+                        if inicio_usize > lista.len() || fin_usize > lista.len() {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: format!("Índices fuera de rango para sublista (tamaño: {})", lista.len()),
+                            });
+                        }
+                        
+                        if inicio_usize > fin_usize {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El índice de inicio no puede ser mayor que el índice de fin".to_string(),
+                            });
+                        }
+                        
+                        let sublista: Vec<Valor> = lista[inicio_usize..fin_usize].to_vec();
+                        Ok((Valor::Lista(sublista), ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "Los argumentos de 'sublista' deben ser números enteros".to_string(),
+                        })
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'sublista' solo es válido para listas"),
+                    })
+                }
+            },
+            
+            "sumar" => {
+                if let Valor::Lista(lista) = valor {
+                    if !argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'sumar' no acepta argumentos".to_string(),
+                        });
+                    }
+                    
+                    if lista.is_empty() {
+                        return Ok((Valor::Entero(0), ControlFlujo::Ninguno));
+                    }
+                    
+                    let mut suma_enteros: i64 = 0;
+                    let mut suma_decimales: f64 = 0.0;
+                    let mut hay_decimales = false;
+                    
+                    for elemento in lista {
+                        match elemento {
+                            Valor::Entero(n) => {
+                                suma_enteros += n;
+                                suma_decimales += *n as f64;
+                            },
+                            Valor::Numero(n) => {
+                                suma_decimales += n;
+                                hay_decimales = true;
+                            },
+                            _ => {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: "Todos los elementos de la lista deben ser números para usar 'sumar'".to_string(),
+                                });
+                            }
+                        }
+                    }
+                    
+                    if hay_decimales {
+                        Ok((Valor::Numero(suma_decimales), ControlFlujo::Ninguno))
+                    } else {
+                        Ok((Valor::Entero(suma_enteros), ControlFlujo::Ninguno))
+                    }
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'sumar' solo es válido para listas"),
+                    })
+                }
+            },
+            
+            "promedio" => {
+                if let Valor::Lista(lista) = valor {
+                    if !argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'promedio' no acepta argumentos".to_string(),
+                        });
+                    }
+                    
+                    if lista.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "No se puede calcular el promedio de una lista vacía".to_string(),
+                        });
+                    }
+                    
+                    let mut suma: f64 = 0.0;
+                    
+                    for elemento in lista {
+                        match elemento {
+                            Valor::Entero(n) => suma += *n as f64,
+                            Valor::Numero(n) => suma += n,
+                            _ => {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: "Todos los elementos de la lista deben ser números para usar 'promedio'".to_string(),
+                                });
+                            }
+                        }
+                    }
+                    
+                    let promedio = suma / lista.len() as f64;
+                    Ok((Valor::Numero(promedio), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'promedio' solo es válido para listas"),
+                    })
+                }
+            },
+            
+            "maximo" => {
+                if let Valor::Lista(lista) = valor {
+                    if !argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'maximo' no acepta argumentos".to_string(),
+                        });
+                    }
+                    
+                    if lista.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "No se puede encontrar el máximo de una lista vacía".to_string(),
+                        });
+                    }
+                    
+                    let mut maximo = &lista[0];
+                    
+                    for elemento in lista.iter().skip(1) {
+                        if self.es_mayor_que(elemento, maximo)? {
+                            maximo = elemento;
+                        }
+                    }
+                    
+                    Ok((maximo.clone(), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'maximo' solo es válido para listas"),
+                    })
+                }
+            },
+            
+            "minimo" => {
+                if let Valor::Lista(lista) = valor {
+                    if !argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'minimo' no acepta argumentos".to_string(),
+                        });
+                    }
+                    
+                    if lista.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "No se puede encontrar el mínimo de una lista vacía".to_string(),
+                        });
+                    }
+                    
+                    let mut minimo = &lista[0];
+                    
+                    for elemento in lista.iter().skip(1) {
+                        if self.es_menor_que(elemento, minimo)? {
+                            minimo = elemento;
+                        }
+                    }
+                    
+                    Ok((minimo.clone(), ControlFlujo::Ninguno))
+                } else {
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: format!("El método 'minimo' solo es válido para listas"),
+                    })
+                }
+            },
+
             _ => {
                 Err(ErrorQuetzal::ErrorEjecucion {
                     linea,
@@ -4412,6 +4860,129 @@ impl Evaluador {
                     let valor_eliminado = mapa.remove(&clave);
                     let resultado = valor_eliminado.unwrap_or(Valor::Vacio);
                     Ok((resultado, ControlFlujo::Ninguno))
+                },
+                
+                (Valor::Lista(ref mut lista), "remover") => {
+                    if argumentos.len() != 1 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'remover' requiere exactamente un argumento (elemento a remover)".to_string(),
+                        });
+                    }
+                    
+                    let elemento_buscar = &argumentos[0];
+                    
+                    // Buscar primera ocurrencia del elemento
+                    for (indice, elemento) in lista.iter().enumerate() {
+                        if self.valores_son_iguales_simple(elemento, elemento_buscar) {
+                            let elemento_removido = lista.remove(indice);
+                            return Ok((elemento_removido, ControlFlujo::Ninguno));
+                        }
+                    }
+                    
+                    // Si no se encuentra el elemento
+                    Err(ErrorQuetzal::ErrorEjecucion {
+                        linea,
+                        mensaje: "El elemento no se encontró en la lista".to_string(),
+                    })
+                },
+                
+                (Valor::Lista(ref mut lista), "quitar_en") => {
+                    if argumentos.len() != 1 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'quitar_en' requiere exactamente un argumento (índice)".to_string(),
+                        });
+                    }
+                    
+                    let indice = match &argumentos[0] {
+                        Valor::Entero(i) => {
+                            if *i < 0 {
+                                return Err(ErrorQuetzal::ErrorEjecucion {
+                                    linea,
+                                    mensaje: format!("Índice negativo: {}", i),
+                                });
+                            }
+                            *i as usize
+                        },
+                        _ => {
+                            return Err(ErrorQuetzal::ErrorEjecucion {
+                                linea,
+                                mensaje: "El índice debe ser un número entero".to_string(),
+                            });
+                        }
+                    };
+                    
+                    if indice >= lista.len() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: format!("Índice fuera de rango: {} (tamaño: {})", indice, lista.len()),
+                        });
+                    }
+                    
+                    let elemento_removido = lista.remove(indice);
+                    Ok((elemento_removido, ControlFlujo::Ninguno))
+                },
+                
+                (Valor::Lista(ref mut lista), "ordenar") => {
+                    if !argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'ordenar' no acepta argumentos".to_string(),
+                        });
+                    }
+                    
+                    lista.sort_by(|a, b| {
+                        self.comparar_valores_para_ordenamiento(a, b)
+                    });
+                    
+                    Ok((Valor::Vacio, ControlFlujo::Ninguno))
+                },
+                
+                (Valor::Lista(ref mut lista), "ordenar_descendente") => {
+                    if !argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'ordenar_descendente' no acepta argumentos".to_string(),
+                        });
+                    }
+                    
+                    lista.sort_by(|a, b| {
+                        self.comparar_valores_para_ordenamiento(b, a) // Intercambiar a y b para orden descendente
+                    });
+                    
+                    Ok((Valor::Vacio, ControlFlujo::Ninguno))
+                },
+                
+                (Valor::Lista(ref mut lista), "invertir") => {
+                    if !argumentos.is_empty() {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'invertir' no acepta argumentos".to_string(),
+                        });
+                    }
+                    
+                    lista.reverse();
+                    Ok((Valor::Vacio, ControlFlujo::Ninguno))
+                },
+                
+                (Valor::Lista(ref mut lista), "extender") => {
+                    if argumentos.len() != 1 {
+                        return Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El método 'extender' requiere exactamente un argumento (otra lista)".to_string(),
+                        });
+                    }
+                    
+                    if let Valor::Lista(otra_lista) = &argumentos[0] {
+                        lista.extend(otra_lista.iter().cloned());
+                        Ok((Valor::Vacio, ControlFlujo::Ninguno))
+                    } else {
+                        Err(ErrorQuetzal::ErrorEjecucion {
+                            linea,
+                            mensaje: "El argumento para 'extender' debe ser una lista".to_string(),
+                        })
+                    }
                 },
                 
                 _ => {
@@ -5730,6 +6301,76 @@ impl Evaluador {
                 }
                 Ok(Valor::Json(mapa))
             },
+        }
+    }
+    
+    /// Compara dos valores para ordenamiento
+    fn comparar_valores_para_ordenamiento(&self, a: &Valor, b: &Valor) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+        
+        match (a, b) {
+            (Valor::Entero(a), Valor::Entero(b)) => a.cmp(b),
+            (Valor::Numero(a), Valor::Numero(b)) => a.partial_cmp(b).unwrap_or(Ordering::Equal),
+            (Valor::Entero(a), Valor::Numero(b)) => (*a as f64).partial_cmp(b).unwrap_or(Ordering::Equal),
+            (Valor::Numero(a), Valor::Entero(b)) => a.partial_cmp(&(*b as f64)).unwrap_or(Ordering::Equal),
+            (Valor::Texto(a), Valor::Texto(b)) => a.cmp(b),
+            (Valor::Log(a), Valor::Log(b)) => a.cmp(b),
+            _ => Ordering::Equal, // Para tipos no comparables, mantener orden original
+        }
+    }
+    
+    /// Verifica si un valor es mayor que otro
+    fn es_mayor_que(&self, a: &Valor, b: &Valor) -> ResultadoQuetzal<bool> {
+        match (a, b) {
+            (Valor::Entero(a), Valor::Entero(b)) => Ok(a > b),
+            (Valor::Numero(a), Valor::Numero(b)) => Ok(a > b),
+            (Valor::Entero(a), Valor::Numero(b)) => Ok(*a as f64 > *b),
+            (Valor::Numero(a), Valor::Entero(b)) => Ok(*a > *b as f64),
+            (Valor::Texto(a), Valor::Texto(b)) => Ok(a > b),
+            _ => Err(ErrorQuetzal::ErrorTipo {
+                linea: 0,
+                mensaje: format!("No se pueden comparar {} y {}", a.tipo_como_cadena(), b.tipo_como_cadena()),
+            }),
+        }
+    }
+    
+    /// Verifica si un valor es menor que otro
+    fn es_menor_que(&self, a: &Valor, b: &Valor) -> ResultadoQuetzal<bool> {
+        match (a, b) {
+            (Valor::Entero(a), Valor::Entero(b)) => Ok(a < b),
+            (Valor::Numero(a), Valor::Numero(b)) => Ok(a < b),
+            (Valor::Entero(a), Valor::Numero(b)) => Ok((*a as f64) < *b),
+            (Valor::Numero(a), Valor::Entero(b)) => Ok(*a < (*b as f64)),
+            (Valor::Texto(a), Valor::Texto(b)) => Ok(a < b),
+            _ => Err(ErrorQuetzal::ErrorTipo {
+                linea: 0,
+                mensaje: format!("No se pueden comparar {} y {}", a.tipo_como_cadena(), b.tipo_como_cadena()),
+            }),
+        }
+    }
+    
+    /// Convierte un Valor a serde_json::Value para serialización JSON
+    fn valor_a_json(&self, valor: &Valor) -> serde_json::Value {
+        match valor {
+            Valor::Vacio | Valor::Nulo => serde_json::Value::Null,
+            Valor::Entero(n) => serde_json::Value::Number(serde_json::Number::from(*n)),
+            Valor::Numero(n) => serde_json::Value::Number(serde_json::Number::from_f64(*n).unwrap_or(serde_json::Number::from(0))),
+            Valor::Texto(s) => serde_json::Value::String(s.clone()),
+            Valor::Log(b) => serde_json::Value::Bool(*b),
+            Valor::Lista(lista) => {
+                let elementos: Vec<serde_json::Value> = lista.iter()
+                    .map(|elemento| self.valor_a_json(elemento))
+                    .collect();
+                serde_json::Value::Array(elementos)
+            },
+            Valor::Json(mapa) => {
+                let mut objeto = serde_json::Map::new();
+                for (clave, valor) in mapa {
+                    objeto.insert(clave.clone(), self.valor_a_json(valor));
+                }
+                serde_json::Value::Object(objeto)
+            },
+            Valor::Objeto { .. } => serde_json::Value::String("[Objeto]".to_string()), // Representación simplificada
         }
     }
 }

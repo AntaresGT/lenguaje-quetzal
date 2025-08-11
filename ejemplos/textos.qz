@@ -1,0 +1,10 @@
+// Textos
+
+// Texto constante
+texto saludo = "Hola, "
+// Texto variable o mutable, se identifica con la palabra reservada var
+texto var mundo = "Mundo!"
+
+mundo += " Quetzal"
+
+consola.mostrar(saludo + mundo)

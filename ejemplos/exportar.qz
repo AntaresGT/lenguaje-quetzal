@@ -7,7 +7,7 @@ objeto Usuario {
     privado:
         texto nombre
         entero edad
-
+        libre número var saldo = 0
     publico:
         Usuario(texto nombre, entero edad) {
             ambiente.nombre = nombre
@@ -24,7 +24,7 @@ objeto Usuario {
 }
 
 // Instancia de objeto
-Usuario instancia_usuario = Usuario("Juan", 30)
+Usuario instancia_usuario = nuevo Usuario("Juan", 30)
 
 // Declaración variable
 texto saludo = "Hola, Quetzal!"

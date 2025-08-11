@@ -10,4 +10,7 @@ importar {
     saludo como texto_saludo
 } desde "exportar.qz"
 
+consola.mostrar(sumar_entero(5, 10))
 
+// Instanciar usuario mutable o variable
+Usuario var nuevo_usuario = nuevo Usuario("Juan", 30)

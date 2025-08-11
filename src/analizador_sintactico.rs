@@ -384,13 +384,26 @@ impl AnalizadorSintactico {
         }
         
         // Verificar si es una declaración de variable con tipo personalizado
-        // Buscar patrón: Identificador Identificador = ...
+        // Buscar patrón: Identificador Identificador = ... o Identificador var Identificador = ...
         if let TipoToken::Identificador(_) = &self.token_actual().tipo {
             if self.posicion_actual + 1 < self.tokens.len() {
+                // Patrón: TipoPersonalizado Identificador = ...
                 if let TipoToken::Identificador(_) = &self.tokens[self.posicion_actual + 1].tipo {
                     if self.posicion_actual + 2 < self.tokens.len() {
                         if matches!(&self.tokens[self.posicion_actual + 2].tipo, TipoToken::Asignacion) {
                             return self.declaracion_variable();
+                        }
+                    }
+                }
+                // Patrón: TipoPersonalizado var Identificador = ...
+                if matches!(&self.tokens[self.posicion_actual + 1].tipo, TipoToken::Var) {
+                    if self.posicion_actual + 2 < self.tokens.len() {
+                        if let TipoToken::Identificador(_) = &self.tokens[self.posicion_actual + 2].tipo {
+                            if self.posicion_actual + 3 < self.tokens.len() {
+                                if matches!(&self.tokens[self.posicion_actual + 3].tipo, TipoToken::Asignacion) {
+                                    return self.declaracion_variable();
+                                }
+                            }
                         }
                     }
                 }

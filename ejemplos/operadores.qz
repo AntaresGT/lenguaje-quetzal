@@ -97,3 +97,25 @@ texto agregar_texto(texto var palabra, texto agregado) {
     palabra += agregado
     retornar palabra
 }
+
+// Ejecutar funciones para comprobar operadores
+entero resultado_suma = suma(5, 10)
+entero resultado_resta = resta(10, 5)
+log resultado_es_verdadero = es_verdadero(verdadero)
+log resultado_es_falso = es_falso(falso)
+log resultado_es_igual = es_igual(5, 5)
+log resultado_es_diferente = es_diferente(5, 10)
+log resultado_es_mayor = es_mayor(10, 5)
+log resultado_es_menor = es_menor(5, 10)
+log resultado_es_mayor_igual = es_mayor_igual(5, 5)
+log resultado_es_menor_igual = es_menor_igual(5, 5)
+entero resultado_asignacion = asignacion(10)
+texto resultado_concatenacion = concatenacion("Hola")
+entero resultado_incremento = incremento(5)
+entero resultado_decremento = decremento(5)
+entero resultado_suma_compuesta = suma_compuesta(5, 10)
+entero resultado_resta_compuesta = resta_compuesta(10, 5)
+entero resultado_multiplicacion_compuesta = multiplicacion_compuesta(5, 10)
+entero resultado_division_compuesta = division_compuesta(10, 5)
+entero resultado_modulo_compuesta = modulo_compuesta(10, 5)
+texto resultado_agregar_texto = agregar_texto("Hola", " Mundo")

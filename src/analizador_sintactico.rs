@@ -1528,6 +1528,26 @@ impl AnalizadorSintactico {
                         mensaje: "Solo se puede aplicar incremento a variables".to_string(),
                     });
                 }
+            } else if self.coincidir(&TipoToken::Decremento) {
+                // Operador de decremento postfijo i--
+                let linea = self.token_anterior().linea;
+                if let Nodo::Identificador(ref nombre) = expresion {
+                    let nombre_clonado = nombre.clone();
+                    expresion = Nodo::Asignacion {
+                        nombre: nombre_clonado,
+                        valor: Box::new(Nodo::OperacionBinaria {
+                            izquierdo: Box::new(expresion.clone()),
+                            operador: "-".to_string(),
+                            derecho: Box::new(Nodo::Literal(Valor::Entero(1))),
+                        }),
+                        linea,
+                    };
+                } else {
+                    return Err(ErrorQuetzal::ErrorSintaxis {
+                        linea,
+                        mensaje: "Solo se puede aplicar decremento a variables".to_string(),
+                    });
+                }
             } else {
                 break;
             }

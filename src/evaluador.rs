@@ -684,6 +684,33 @@ impl Evaluador {
                                 CONSOLA_GLOBAL.mostrar_error(&mensaje);
                                 return Ok((Valor::Vacio, ControlFlujo::Ninguno));
                             },
+                            "imprimir_advertencia" | "mostrar_advertencia" => {
+                                let mensaje = if !args_evaluados.is_empty() {
+                                    args_evaluados[0].a_cadena()
+                                } else {
+                                    String::new()
+                                };
+                                CONSOLA_GLOBAL.mostrar_advertencia(&mensaje);
+                                return Ok((Valor::Vacio, ControlFlujo::Ninguno));
+                            },
+                            "imprimir_exito" | "mostrar_exito" => {
+                                let mensaje = if !args_evaluados.is_empty() {
+                                    args_evaluados[0].a_cadena()
+                                } else {
+                                    String::new()
+                                };
+                                CONSOLA_GLOBAL.mostrar_exito(&mensaje);
+                                return Ok((Valor::Vacio, ControlFlujo::Ninguno));
+                            },
+                            "imprimir_informacion" | "mostrar_informacion" => {
+                                let mensaje = if !args_evaluados.is_empty() {
+                                    args_evaluados[0].a_cadena()
+                                } else {
+                                    String::new()
+                                };
+                                CONSOLA_GLOBAL.mostrar_informacion(&mensaje);
+                                return Ok((Valor::Vacio, ControlFlujo::Ninguno));
+                            },
                             _ => {
                                 return Err(ErrorQuetzal::ErrorEjecucion {
                                     linea: *linea,
@@ -691,6 +718,38 @@ impl Evaluador {
                                 });
                             }
                         }
+                    }
+                    
+                    // Verificar si es una llamada a método libre desde ambiente
+                    if nombre_objeto == "ambiente" {
+                        // Verificar si estamos dentro de una función libre
+                        let entorno_ref = entorno.borrow();
+                        if let Some(variable_clase) = entorno_ref.obtener_variable("__clase_actual__") {
+                            if let Valor::Texto(nombre_clase_actual) = &variable_clase.valor {
+                                if let Some(clase) = entorno_ref.obtener_clase(nombre_clase_actual) {
+                                    // Es una llamada a método libre desde ambiente
+                                    if clase.metodos_libres.contains(&metodo.to_string()) {
+                                        // Buscar la función libre en los miembros libres
+                                        for miembro_libre in &clase.miembros_libres {
+                                            if let Nodo::DeclaracionFuncion { nombre: nombre_metodo, .. } = miembro_libre {
+                                                if nombre_metodo == metodo {
+                                                    drop(entorno_ref); // Soltar la referencia antes de evaluar
+                                                    // Evaluar argumentos
+                                                    let mut args_evaluados = Vec::new();
+                                                    for arg in argumentos {
+                                                        let (valor_arg, _) = self.evaluar_con_entorno(arg, entorno.clone())?;
+                                                        args_evaluados.push(valor_arg);
+                                                    }
+                                                    // Llamar al método libre
+                                                    return self.evaluar_funcion_libre(miembro_libre, &args_evaluados, *linea, entorno, nombre_clase_actual);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        drop(entorno_ref);
                     }
                 }
                 
@@ -712,7 +771,7 @@ impl Evaluador {
                                             args_evaluados.push(valor_arg);
                                         }
                                         // Llamar al método libre como una función estática
-                                        return self.evaluar_funcion_libre(miembro_libre, &args_evaluados, *linea, entorno);
+                                        return self.evaluar_funcion_libre(miembro_libre, &args_evaluados, *linea, entorno, nombre_clase);
                                     }
                                 }
                             }
@@ -742,7 +801,7 @@ impl Evaluador {
                                                 args_evaluados.push(valor_arg);
                                             }
                                             // Llamar al método libre como una función estática
-                                            return self.evaluar_funcion_libre(miembro_libre, &args_evaluados, *linea, entorno);
+                                            return self.evaluar_funcion_libre(miembro_libre, &args_evaluados, *linea, entorno, nombre_clase);
                                         }
                                     }
                                 }
@@ -760,7 +819,7 @@ impl Evaluador {
                 }
                 
                 // Métodos que modifican la variable original (como agregar)
-                if metodo == "agregar" || metodo == "quitar" || metodo == "limpiar" || metodo == "insertar" || metodo == "sacar" || metodo == "sacar_ultimo" || metodo == "establecer" || metodo == "eliminar" || metodo == "remover" || metodo == "quitar_en" || metodo == "ordenar" || metodo == "ordenar_descendente" || metodo == "extender" || (metodo == "invertir" && matches!(valor_objeto, Valor::Lista(_))) {
+                if metodo == "agregar" || metodo == "quitar" || metodo == "limpiar" || metodo == "insertar" || metodo == "sacar" || metodo == "sacar_ultimo" || metodo == "eliminar" || metodo == "remover" || metodo == "quitar_en" || metodo == "ordenar" || metodo == "ordenar_descendente" || metodo == "extender" || (metodo == "invertir" && matches!(valor_objeto, Valor::Lista(_))) {
                     match objeto.as_ref() {
                         Nodo::Identificador(nombre_var) => {
                             return self.evaluar_metodo_mutante(nombre_var, metodo, &args_evaluados, *linea, entorno);
@@ -1659,7 +1718,7 @@ impl Evaluador {
     }
     
     /// Evalúa una función libre (método estático de clase)
-    fn evaluar_funcion_libre(&mut self, nodo_funcion: &Nodo, argumentos: &[Valor], linea: usize, entorno: Rc<RefCell<Entorno>>) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
+    fn evaluar_funcion_libre(&mut self, nodo_funcion: &Nodo, argumentos: &[Valor], linea: usize, entorno: Rc<RefCell<Entorno>>, nombre_clase: &str) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
         if let Nodo::DeclaracionFuncion { nombre, parametros, cuerpo, tipo_retorno, .. } = nodo_funcion {
             // Contar parámetros obligatorios (sin valor por defecto)
             let parametros_obligatorios = parametros.iter()
@@ -1676,7 +1735,7 @@ impl Evaluador {
             }
             
             // Crear entorno para la función libre
-            let entorno_funcion = Rc::new(RefCell::new(Entorno::nuevo_hijo(entorno)));
+            let entorno_funcion = Rc::new(RefCell::new(Entorno::nuevo_hijo(entorno.clone())));
             
             // Asignar parámetros
             for (i, parametro) in parametros.iter().enumerate() {
@@ -1711,13 +1770,69 @@ impl Evaluador {
                 entorno_funcion.borrow_mut().definir_variable(parametro.nombre.clone(), variable)?;
             }
             
+            // Crear objeto 'ambiente' con propiedades libres de la clase
+            {
+                let entorno_ref = entorno.borrow();
+                if let Some(clase) = entorno_ref.obtener_clase(nombre_clase) {
+                    let mut propiedades_ambiente = std::collections::HashMap::new();
+                    
+                    // Agregar todas las propiedades libres al objeto ambiente
+                    for propiedad_libre in &clase.propiedades_libres {
+                        let nombre_global = format!("{}LibrE{}", nombre_clase, propiedad_libre);
+                        if let Some(variable) = entorno_ref.obtener_variable(&nombre_global) {
+                            propiedades_ambiente.insert(propiedad_libre.clone(), variable.valor.clone());
+                        }
+                    }
+                    
+                    // Crear el objeto ambiente
+                    let valor_ambiente = Valor::Json(propiedades_ambiente);
+                    let variable_ambiente = Variable::nueva(
+                        "ambiente".to_string(),
+                        valor_ambiente,
+                        TipoVariable::Variable, // ambiente puede ser modificado en métodos libres
+                        "jsn".to_string(),
+                    );
+                    
+                    entorno_funcion.borrow_mut().definir_variable("ambiente".to_string(), variable_ambiente)?;
+                    
+                    // Definir variable especial para saber en qué clase estamos
+                    let variable_clase_actual = Variable::nueva(
+                        "__clase_actual__".to_string(),
+                        Valor::Texto(nombre_clase.to_string()),
+                        TipoVariable::Inmutable,
+                        "texto".to_string(),
+                    );
+                    entorno_funcion.borrow_mut().definir_variable("__clase_actual__".to_string(), variable_clase_actual)?;
+                }
+                drop(entorno_ref);
+            }
+            
             // Ejecutar cuerpo de la función
             let estado_anterior = self.dentro_de_funcion;
             self.dentro_de_funcion = true;
-            let resultado = self.evaluar_con_trampolina(cuerpo, entorno_funcion);
+            let resultado = self.evaluar_con_trampolina(cuerpo, entorno_funcion.clone());
             self.dentro_de_funcion = estado_anterior;
             
             let (valor, control) = resultado?;
+            
+            // Actualizar propiedades libres si ambiente fue modificado
+            {
+                let entorno_funcion_ref = entorno_funcion.borrow();
+                if let Some(variable_ambiente) = entorno_funcion_ref.obtener_variable("ambiente") {
+                    if let Valor::Json(mapa_ambiente) = &variable_ambiente.valor {
+                        // Actualizar las variables globales con los nuevos valores
+                        let mut entorno_ref = entorno.borrow_mut();
+                        for (propiedad, nuevo_valor) in mapa_ambiente {
+                            let nombre_global = format!("{}LibrE{}", nombre_clase, propiedad);
+                            if let Some(variable_global) = entorno_ref.obtener_variable_mut(&nombre_global) {
+                                variable_global.valor = nuevo_valor.clone();
+                            }
+                        }
+                        drop(entorno_ref);
+                    }
+                }
+                drop(entorno_funcion_ref);
+            }
             
             match control {
                 ControlFlujo::Retornar(valor_retorno) => Ok((valor_retorno, ControlFlujo::Ninguno)),

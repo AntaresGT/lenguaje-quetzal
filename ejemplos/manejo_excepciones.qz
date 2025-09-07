@@ -13,15 +13,15 @@ número dividir(número numerador, número denominador){
 // Tratar la excepción al llamar a la función
 intentar {
     número resultado = dividir(10, 0)
-    consola.imprimir("Resultado: " + resultado)
+    consola.mostrar("Resultado: " + resultado)
 } capturar (excepcion e){
     // Obtenemos el mensaje de la excepción y lo imprimimos en la consola
-    consola.imprimir(e.mensaje)
-    // También podemos imprimir la pila de llamadas para ver dónde ocurrió la excepción
-    consola.imprimir("Pila de llamadas:" + e.llamadas.texto())
+    consola.mostrar(e.mensaje)
+    // También podemos mostrar la pila de llamadas para ver dónde ocurrió la excepción
+    consola.mostrar("Pila de llamadas:" + e.llamadas.texto())
 }
 finalmente {
     // Este bloque se ejecuta siempre, independientemente de si ocurrió una excepción o no
-    // No es obligatorio, pero es útil para limpiar recursos o imprimir mensajes finales
-    consola.imprimir("Fin del manejo de excepciones.")
+    // No es obligatorio, pero es útil para limpiar recursos o mostrar mensajes finales
+    consola.mostrar("Fin del manejo de excepciones.")
 }

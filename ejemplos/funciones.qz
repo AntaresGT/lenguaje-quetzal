@@ -2,7 +2,7 @@
 
 // Función que no devuelve valor
 vacio saludar() {
-    consola.imprimir("¡Hola, Quetzal!")
+    consola.mostrar("¡Hola, Quetzal!")
 }
 
 // Función que devuelve un número

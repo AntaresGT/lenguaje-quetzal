@@ -16,6 +16,7 @@ mod tipos_datos;
 mod evaluador;
 mod errores;
 mod consola;
+mod modulos;
 mod manejador_modulos;
 mod maquina_virtual;
 

@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -9,7 +9,7 @@ mod tests {
         let codigo = r#"
 consola.imprimir("Hola mundo")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -19,7 +19,7 @@ consola.imprimir("Hola mundo")
 entero valor_numero = 42
 consola.imprimir(valor_numero.texto())
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -29,7 +29,7 @@ consola.imprimir(valor_numero.texto())
 número decimal = 3.14
 consola.imprimir(decimal.texto())
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -39,7 +39,7 @@ consola.imprimir(decimal.texto())
 log verdad = verdadero
 consola.imprimir(verdad.texto())
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -49,7 +49,7 @@ consola.imprimir(verdad.texto())
 texto mensaje = "Este es un mensaje"
 consola.imprimir(mensaje)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -60,7 +60,7 @@ texto parte1 = "Hola"
 texto parte2 = "mundo"
 consola.imprimir(parte1 + " " + parte2)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -71,7 +71,7 @@ entero a = 10
 entero b = 5
 consola.imprimir((a + b).texto())
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -80,7 +80,7 @@ consola.imprimir((a + b).texto())
         let codigo = r#"
 consola.imprimir_exito("Operación exitosa")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -89,7 +89,7 @@ consola.imprimir_exito("Operación exitosa")
         let codigo = r#"
 consola.imprimir_error("Mensaje de error")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -98,7 +98,7 @@ consola.imprimir_error("Mensaje de error")
         let codigo = r#"
 consola.imprimir_informacion("Información importante")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -107,7 +107,7 @@ consola.imprimir_informacion("Información importante")
         let codigo = r#"
 consola.imprimir_advertencia("Advertencia del sistema")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -118,7 +118,7 @@ consola.imprimir("Primera línea")
 consola.imprimir("Segunda línea")
 consola.imprimir("Tercera línea")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -127,7 +127,7 @@ consola.imprimir("Tercera línea")
         let codigo = r#"
 consola.imprimir("Línea con \"comillas\"")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -136,7 +136,7 @@ consola.imprimir("Línea con \"comillas\"")
         let codigo = r#"
 consola.imprimir("")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -148,7 +148,7 @@ texto obtener_mensaje() {
 }
 consola.imprimir(obtener_mensaje())
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -162,7 +162,7 @@ consola.imprimir("Número: " + valor_numero.texto())
 consola.imprimir("Decimal: " + decimal.texto())
 consola.imprimir("Estado: " + estado.texto())
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -174,7 +174,7 @@ entero b = 20
 entero c = 30
 consola.imprimir("Resultado: " + (a + b * c).texto())
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -183,7 +183,7 @@ consola.imprimir("Resultado: " + (a + b * c).texto())
         let codigo = r#"
 consola.imprimir()
         "#;
-        
+
         // imprimir() sin parámetros es válido - imprime línea vacía
         assert!(interprete::interpretar(codigo).is_ok());
     }
@@ -194,7 +194,7 @@ consola.imprimir()
 entero valor_numero = 42
 consola.imprimir(valor_numero)  // Debería convertir a texto primero
         "#;
-        
+
         // Esto podría ser válido si el intérprete hace conversión automática
         // Si no, debería fallar
         let resultado = interprete::interpretar(codigo);

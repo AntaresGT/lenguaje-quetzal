@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -13,7 +13,7 @@ texto mi_texto = "Hola mundo"
 log verdad = verdadero
 log mentira = falso
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -25,7 +25,7 @@ número decimal_vacio
 texto texto_vacio
 log booleano_vacio
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -36,7 +36,7 @@ entero var numero_mutable = 10
 número var decimal_mutable = 5.5
 texto var texto_mutable = "Variable"
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -52,7 +52,7 @@ texto cadena_vacia = ""
 log verdadero_explicito = verdadero
 log falso_explicito = falso
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -61,7 +61,7 @@ log falso_explicito = falso
         let codigo = r#"
 entero entero = 5
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -70,7 +70,7 @@ entero entero = 5
         let codigo = r#"
 entero 123variable = 5
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -82,7 +82,7 @@ entero _variable_con_guion = 2
 entero variableCamelCase = 3
 entero variable123 = 4
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 }

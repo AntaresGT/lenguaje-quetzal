@@ -4,11 +4,11 @@
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
-use crate::analizador_sintactico::{Nodo, Parametro};
-use crate::errores::{ErrorQuetzal, ResultadoQuetzal};
-use crate::evaluador::{Evaluador, FuncionDefinida};
-use crate::manejador_modulos::ElementoExportado;
-use crate::tipos_datos::{TipoVariable, Valor, Variable};
+use crate::analisis::analizador_sintactico::{Nodo, Parametro};
+use crate::datos::tipos_datos::{TipoVariable, Valor, Variable};
+use crate::ejecucion::evaluador::{Evaluador, FuncionDefinida};
+use crate::infraestructura::errores::{ErrorQuetzal, ResultadoQuetzal};
+use crate::infraestructura::manejador_modulos::ElementoExportado;
 
 /// Registra todas las exportaciones ofrecidas por el módulo nativo
 pub fn registrar_modulo(

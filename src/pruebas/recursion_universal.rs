@@ -1,9 +1,9 @@
 //! Pruebas para la gestión universal de recursión en Quetzal
-//! 
+//!
 //! Estas pruebas verifican que CUALQUIER función puede ser recursiva infinita
 //! sin restricciones de nombres o palabras reservadas.
 
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -23,7 +23,7 @@ vacio cualquier_nombre() {
 
 cualquier_nombre()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -41,7 +41,7 @@ vacio ir_profundo() {
 
 ir_profundo()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -67,7 +67,7 @@ vacio funcion_b() {
 
 funcion_a()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -85,7 +85,7 @@ vacio expandir_limites() {
 
 expandir_limites()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -111,7 +111,7 @@ vacio otro_nombre_completamente_diferente() {
 cualquier_nombre_que_quiera()
 otro_nombre_completamente_diferente()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 }

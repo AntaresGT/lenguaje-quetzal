@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::interprete::interpretar;
+    use crate::nucleo::interprete::interpretar;
 
     #[test]
     fn test_matriz_4d_basica() {
@@ -18,7 +18,7 @@ mod tests {
             
             consola.imprimir("Matriz 4D creada: " + matriz_4d.texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -40,7 +40,7 @@ mod tests {
             entero valor = matriz_4d[0][1][0][1]
             consola.imprimir("Valor [0][1][0][1]: " + valor.texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -63,7 +63,7 @@ mod tests {
             entero valor_modificado = matriz_4d[1][0][1][0]
             consola.imprimir("Matriz modificada - nuevo valor: " + valor_modificado.texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -86,7 +86,7 @@ mod tests {
             texto elemento = matriz_3d[0][1][2].texto()
             consola.imprimir("Elemento [0][1][2]: " + elemento)
         "#;
-        
+
         let resultado = interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -108,7 +108,7 @@ mod tests {
             consola.imprimir("Valor [0][0][1]: " + valor1.texto())
             consola.imprimir("Valor [1][1][0]: " + valor2.texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
         assert!(resultado.is_ok());
     }

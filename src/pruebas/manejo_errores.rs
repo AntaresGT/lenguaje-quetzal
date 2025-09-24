@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -11,7 +11,7 @@ entero a = 10
 entero b = 0
 entero resultado = a / b
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -22,7 +22,7 @@ número a = 10.5
 número b = 0.0
 número resultado = a / b
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -33,7 +33,7 @@ entero a = 10
 entero b = 0
 entero resultado = a % b
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -42,7 +42,7 @@ entero resultado = a % b
         let codigo = r#"
 entero resultado = variable_inexistente + 5
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -52,7 +52,7 @@ entero resultado = variable_inexistente + 5
 entero numero = 5
 entero numero = 10
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -61,7 +61,7 @@ entero numero = 10
         let codigo = r#"
 entero numero_entero = "texto"
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -72,7 +72,7 @@ texto mi_texto = "hola"
 entero numero = 5
 entero resultado = texto + numero
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -81,7 +81,7 @@ entero resultado = texto + numero
         let codigo = r#"
 entero = 5
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -90,7 +90,7 @@ entero = 5
         let codigo = r#"
 entero a = 5 ++ 3
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -99,7 +99,7 @@ entero a = 5 ++ 3
         let codigo = r#"
 entero resultado = (5 + 3
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -108,7 +108,7 @@ entero resultado = (5 + 3
         let codigo = r#"
 texto mi_texto = "texto sin cerrar
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -118,7 +118,7 @@ texto mi_texto = "texto sin cerrar
 texto mi_texto = "no_es_numero"
 entero numero = mi_texto.numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -128,7 +128,7 @@ entero numero = mi_texto.numero()
 entero numero_no_inicializado
 entero resultado = numero_no_inicializado + 5
         "#;
-        
+
         // Esto podría ser válido si las variables tienen valores por defecto
         // Dependiendo de la implementación
         let resultado = interprete::interpretar(codigo);
@@ -140,7 +140,7 @@ entero resultado = numero_no_inicializado + 5
         let codigo = r#"
 entero numero_grande = 999999999999999999999999999999
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -149,7 +149,7 @@ entero numero_grande = 999999999999999999999999999999
         let codigo = r#"
 entero si = 5
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -158,7 +158,7 @@ entero si = 5
         let codigo = r#"
 entero variable-con-guion = 5
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -167,7 +167,7 @@ entero variable-con-guion = 5
         let codigo = r#"
 entero 123variable = 5
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -177,7 +177,7 @@ entero 123variable = 5
 entero numero = 5
 numero = 10
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -188,7 +188,7 @@ entero a = 5
 entero b = 3
 entero resultado = a ^ b
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -207,7 +207,7 @@ entero funcion_c() {
 }
 entero resultado = funcion_a()
         "#;
-        
+
         // Esto podría causar stack overflow
         assert!(interprete::interpretar(codigo).is_err());
     }
@@ -218,7 +218,7 @@ entero resultado = funcion_a()
 /* comentario sin cerrar
 entero numero = 5
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -227,7 +227,7 @@ entero numero = 5
         let codigo = r#"
 entero resultado = 
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -237,7 +237,7 @@ entero resultado =
 entero funcion_vacia() {
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -247,7 +247,7 @@ entero funcion_vacia() {
 entero numero = 5
 retornar numero
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -258,7 +258,7 @@ entero funcion_invalida(entero a, entero a) {
     retornar a
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -267,7 +267,7 @@ entero funcion_invalida(entero a, entero a) {
         let codigo = r#"
 texto mi_texto = "texto con \z escape inválido"
         "#;
-        
+
         // Dependiendo de la implementación, esto podría ser válido o no
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok() || resultado.is_err());

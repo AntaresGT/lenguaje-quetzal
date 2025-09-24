@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -10,7 +10,7 @@ mod tests {
 // Este es un comentario de línea
 entero numero = 42
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -20,7 +20,7 @@ entero numero = 42
 entero numero = 42  // Comentario al final
 texto mi_texto = "hola"  // Otro comentario
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -31,7 +31,7 @@ texto mi_texto = "hola"  // Otro comentario
    de múltiples líneas */
 entero numero = 42
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -40,7 +40,7 @@ entero numero = 42
         let codigo = r#"
 entero numero = /* comentario en medio */ 42
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -54,7 +54,7 @@ entero b = 20
 // Comentario 3
 entero suma = a + b
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -68,7 +68,7 @@ entero calcular(entero x) {
     retornar resultado
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -81,7 +81,7 @@ entero numero_entero = 42
 texto mi_texto = "hola"
 
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -92,7 +92,7 @@ texto mi_texto = "hola"
 	texto mi_texto = "hola"
         log estado = verdadero
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -103,7 +103,7 @@ texto mi_texto = "hola"
 entero numero = 42
 /* Comentario con símbolos: @#$%^&*()+=[]{}|;:'"<>?/ */
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -113,7 +113,7 @@ entero numero = 42
 // 
 entero numero_entero = 42
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -123,7 +123,7 @@ entero numero_entero = 42
 /**/
 entero numero_entero = 42
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -133,7 +133,7 @@ entero numero_entero = 42
 /* Comentario principal /* esto no debería anidar */ fin */
 entero numero_entero = 42
         "#;
-        
+
         // Los comentarios anidados generalmente no son soportados
         assert!(interprete::interpretar(codigo).is_ok());
     }
@@ -145,7 +145,7 @@ entero numero_entero = 42
 texto mi_texto = "hola"
 log estado = verdadero
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -156,7 +156,7 @@ log estado = verdadero
 /* No hay código ejecutable */
 // Esto debería ser válido
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -171,7 +171,7 @@ entero variable_comentada = 50
 texto otra_variable = "comentada"
 */
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -181,7 +181,7 @@ texto otra_variable = "comentada"
 // Comentario con // doble barra dentro
 entero numero_entero = 42
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -198,7 +198,7 @@ entero calcular() {
     }
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -209,7 +209,7 @@ entero resultado = 10 +
                    20 +
                    30
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -222,7 +222,7 @@ entero funcion_larga(entero parametro1,
     retornar parametro1 + parametro2 + parametro3
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -232,7 +232,7 @@ entero funcion_larga(entero parametro1,
 // Prueba con emoji 🚀 y caracteres unicode ñáéíóúü
 entero numero_entero = 42
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -242,21 +242,21 @@ entero numero_entero = 42
 /* Comentario sin cerrar
 entero numero = 42
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
     #[test]
     fn test_archivo_vacio() {
         let codigo = "";
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
     #[test]
     fn test_solo_espacios_y_saltos() {
         let codigo = "   \n\n  \t  \n   ";
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 }

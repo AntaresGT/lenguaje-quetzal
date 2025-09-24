@@ -1,27 +1,27 @@
 // Módulo de pruebas unitarias para el intérprete Quetzal
 
-pub mod funciones_encadenadas;
-pub mod variables_y_tipos;
-pub mod operadores;
-pub mod condicionales;
-pub mod bucles;
-pub mod listas_y_json;
-pub mod cadenas;
-pub mod funciones;
-pub mod entrada_salida;
-pub mod manejo_errores;
-pub mod conversiones;
-pub mod sintaxis_y_comentarios;
-pub mod integracion;
-pub mod funciones_cadena_avanzadas;
-pub mod metodos_listas;
 pub mod asignacion_indices;
+pub mod bucles;
+pub mod cadenas;
+pub mod condicionales;
+pub mod conversiones;
+pub mod entrada_salida;
+pub mod funciones;
+pub mod funciones_cadena_avanzadas;
+pub mod funciones_encadenadas;
+pub mod integracion;
+pub mod listas_y_json;
+pub mod manejo_errores;
+pub mod metodos_listas;
 pub mod metodos_mutantes;
+pub mod operadores;
 pub mod redondeo_decimales;
+pub mod sintaxis_y_comentarios;
+pub mod variables_y_tipos;
 
 // Nuevos módulos para funcionalidades avanzadas
-pub mod matrices_multidimensionales;
 pub mod algoritmos_recursivos;
+pub mod matrices_multidimensionales;
 pub mod procesamiento_cadenas_avanzado;
 pub mod recursion_universal; // Prueba universal que funciona con cualquier nombre
 

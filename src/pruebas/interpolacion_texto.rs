@@ -1,6 +1,6 @@
 // Pruebas unitarias para la interpolación de texto t"..."
 
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -13,7 +13,7 @@ mod tests {
             texto resultado = t"El valor es {valor}"
             consola.mostrar(resultado)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -25,7 +25,7 @@ mod tests {
             texto resultado = t"La suma de {a} + {b} = {a + b}"
             consola.mostrar(resultado)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -38,7 +38,7 @@ mod tests {
             texto resultado = t"Lenguaje {nombre} v{version}.{decimal}"
             consola.mostrar(resultado)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -50,7 +50,7 @@ mod tests {
             texto resultado = t"Verdadero: {verdadero_valor}, Falso: {falso_valor}"
             consola.mostrar(resultado)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -61,7 +61,7 @@ mod tests {
             texto resultado = t"Números: {numeros}"
             consola.mostrar(resultado)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -73,7 +73,7 @@ mod tests {
             texto resultado = t"Especiales: {emoji} y {acento}"
             consola.mostrar(resultado)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -85,7 +85,7 @@ mod tests {
             texto resultado = t"Hola {nombre}\nTienes {edad} años\n¡Bienvenido!"
             consola.mostrar(resultado)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -97,7 +97,7 @@ mod tests {
             texto resultado = t"Potencia: {base}^{exponente} = {base * base * base}"
             consola.mostrar(resultado)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -107,7 +107,7 @@ mod tests {
             texto resultado = t"Solo texto sin interpolación"
             consola.mostrar(resultado)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -119,7 +119,7 @@ mod tests {
             texto resultado = t"{a}{b}{a + b}"
             consola.mostrar(resultado)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 }

@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -12,7 +12,7 @@ lista<entero> enteros = [10, 20, 30]
 lista<texto> textos = ["hola", "mundo", "quetzal"]
 lista mixta = [1, "texto", verdadero, 3.14]
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -22,7 +22,7 @@ lista mixta = [1, "texto", verdadero, 3.14]
 lista vacia = []
 lista<entero> enteros_vacios = []
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -32,7 +32,7 @@ lista<entero> enteros_vacios = []
 lista matriz = [[1, 2], [3, 4], [5, 6]]
 lista compleja = [1, [2, 3], "texto", [verdadero, falso]]
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -42,7 +42,7 @@ lista compleja = [1, [2, 3], "texto", [verdadero, falso]]
 lista numeros = [10, 20, 30, 40, 50]
 // Nota: El acceso por índice requeriría implementación adicional
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -55,7 +55,7 @@ jsn persona = {
     activo: verdadero
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -73,7 +73,7 @@ jsn configuracion = {
     }
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -92,7 +92,7 @@ jsn datos = {
     }
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -110,7 +110,7 @@ jsn completo = {
     }
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -119,7 +119,7 @@ jsn completo = {
         let codigo = r#"
 jsn json_vacio = {}
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -134,7 +134,7 @@ jsn usuario = {
     registrado: verdadero
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -146,7 +146,7 @@ entero b = 20
 entero c = 30
 lista numeros = [a, b, c]
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -159,7 +159,7 @@ jsn var configuracion_mutable = {
     version: "1.0"
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 }

@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -15,7 +15,7 @@ entero multiplicacion = a * b
 entero division = a / b
 entero modulo = a % b
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -29,7 +29,7 @@ número resta = a - b
 número multiplicacion = a * b
 número division = a / b
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -40,7 +40,7 @@ entero entero_val = 10
 número decimal_val = 3.5
 número resultado = entero_val + decimal_val
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -56,7 +56,7 @@ log menor_igual = a <= b
 log igual = a == b
 log diferente = a != b
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -71,7 +71,7 @@ log y_espanol = verdad y mentira
 log o_espanol = verdad o mentira
 log negacion = !verdad
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -85,7 +85,7 @@ numero *= 2
 numero /= 4
 numero %= 3
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -98,7 +98,7 @@ decimal -= 1.0
 decimal *= 3.0
 decimal /= 2.0
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -109,7 +109,7 @@ texto var mi_texto = "Hola"
 mi_texto += " mundo"
 mi_texto += "!"
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -120,7 +120,7 @@ entero a = 10
 entero b = 5
 texto resultado = a > b ? "a es mayor" : "b es mayor"
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -131,7 +131,7 @@ entero resultado1 = 2 + 3 * 4
 entero resultado2 = (2 + 3) * 4
 número resultado3 = 10.0 / 2.0 + 3.0
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -141,7 +141,7 @@ número resultado3 = 10.0 / 2.0 + 3.0
 entero numero = 10
 numero /= 0
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 }

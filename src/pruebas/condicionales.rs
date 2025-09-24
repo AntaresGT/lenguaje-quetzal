@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -12,7 +12,7 @@ si (numero > 5) {
     consola.imprimir("Número es mayor que 5")
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -26,7 +26,7 @@ si (numero > 5) {
     consola.imprimir("Menor o igual que 5")
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -42,7 +42,7 @@ si (numero < 5) {
     consola.imprimir("Otro caso")
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -59,7 +59,7 @@ si (a > b) {
     }
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -73,7 +73,7 @@ si ((a > b) && (c > a)) {
     consola.imprimir("Condición compleja verdadera")
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -86,7 +86,7 @@ si (verdad y !mentira) {
     consola.imprimir("Condición en español verdadera")
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -99,7 +99,7 @@ si (texto1 == texto2) {
     consola.imprimir("Las cadenas son iguales")
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -112,7 +112,7 @@ si (valor1 != valor2) {
     consola.imprimir("Los valores booleanos son diferentes")
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -125,7 +125,7 @@ si (entero_val == decimal_val) {
     consola.imprimir("Valores numéricos iguales")
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 }

@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -11,7 +11,7 @@ vacio saludar() {
     entero x = 5
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -22,7 +22,7 @@ entero sumar(entero a, entero b) {
     retornar a + b
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -34,7 +34,7 @@ vacio saludar() {
 }
 saludar()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -46,7 +46,7 @@ entero duplicar(entero valor) {
 }
 entero resultado = duplicar(5)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -58,7 +58,7 @@ entero obtener_numero() {
 }
 entero numero_valor = obtener_numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -70,7 +70,7 @@ texto obtener_saludo() {
 }
 texto saludo = obtener_saludo()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -82,7 +82,7 @@ log es_verdadero() {
 }
 log resultado = es_verdadero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -94,7 +94,7 @@ texto concatenar(texto a, texto b, texto c) {
 }
 texto resultado = concatenar("Hola", " ", "mundo")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -108,7 +108,7 @@ entero calcular(entero a, entero b) {
 }
 entero resultado = calcular(5, 3)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -124,7 +124,7 @@ entero mayor(entero a, entero b) {
 }
 entero resultado = mayor(10, 5)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -140,7 +140,7 @@ entero factorial(entero n) {
 }
 entero resultado = factorial(3)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -155,7 +155,7 @@ entero procesar_datos(entero entrada) {
 }
 entero resultado = procesar_datos(10)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -170,7 +170,7 @@ entero triplicar(entero x) {
 }
 entero resultado = duplicar(triplicar(5))
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -182,7 +182,7 @@ texto formatear(entero numero, texto mensaje) {
 }
 texto resultado = formatear(42, "prueba")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -196,7 +196,7 @@ entero funcion_problematica() {
 
 entero resultado = funcion_problematica()
         "#;
-        
+
         // Esta prueba debe fallar porque la función no retorna
         assert!(interprete::interpretar(codigo).is_err());
     }
@@ -206,7 +206,7 @@ entero resultado = funcion_problematica()
         let codigo = r#"
 entero resultado = funcion_que_no_existe(5)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -218,7 +218,7 @@ entero sumar(entero a, entero b) {
 }
 entero resultado = sumar(5)  // Faltan parámetros
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -231,7 +231,7 @@ vacio hacer_algo() {
 }
 hacer_algo()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -246,7 +246,7 @@ entero usar_variable_global() {
 
 entero resultado = usar_variable_global()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -256,7 +256,7 @@ entero resultado = usar_variable_global()
 entero doble(entero x) { retornar x * 2 }
 entero resultado = doble(10)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -266,7 +266,7 @@ entero resultado = doble(10)
 vacio imprimir_mensaje() { consola.imprimir("Hola") }
 imprimir_mensaje()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -282,7 +282,7 @@ entero operaciones(entero a, entero b) {
 }
 entero resultado = operaciones(10, 5)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -294,7 +294,7 @@ entero sumar(entero a, entero b = 10) {
 }
 entero resultado = sumar(5)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -307,7 +307,7 @@ entero incrementar(entero var x) {
 }
 entero resultado = incrementar(5)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 }

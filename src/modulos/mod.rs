@@ -3,9 +3,9 @@
 
 use std::collections::HashMap;
 
-use crate::errores::ResultadoQuetzal;
-use crate::evaluador::Evaluador;
-use crate::manejador_modulos::ElementoExportado;
+use crate::ejecucion::evaluador::Evaluador;
+use crate::infraestructura::errores::ResultadoQuetzal;
+use crate::infraestructura::manejador_modulos::ElementoExportado;
 
 mod matematica;
 

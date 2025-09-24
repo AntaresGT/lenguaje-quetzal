@@ -1,13 +1,13 @@
 // Máquina Virtual Híbrida para manejo automático de recursión
 // Gestiona automáticamente la memoria y optimiza las llamadas recursivas
 
-use crate::analizador_sintactico::Nodo;
-use crate::tipos_datos::Valor;
-use crate::evaluador::{Entorno, FuncionDefinida};
-use crate::errores::{ErrorQuetzal, ResultadoQuetzal};
+use crate::analisis::analizador_sintactico::Nodo;
+use crate::datos::tipos_datos::Valor;
+use crate::ejecucion::evaluador::{Entorno, FuncionDefinida};
+use crate::infraestructura::errores::{ErrorQuetzal, ResultadoQuetzal};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::cell::RefCell;
 use std::time::Instant;
 
 /// Marco de llamada de función en la VM
@@ -106,7 +106,7 @@ impl Default for ConfiguracionVM {
             limite_inicial_profundidad: 1000,
             incremento_limite: 1000, // Expandir de 1000 en 1000
             limite_memoria_total: 512 * 1024 * 1024, // 512MB
-            umbral_gc: 0.7, // 70% de memoria
+            umbral_gc: 0.7,          // 70% de memoria
             limite_memoria_por_marco: 64 * 1024, // 64KB por marco (razonable)
             optimizar_tail_calls: true,
             comprimir_stack_automatico: true,
@@ -150,9 +150,13 @@ impl MaquinaVirtualRecursion {
             historial_estados: HashMap::new(),
         }
     }
-    
+
     /// Gestión universal de recursión - funciona con cualquier función
-    pub fn puede_ejecutar_funcion(&mut self, nombre: &str, argumentos: &[Valor]) -> ResultadoQuetzal<bool> {
+    pub fn puede_ejecutar_funcion(
+        &mut self,
+        nombre: &str,
+        argumentos: &[Valor],
+    ) -> ResultadoQuetzal<bool> {
         // 1. Verificar memoria disponible del sistema
         if !self.verificar_memoria_disponible(argumentos)? {
             self.ejecutar_garbage_collection();
@@ -168,7 +172,10 @@ impl MaquinaVirtualRecursion {
         if self.stack_llamadas.len() >= self.limite_profundidad_actual {
             if self.puede_expandir_limite() {
                 self.expandir_limite_profundidad();
-                println!("🔧 Límite de profundidad expandido a: {}", self.limite_profundidad_actual);
+                println!(
+                    "🔧 Límite de profundidad expandido a: {}",
+                    self.limite_profundidad_actual
+                );
             } else {
                 // Solo fallar si realmente parece un bucle infinito malicioso
                 if self.es_bucle_infinito_real(nombre)? {
@@ -188,67 +195,80 @@ impl MaquinaVirtualRecursion {
 
         // 3. Actualizar contadores de progreso
         self.actualizar_contador_progreso(nombre, argumentos);
-        
+
         Ok(true)
     }
-    
+
     /// Verifica si hay memoria suficiente disponible
     fn verificar_memoria_disponible(&self, argumentos: &[Valor]) -> ResultadoQuetzal<bool> {
         let memoria_nueva = self.estimar_memoria_valores(argumentos);
         let memoria_total_proyectada = self.estadisticas.memoria_actual + memoria_nueva;
-        
-        Ok(memoria_total_proyectada <= (self.configuracion.limite_memoria_total as f64 * self.configuracion.umbral_gc) as usize)
+
+        Ok(memoria_total_proyectada
+            <= (self.configuracion.limite_memoria_total as f64 * self.configuracion.umbral_gc)
+                as usize)
     }
-    
+
     /// Verifica si se puede expandir el límite de profundidad
     fn puede_expandir_limite(&self) -> bool {
         // Expandir solo si hay memoria suficiente para más marcos
-        let memoria_por_nuevos_marcos = self.configuracion.incremento_limite * self.configuracion.limite_memoria_por_marco;
-        self.estadisticas.memoria_actual + memoria_por_nuevos_marcos < self.configuracion.limite_memoria_total
+        let memoria_por_nuevos_marcos =
+            self.configuracion.incremento_limite * self.configuracion.limite_memoria_por_marco;
+        self.estadisticas.memoria_actual + memoria_por_nuevos_marcos
+            < self.configuracion.limite_memoria_total
     }
-    
+
     /// Expande automáticamente el límite de profundidad
     fn expandir_limite_profundidad(&mut self) {
         self.limite_profundidad_actual += self.configuracion.incremento_limite;
     }
-    
+
     /// Detecta bucles infinitos reales (sin progreso) vs recursión legítima
     fn es_bucle_infinito_real(&mut self, nombre: &str) -> ResultadoQuetzal<bool> {
-        let contador = self.contadores_iteracion.entry(nombre.to_string()).or_insert(0);
+        let contador = self
+            .contadores_iteracion
+            .entry(nombre.to_string())
+            .or_insert(0);
         *contador += 1;
-        
+
         // Si se ejecuta muchas veces sin progreso en las variables, es bucle infinito
         if *contador > self.configuracion.limite_iteraciones_sin_progreso {
             if let Some(historial) = self.historial_estados.get(nombre) {
                 if historial.len() > 10 {
                     // Verificar si los últimos 10 estados son idénticos (sin progreso)
-                    let ultimos_estados = &historial[historial.len()-10..];
-                    if ultimos_estados.iter().all(|&estado| estado == ultimos_estados[0]) {
+                    let ultimos_estados = &historial[historial.len() - 10..];
+                    if ultimos_estados
+                        .iter()
+                        .all(|&estado| estado == ultimos_estados[0])
+                    {
                         return Ok(true); // Es bucle infinito real
                     }
                 }
             }
         }
-        
+
         Ok(false)
     }
-    
+
     /// Actualiza el progreso de la función para detectar bucles infinitos reales
     fn actualizar_contador_progreso(&mut self, nombre: &str, argumentos: &[Valor]) {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         // Crear hash del estado actual de los argumentos
         let mut hasher = DefaultHasher::new();
         for arg in argumentos {
             arg.hash(&mut hasher);
         }
         let estado_actual = hasher.finish();
-        
+
         // Actualizar historial
-        let historial = self.historial_estados.entry(nombre.to_string()).or_insert_with(Vec::new);
+        let historial = self
+            .historial_estados
+            .entry(nombre.to_string())
+            .or_insert_with(Vec::new);
         historial.push(estado_actual);
-        
+
         // Mantener solo los últimos N estados para eficiencia
         if historial.len() > 20 {
             historial.remove(0);
@@ -261,16 +281,16 @@ impl MaquinaVirtualRecursion {
         // Por ahora, asumimos un valor conservador
         512 * 1024 * 1024 // 512MB
     }
-    
+
     /// Obtiene estadísticas públicas de la VM
     pub fn obtener_limite_actual(&self) -> usize {
         self.limite_profundidad_actual
     }
-    
+
     pub fn obtener_memoria_actual(&self) -> usize {
         self.estadisticas.memoria_actual
     }
-    
+
     pub fn obtener_profundidad_actual(&self) -> usize {
         self.stack_llamadas.len()
     }
@@ -294,12 +314,16 @@ impl MaquinaVirtualRecursion {
             Valor::Log(_) => 1,
             Valor::Texto(s) => s.len() * 4, // UTF-8 puede usar hasta 4 bytes por char
             Valor::Lista(lista) => {
-                48 + lista.iter().map(|v| self.estimar_memoria_valor(v)).sum::<usize>()
+                48 + lista
+                    .iter()
+                    .map(|v| self.estimar_memoria_valor(v))
+                    .sum::<usize>()
             }
             Valor::Json(mapa) => {
-                48 + mapa.iter().map(|(k, v)| {
-                    k.len() * 4 + self.estimar_memoria_valor(v)
-                }).sum::<usize>()
+                48 + mapa
+                    .iter()
+                    .map(|(k, v)| k.len() * 4 + self.estimar_memoria_valor(v))
+                    .sum::<usize>()
             }
             Valor::Objeto { .. } => 256, // Estimación base para objetos
             Valor::Nulo => 1,
@@ -316,13 +340,20 @@ impl MaquinaVirtualRecursion {
         // Verificar si la última instrucción es un retorno directo de llamada a función
         match nodo {
             Nodo::Programa(declaraciones) => {
-                if let Some(Nodo::Retornar { valor: Some(llamada), .. }) = declaraciones.last() {
+                if let Some(Nodo::Retornar {
+                    valor: Some(llamada),
+                    ..
+                }) = declaraciones.last()
+                {
                     matches!(llamada.as_ref(), Nodo::LlamadaFuncion { .. })
                 } else {
                     false
                 }
             }
-            Nodo::Retornar { valor: Some(llamada), .. } => {
+            Nodo::Retornar {
+                valor: Some(llamada),
+                ..
+            } => {
                 matches!(llamada.as_ref(), Nodo::LlamadaFuncion { .. })
             }
             _ => false,
@@ -336,8 +367,8 @@ impl MaquinaVirtualRecursion {
         argumentos: &[Nodo],
         linea: usize,
         entorno: Rc<RefCell<Entorno>>,
-        evaluador: &mut crate::evaluador::Evaluador,
-    ) -> ResultadoQuetzal<(Valor, crate::evaluador::ControlFlujo)> {
+        evaluador: &mut crate::ejecucion::evaluador::Evaluador,
+    ) -> ResultadoQuetzal<(Valor, crate::ejecucion::evaluador::ControlFlujo)> {
         // Por ahora, usar stacker como respaldo para evitar errores
         stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
             evaluador.evaluar_llamada_funcion(nombre, argumentos, linea, entorno)
@@ -396,7 +427,11 @@ impl MaquinaVirtualRecursion {
                     // Continuar con la ejecución normal
                     continue;
                 }
-                ResultadoPaso::LlamarFuncion { nombre, argumentos, entorno } => {
+                ResultadoPaso::LlamarFuncion {
+                    nombre,
+                    argumentos,
+                    entorno,
+                } => {
                     // Necesitamos hacer una nueva llamada de función
                     if let Some(funcion) = entorno.borrow().obtener_funcion(&nombre) {
                         // Verificar límites antes de la nueva llamada
@@ -425,13 +460,15 @@ impl MaquinaVirtualRecursion {
                 ResultadoPaso::RetornarValor(valor) => {
                     // Función completada, pop del stack
                     let marco_completado = self.stack_llamadas.pop();
-                    
+
                     if let Some(marco) = marco_completado {
                         // Guardar en cache si es apropiado
                         self.guardar_en_cache(&marco.nombre_funcion, &marco.argumentos, &valor);
-                        
+
                         // Actualizar estadísticas
-                        self.estadisticas.memoria_actual = self.estadisticas.memoria_actual
+                        self.estadisticas.memoria_actual = self
+                            .estadisticas
+                            .memoria_actual
                             .saturating_sub(marco.memoria_estimada);
                     }
 
@@ -456,7 +493,11 @@ impl MaquinaVirtualRecursion {
     }
 
     /// Verifica los límites de ejecución antes de una llamada
-    fn verificar_limites_ejecucion(&mut self, nombre: &str, argumentos: &[Valor]) -> ResultadoQuetzal<()> {
+    fn verificar_limites_ejecucion(
+        &mut self,
+        nombre: &str,
+        argumentos: &[Valor],
+    ) -> ResultadoQuetzal<()> {
         // Usar la nueva lógica universal - NO más restricciones por nombre
         self.puede_ejecutar_funcion(nombre, argumentos)?;
         Ok(())
@@ -476,7 +517,10 @@ impl MaquinaVirtualRecursion {
     /// Determina si una función es pura (sin efectos secundarios)
     fn es_funcion_pura(&self, nombre: &str) -> bool {
         // Lista de funciones que sabemos que son puras
-        matches!(nombre, "factorial" | "fibonacci" | "potencia" | "suma_lista")
+        matches!(
+            nombre,
+            "factorial" | "fibonacci" | "potencia" | "suma_lista"
+        )
     }
 
     /// Genera una clave única para el cache
@@ -498,7 +542,7 @@ impl MaquinaVirtualRecursion {
             // Reemplazar el marco anterior con el actual (reutilización de stack)
             let marco_actual = self.stack_llamadas.pop().unwrap();
             let _marco_anterior = self.stack_llamadas.pop().unwrap();
-            
+
             // El marco actual toma el lugar del anterior
             self.stack_llamadas.push(marco_actual);
             self.estadisticas.optimizaciones_tail_call += 1;
@@ -514,11 +558,14 @@ impl MaquinaVirtualRecursion {
                 // Verificar progreso reciente
                 if let Some(historial) = self.historial_estados.get(nombre) {
                     if historial.len() > 50 {
-                        let estados_recientes = &historial[historial.len()-50..];
+                        let estados_recientes = &historial[historial.len() - 50..];
                         let primer_estado = estados_recientes[0];
-                        
+
                         // Si todos los estados recientes son idénticos, es bucle infinito real
-                        if estados_recientes.iter().all(|&estado| estado == primer_estado) {
+                        if estados_recientes
+                            .iter()
+                            .all(|&estado| estado == primer_estado)
+                        {
                             return Err(ErrorQuetzal::ErrorEjecucion {
                                 linea: 0,
                                 mensaje: format!(
@@ -549,16 +596,21 @@ impl MaquinaVirtualRecursion {
 
     /// Actualiza las estadísticas de memoria
     fn actualizar_estadisticas_memoria(&mut self) {
-        self.estadisticas.memoria_actual = self.stack_llamadas
+        self.estadisticas.memoria_actual = self
+            .stack_llamadas
             .iter()
             .map(|marco| marco.memoria_estimada)
             .sum();
 
-        self.estadisticas.memoria_maxima = self.estadisticas.memoria_maxima
+        self.estadisticas.memoria_maxima = self
+            .estadisticas
+            .memoria_maxima
             .max(self.estadisticas.memoria_actual);
 
         self.estadisticas.profundidad_actual = self.stack_llamadas.len();
-        self.estadisticas.profundidad_maxima = self.estadisticas.profundidad_maxima
+        self.estadisticas.profundidad_maxima = self
+            .estadisticas
+            .profundidad_maxima
             .max(self.estadisticas.profundidad_actual);
     }
 

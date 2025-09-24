@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -11,7 +11,7 @@ lista numeros = [1, 2, 3, 4, 5]
 entero longitud = numeros.longitud()
 imprimir(longitud)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -22,7 +22,7 @@ imprimir(longitud)
 lista vacia = []
 entero longitud = vacia.longitud()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -33,7 +33,7 @@ entero longitud = vacia.longitud()
 lista numeros = [10, 20, 30]
 entero primero = numeros.primero()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -44,7 +44,7 @@ entero primero = numeros.primero()
 lista numeros = [10, 20, 30]
 entero ultimo = numeros.ultimo()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -55,7 +55,7 @@ entero ultimo = numeros.ultimo()
 lista vacia = []
 entero primero = vacia.primero()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_err()); // Debe fallar
     }
@@ -66,7 +66,7 @@ entero primero = vacia.primero()
 lista vacia = []
 entero ultimo = vacia.ultimo()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_err()); // Debe fallar
     }
@@ -78,7 +78,7 @@ lista var numeros = [5, 1, 3, 2, 4]
 numeros.ordenar()
 imprimir(numeros)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -90,7 +90,7 @@ lista var nombres = ["Carlos", "Ana", "Beatriz"]
 nombres.ordenar()
 imprimir(nombres)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -103,7 +103,7 @@ lista llena = [1, 2, 3]
 log vacia_result = vacia.esta_vacia()
 log llena_result = llena.esta_vacia()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -116,7 +116,7 @@ numeros[0] = 100
 numeros[3] = 400
 imprimir(numeros)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -128,7 +128,7 @@ lista var frutas = ["manzana", "banana", "naranja"]
 frutas[1] = "kiwi"
 imprimir(frutas)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -139,7 +139,7 @@ imprimir(frutas)
 lista numeros = [1, 2, 3]
 numeros[10] = 100
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_err()); // Debe fallar
     }
@@ -152,7 +152,7 @@ numeros.agregar(4)
 numeros.agregar(5)
 imprimir(numeros)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -165,7 +165,7 @@ mixta.agregar(3.texto())
 mixta.agregar(verdadero.texto())
 imprimir(mixta)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -180,7 +180,7 @@ entero longitud_lista = numeros.longitud()
 imprimir(longitud_texto)
 imprimir(longitud_lista)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -198,7 +198,7 @@ log texto_lleno_result = texto_lleno.esta_vacia()
 log lista_vacia_result = lista_vacia.esta_vacia()
 log lista_llena_result = lista_llena.esta_vacia()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -212,7 +212,7 @@ entero longitud = numeros.longitud()
 entero primero = numeros.primero()
 entero ultimo = numeros.ultimo()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -227,7 +227,7 @@ datos.agregar(5)
 datos[1] = 20
 imprimir(datos)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -240,7 +240,7 @@ entero longitud = mixta.longitud()
 mixta.agregar("nuevo")
 entero nueva_longitud = mixta.longitud()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }

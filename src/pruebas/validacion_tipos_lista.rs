@@ -1,10 +1,10 @@
 //! Pruebas para la validación de tipos en métodos de listas tipadas
-//! 
+//!
 //! Este módulo contiene pruebas específicas para verificar que los métodos
-//! de listas tipadas (como lista<entero>, lista<texto>, etc.) validen 
+//! de listas tipadas (como lista<entero>, lista<texto>, etc.) validen
 //! correctamente los tipos de elementos antes de agregarlos.
 
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -17,10 +17,10 @@ mod tests {
             lista<entero> var numeros = []
             numeros.agregar("texto")
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_err());
-        
+
         if let Err(error) = resultado {
             let mensaje = error.to_string();
             assert!(mensaje.contains("No se puede agregar un valor de tipo"));
@@ -35,10 +35,10 @@ mod tests {
             lista<texto> var palabras = []
             palabras.agregar(42)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_err());
-        
+
         if let Err(error) = resultado {
             let mensaje = error.to_string();
             assert!(mensaje.contains("No se puede agregar un valor de tipo"));
@@ -53,10 +53,10 @@ mod tests {
             lista<entero> var numeros = []
             numeros.agregar(verdadero)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_err());
-        
+
         if let Err(error) = resultado {
             let mensaje = error.to_string();
             assert!(mensaje.contains("No se puede agregar un valor de tipo"));
@@ -72,7 +72,7 @@ mod tests {
             numeros.agregar(42)
             numeros.agregar(100)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -85,7 +85,7 @@ mod tests {
             palabras.agregar("hola")
             palabras.agregar("mundo")
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -99,7 +99,7 @@ mod tests {
             mixta.agregar("texto")
             mixta.agregar(verdadero)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -112,7 +112,7 @@ mod tests {
             decimales.agregar(3.14)
             decimales.agregar(2.71)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -125,7 +125,7 @@ mod tests {
             numeros.agregar(42)
             numeros.agregar(3.14)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -138,7 +138,7 @@ mod tests {
             banderas.agregar(verdadero)
             banderas.agregar(falso)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -150,10 +150,10 @@ mod tests {
             lista<log> var banderas = []
             banderas.agregar("no es booleano")
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_err());
-        
+
         if let Err(error) = resultado {
             let mensaje = error.to_string();
             assert!(mensaje.contains("No se puede agregar un valor de tipo"));
@@ -168,7 +168,7 @@ mod tests {
             lista<entero> var numeros = []
             numeros.agregar(nulo)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         // Nota: El comportamiento con nulo puede variar según la implementación
         // Si nulo es compatible con todos los tipos, esto puede pasar
@@ -192,10 +192,10 @@ mod tests {
             // Esta línea debería fallar
             palabras.agregar(123)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_err());
-        
+
         if let Err(error) = resultado {
             let mensaje = error.to_string();
             assert!(mensaje.contains("No se puede agregar un valor de tipo"));

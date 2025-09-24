@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -10,7 +10,7 @@ mod tests {
 entero numero = 42
 texto mi_texto = numero.texto()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -20,7 +20,7 @@ texto mi_texto = numero.texto()
 número decimal = 3.14159
 texto mi_texto = decimal.texto()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -32,7 +32,7 @@ log mentira = falso
 texto texto_verdad = verdad.texto()
 texto texto_mentira = mentira.texto()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -42,7 +42,7 @@ texto texto_mentira = mentira.texto()
 texto texto_numero = "123"
 entero numero = texto_numero.numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -52,7 +52,7 @@ entero numero = texto_numero.numero()
 texto texto_decimal = "123.456"
 número decimal = texto_decimal.numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -62,7 +62,7 @@ número decimal = texto_decimal.numero()
 entero entero_val = 42
 número decimal_val = entero_val.numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -72,7 +72,7 @@ número decimal_val = entero_val.numero()
 número decimal_val = 42.7
 entero entero_val = decimal_val.numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -82,7 +82,7 @@ entero entero_val = decimal_val.numero()
 texto texto_negativo = "-123"
 entero numero_negativo = texto_negativo.numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -92,7 +92,7 @@ entero numero_negativo = texto_negativo.numero()
 texto texto_decimal_negativo = "-123.456"
 número decimal_negativo = texto_decimal_negativo.numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -102,7 +102,7 @@ número decimal_negativo = texto_decimal_negativo.numero()
 texto texto_con_espacios = "  123  "
 entero numero = texto_con_espacios.numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -112,7 +112,7 @@ entero numero = texto_con_espacios.numero()
 texto texto_cero = "0"
 entero cero = texto_cero.numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -122,7 +122,7 @@ entero cero = texto_cero.numero()
 texto texto_decimal_cero = "0.0"
 número decimal_cero = texto_decimal_cero.numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -132,7 +132,7 @@ número decimal_cero = texto_decimal_cero.numero()
 entero numero = 42
 texto resultado = "El número es: " + numero.texto()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -143,7 +143,7 @@ entero a = 10
 entero b = 20
 texto resultado = (a + b).texto()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -153,7 +153,7 @@ texto resultado = (a + b).texto()
 log estado = verdadero
 texto texto_estado = estado.texto()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -163,7 +163,7 @@ texto texto_estado = estado.texto()
 log estado = falso
 texto texto_estado = estado.texto()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -174,7 +174,7 @@ número decimal = 123.456
 texto mi_texto = decimal.texto()
 entero numero_entero = mi_texto.numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -186,7 +186,7 @@ texto formatear_numero(entero num) {
 }
 texto resultado = formatear_numero(42)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -196,7 +196,7 @@ texto resultado = formatear_numero(42)
 texto texto_invalido = "no_es_numero"
 entero numero = texto_invalido.numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -206,7 +206,7 @@ entero numero = texto_invalido.numero()
 texto cadena_vacia = ""
 entero numero = cadena_vacia.numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -216,7 +216,7 @@ entero numero = cadena_vacia.numero()
 texto texto_especial = "123abc"
 entero numero = texto_especial.numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -226,7 +226,7 @@ entero numero = texto_especial.numero()
 texto texto_puntos = "12.34.56"
 número decimal = texto_puntos.numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -236,7 +236,7 @@ número decimal = texto_puntos.numero()
 texto numero_grande = "999999999999999999999999999"
 entero entero_grande = numero_grande.numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -246,7 +246,7 @@ entero entero_grande = numero_grande.numero()
 texto decimal_precision = "3.141592653589793238462643383279"
 número decimal = decimal_precision.numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 }

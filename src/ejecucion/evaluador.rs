@@ -4,6 +4,7 @@
 use crate::analisis::analizador_sintactico::{Nodo, Parametro, SegmentoInterpolacion};
 use crate::datos::tipos_datos::{TipoVariable, Valor, Variable};
 use crate::ejecucion::maquina_virtual::MaquinaVirtualRecursion;
+use crate::infraestructura::configuracion::PermisosEjecucion;
 use crate::infraestructura::consola::CONSOLA_GLOBAL;
 use crate::infraestructura::errores::{ErrorQuetzal, ResultadoQuetzal};
 use crate::infraestructura::manejador_modulos::ManejadorModulos;
@@ -318,6 +319,7 @@ pub struct Evaluador {
     dentro_de_metodo_clase: bool, // Indica si estamos ejecutando un método de clase
     manejador_modulos: Option<ManejadorModulos>,
     ruta_archivo_actual: Option<String>, // Rastrea el archivo que se está evaluando actualmente
+    permisos: PermisosEjecucion,
     vm_recursion: MaquinaVirtualRecursion,
 }
 
@@ -337,6 +339,7 @@ impl Evaluador {
             dentro_de_metodo_clase: false,
             manejador_modulos: None,
             ruta_archivo_actual: None,
+            permisos: PermisosEjecucion::sin_permisos(),
             vm_recursion: MaquinaVirtualRecursion::nueva(),
         }
     }
@@ -344,9 +347,15 @@ impl Evaluador {
     /// Crea un nuevo evaluador con manejador de módulos
     pub fn nuevo_con_modulos(ruta_principal: &str) -> ResultadoQuetzal<Self> {
         let mut evaluador = Self::nuevo();
-        let manejador = ManejadorModulos::nuevo(ruta_principal, evaluador.entorno_global.clone())?;
+        let permisos = PermisosEjecucion::desde_configuracion(ruta_principal)?;
+        let manejador = ManejadorModulos::nuevo(
+            ruta_principal,
+            evaluador.entorno_global.clone(),
+            permisos.clone(),
+        )?;
         evaluador.manejador_modulos = Some(manejador);
         evaluador.ruta_archivo_actual = Some(ruta_principal.to_string());
+        evaluador.permisos = permisos;
         Ok(evaluador)
     }
 
@@ -368,6 +377,11 @@ impl Evaluador {
     /// Toma el manejador de módulos temporalmente
     pub fn tomar_manejador_modulos(&mut self) -> Option<ManejadorModulos> {
         self.manejador_modulos.take()
+    }
+
+    /// Expone los permisos activos para las distintas operaciones.
+    pub fn obtener_permisos(&self) -> &PermisosEjecucion {
+        &self.permisos
     }
 
     /// Compara si dos valores son iguales (para detectar cambios en objetos)

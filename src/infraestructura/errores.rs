@@ -97,6 +97,9 @@ pub enum ErrorQuetzal {
         sugerencia: String,
     },
 
+    #[error("Permiso denegado en línea {linea}: {detalle}")]
+    PermisoDenegado { linea: usize, detalle: String },
+
     #[error("Ruta de módulo inválida en línea {linea}: '{ruta}' - {razon}")]
     RutaModuloInvalida {
         linea: usize,
@@ -443,6 +446,20 @@ impl ErrorQuetzal {
                     nombre_archivo,
                     nota,
                     sugerencia,
+                );
+            }
+            ErrorQuetzal::PermisoDenegado { linea, detalle } => {
+                let ayuda =
+                    Some("declara los permisos necesarios en quetzal.json dentro del proyecto");
+                self.mostrar_error_formato_rust(
+                    "error",
+                    "E0701",
+                    *linea,
+                    detalle,
+                    codigo_fuente,
+                    nombre_archivo,
+                    None,
+                    ayuda,
                 );
             }
             ErrorQuetzal::ErrorInterno { mensaje } => {

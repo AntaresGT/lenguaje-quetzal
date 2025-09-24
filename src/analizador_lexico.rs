@@ -368,7 +368,10 @@ impl AnalizadorLexico {
             
             // Interpolación de texto
             't' if self.mirar() == Some('"') => {
-                self.avanzar(); // Saltar la 't'
+                // IMPORTANTE: No avanzar aquí. 'caracter_actual' ya consumió la 't'.
+                // Antes se hacía un avanzar adicional que consumía la comilla inicial
+                // y luego dentro de `interpolacion_texto` se avanzaba de nuevo, lo cual
+                // provocaba que se perdiera el primer carácter real del texto (ej: 'E' en "El").
                 self.interpolacion_texto()
             },
             

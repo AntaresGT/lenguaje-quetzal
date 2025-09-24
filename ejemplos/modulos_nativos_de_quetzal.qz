@@ -1,0 +1,5 @@
+importar {
+    sumar
+} desde "quetzal/matemática"
+
+consola.mostrar(t"El resultado de 2 + 3 es: {sumar(2, 3)}")

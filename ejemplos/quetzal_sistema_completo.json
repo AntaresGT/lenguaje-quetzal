@@ -1,0 +1,11 @@
+{
+  "versión": "1.0.0",
+  "aplicación": "ejemplo-intérprete-sin-restricciones",
+  "permisos": [
+    "red",
+    {
+      "nombre": "sistema-archivos",
+      "alcance": "sistema-completo"
+    }
+  ]
+}

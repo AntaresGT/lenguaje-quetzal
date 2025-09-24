@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -11,7 +11,7 @@ para (entero var i = 0; i < 5; i = i + 1) {
     consola.imprimir("Iteración: " + i.texto())
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -24,7 +24,7 @@ mientras (contador < 3) {
     contador = contador + 1
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -37,7 +37,7 @@ hacer {
     valor_numero = valor_numero + 1
 } mientras (valor_numero <= 3)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -49,7 +49,7 @@ para (valor_numero cada numeros) {
     consola.imprimir("Elemento: " + valor_numero.texto())
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -61,7 +61,7 @@ para (entero valor cada enteros) {
     consola.imprimir("Valor entero: " + valor.texto())
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -74,7 +74,7 @@ para (entero var i = 0; i < 3; i = i + 1) {
     }
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -88,7 +88,7 @@ para (entero var i = 0; i < 10; i = i + 1) {
     consola.imprimir("Valor: " + i.texto())
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -102,7 +102,7 @@ para (entero var i = 0; i < 5; i = i + 1) {
     consola.imprimir("Valor: " + i.texto())
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -113,7 +113,7 @@ para (número var i = 0.0; i < 2.5; i = i + 0.5) {
     consola.imprimir("Decimal: " + i.texto())
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -128,7 +128,7 @@ mientras ((a < 5) && (b > 5)) {
     b = b - 1
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -143,12 +143,12 @@ mientras (verdadero) {
     contador = contador + 1
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
     // ========== TESTS PARA ÁMBITO DE VARIABLES EN BUCLES ==========
-    
+
     #[test]
     fn test_ambito_variables_bucle_para_mismo_nombre() {
         // Este test verifica que se puede usar el mismo nombre de variable
@@ -159,9 +159,13 @@ para (entero var i = 0; i < 3; i = i + 1) {
     consola.imprimir(palabra)
 }
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_ok(), "Error en ámbito de variables en bucle para: {:?}", resultado);
+        assert!(
+            resultado.is_ok(),
+            "Error en ámbito de variables en bucle para: {:?}",
+            resultado
+        );
     }
 
     #[test]
@@ -179,14 +183,18 @@ para (entero var i = 0; i < 2; i = i + 1) {
     }
 }
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_ok(), "Error en ámbito de variables en bucles anidados: {:?}", resultado);
+        assert!(
+            resultado.is_ok(),
+            "Error en ámbito de variables en bucles anidados: {:?}",
+            resultado
+        );
     }
 
     #[test]
     fn test_ambito_variables_funciones_con_bucles() {
-        // Test que verifica el problema original reportado: 
+        // Test que verifica el problema original reportado:
         // variables con el mismo nombre en funciones diferentes que contienen bucles
         let codigo = r#"
 vacio funcion1() {
@@ -206,9 +214,13 @@ vacio funcion2() {
 funcion1()
 funcion2()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_ok(), "Error en ámbito de variables entre funciones con bucles: {:?}", resultado);
+        assert!(
+            resultado.is_ok(),
+            "Error en ámbito de variables entre funciones con bucles: {:?}",
+            resultado
+        );
     }
 
     #[test]
@@ -228,9 +240,13 @@ para (elemento cada numeros2) {
     consola.imprimir(mensaje)
 }
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_ok(), "Error en ámbito de variables en bucles para_cada: {:?}", resultado);
+        assert!(
+            resultado.is_ok(),
+            "Error en ámbito de variables en bucles para_cada: {:?}",
+            resultado
+        );
     }
 
     #[test]
@@ -255,9 +271,13 @@ para (entero var m = 0; m < 2; m = m + 1) {
     consola.imprimir(resultado)
 }
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_ok(), "Error en ámbito de variables en bucles consecutivos: {:?}", resultado);
+        assert!(
+            resultado.is_ok(),
+            "Error en ámbito de variables en bucles consecutivos: {:?}",
+            resultado
+        );
     }
 
     #[test]
@@ -278,9 +298,13 @@ lista datos2 = ["x", "y"]
 procesar_lista(datos1)
 procesar_lista(datos2)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_ok(), "Error en ámbito de variables en función con bucle y parámetros: {:?}", resultado);
+        assert!(
+            resultado.is_ok(),
+            "Error en ámbito de variables en función con bucle y parámetros: {:?}",
+            resultado
+        );
     }
 
     #[test]
@@ -301,9 +325,13 @@ para (entero var i = 0; i < 2; i = i + 1) {
     }
 }
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_ok(), "Error en ámbito de variables en bucles con tres niveles de anidación: {:?}", resultado);
+        assert!(
+            resultado.is_ok(),
+            "Error en ámbito de variables en bucles con tres niveles de anidación: {:?}",
+            resultado
+        );
     }
 
     #[test]
@@ -319,8 +347,12 @@ para (entero var i = 0; i < 2; i = i + 1) {
 
 consola.imprimir("Fuera del bucle: " + variable_global)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_ok(), "Error en shadowing de variables en bucles: {:?}", resultado);
+        assert!(
+            resultado.is_ok(),
+            "Error en shadowing de variables en bucles: {:?}",
+            resultado
+        );
     }
 }

@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -13,7 +13,7 @@ entero numero2 = 20
 entero suma = numero1 + numero2
 consola.imprimir("Suma: " + suma.texto())
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -38,7 +38,7 @@ si (area > 50.0) {
     consola.imprimir("El círculo es pequeño")
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -59,7 +59,7 @@ entero sumar_lista(lista<entero> lista_nums) {
 entero total = sumar_lista(numeros)
 consola.imprimir("Total: " + total.texto())
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -83,7 +83,7 @@ texto mensaje_completo = "Número: " + numero_entero.texto() +
 
 consola.imprimir(mensaje_completo)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -112,7 +112,7 @@ log igual = a == b
 
 consola.imprimir("Operaciones completadas")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -138,7 +138,7 @@ entero numero_inicial = 10
 entero resultado_final = procesar_numero(numero_inicial)
 consola.imprimir("Resultado: " + resultado_final.texto())
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -154,12 +154,12 @@ jsn persona = {
 
 consola.imprimir("Persona creada")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
     #[test]
-    fn test_programa_con_json_extrano(){
+    fn test_programa_con_json_extrano() {
         let codigo = r#"
 // Objeto JSON con estructura compleja
 jsn complejo = {
@@ -182,7 +182,7 @@ jsn complejo = {
 }
 consola.imprimir("Objeto JSON complejo creado")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -206,7 +206,7 @@ si (edad >= 18) {
     consola.imprimir("Menor de edad")
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -225,7 +225,7 @@ mensaje = "Modificado"
 consola.imprimir("Contador: " + contador.texto())
 consola.imprimir("Mensaje: " + mensaje)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -259,7 +259,7 @@ lista<entero> numeros = [10, 15, 20, 25]
 // Procesar cada número (simulado)
 consola.imprimir("Procesando números...")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -285,7 +285,7 @@ texto crear_reporte(entero num, número dec, texto txt, log activo) {
 texto reporte = crear_reporte(numero_entero, numero_decimal, mi_texto, estado_activo)
 consola.imprimir(reporte)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 }

@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -10,7 +10,7 @@ mod tests {
 texto mi_texto = "Hola mundo"
 entero longitud = mi_texto.longitud()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -22,7 +22,7 @@ texto texto_lleno = "contenido"
 log es_vacio = texto_vacio.esta_vacia()
 log es_lleno = texto_lleno.esta_vacia()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -33,7 +33,7 @@ texto mi_texto = "Hola mundo cruel"
 entero posicion = mi_texto.buscar("mundo")
 entero no_encontrado = mi_texto.buscar("xyz")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -44,7 +44,7 @@ texto mi_texto = "Hola mundo"
 log contiene_hola = mi_texto.contiene("Hola")
 log contiene_xyz = mi_texto.contiene("xyz")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -55,7 +55,7 @@ texto mi_texto = "Hola mundo"
 log empieza_hola = mi_texto.empieza_con("Hola")
 log empieza_mundo = mi_texto.empieza_con("mundo")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -66,7 +66,7 @@ texto mi_texto = "archivo.txt"
 log es_txt = mi_texto.termina_con(".txt")
 log es_pdf = mi_texto.termina_con(".pdf")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -77,7 +77,7 @@ texto mi_texto = "ana, banana, manzana"
 entero cuenta_ana = mi_texto.contar_ocurrencias("ana")
 entero cuenta_na = mi_texto.contar_ocurrencias("na")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -89,7 +89,7 @@ texto mayusculas = mi_texto.a_mayusculas()
 texto minusculas = mi_texto.a_minusculas()
 texto capitalizado = mi_texto.capitalizar()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -99,7 +99,7 @@ texto capitalizado = mi_texto.capitalizar()
 texto mi_texto = "  texto con espacios  "
 texto limpio = mi_texto.recortar()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -109,7 +109,7 @@ texto limpio = mi_texto.recortar()
 texto mi_texto = "ab"
 texto repetido = mi_texto.repetir(3)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -119,7 +119,7 @@ texto repetido = mi_texto.repetir(3)
 texto mi_texto = "Hola"
 texto invertido = mi_texto.invertir()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -129,7 +129,7 @@ texto invertido = mi_texto.invertir()
 texto mi_texto = "Hola mundo, mundo cruel"
 texto reemplazado = mi_texto.reemplazar("mundo", "universo")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -140,7 +140,7 @@ texto mi_texto = "Hola mundo"
 texto sub1 = mi_texto.subcadena(0, 4)
 texto sub2 = mi_texto.subcadena(5)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -150,7 +150,7 @@ texto sub2 = mi_texto.subcadena(5)
 texto mi_texto = "uno,dos,tres,cuatro"
 lista partes = mi_texto.dividir(",")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -160,7 +160,7 @@ lista partes = mi_texto.dividir(",")
 texto texto_multilinea = "linea1\nlinea2\nlinea3"
 lista<texto> lineas = texto_multilinea.partir_lineas()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -173,7 +173,7 @@ texto texto3 = "abc"
 entero comp1 = texto1.comparar(texto2)
 entero comp2 = texto1.comparar(texto3)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -186,7 +186,7 @@ texto texto3 = "mundo"
 log iguales = texto1.igual_sin_caso(texto2)
 log diferentes = texto1.igual_sin_caso(texto3)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -196,7 +196,7 @@ log diferentes = texto1.igual_sin_caso(texto3)
 texto mi_texto = "Hola mundo"
 texto codificado = mi_texto.codificar_base64()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -206,7 +206,7 @@ texto codificado = mi_texto.codificar_base64()
 texto texto_base64 = "SG9sYSBtdW5kbw=="
 texto decodificado = texto_base64.decodificar_base64()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -216,7 +216,7 @@ texto decodificado = texto_base64.decodificar_base64()
 texto mi_texto = "Hola mundo!"
 texto codificado = mi_texto.codificar_uri()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -226,7 +226,7 @@ texto codificado = mi_texto.codificar_uri()
 texto texto_uri = "Hola%20mundo%21"
 texto decodificado = texto_uri.decodificar_uri()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -237,7 +237,7 @@ texto mi_texto = "Hola"
 texto primer_char = mi_texto[0]
 texto segundo_char = mi_texto[1]
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -248,7 +248,7 @@ lista<texto> palabras = ["Hola", "mundo", "cruel"]
 texto unido = palabras.unir(" ")
 texto unido_comas = palabras.unir(", ")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -258,7 +258,7 @@ texto unido_comas = palabras.unir(", ")
 lista<texto> lineas = ["Primera linea", "Segunda linea", "Tercera linea"]
 texto texto_multilinea = lineas.unir_lineas()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -268,7 +268,7 @@ texto texto_multilinea = lineas.unir_lineas()
 texto mi_texto = "test"
 texto resultado = mi_texto.repetir(-1)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -278,7 +278,7 @@ texto resultado = mi_texto.repetir(-1)
 texto mi_texto = "abc"
 texto char = texto[10]
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -288,7 +288,7 @@ texto char = texto[10]
 texto mi_texto = "test"
 entero pos = mi_texto.buscar()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -298,7 +298,7 @@ entero pos = mi_texto.buscar()
 texto mi_texto = "abc"
 lista<texto> partes = mi_texto.dividir("")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -308,7 +308,7 @@ lista<texto> partes = mi_texto.dividir("")
 texto mi_texto = "abc"
 entero count = mi_texto.contar_ocurrencias("")
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -318,7 +318,7 @@ entero count = mi_texto.contar_ocurrencias("")
 texto texto_vacio = ""
 entero longitud = texto_vacio.longitud()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -330,7 +330,7 @@ texto todo = mi_texto.subcadena(0)
 texto str_vacio = mi_texto.subcadena(10)
 texto parte = mi_texto.subcadena(1, 2)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -341,7 +341,7 @@ texto mi_texto = "ñáéíóúü"
 entero longitud = mi_texto.longitud()
 texto mayusculas = mi_texto.a_mayusculas()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -351,7 +351,7 @@ texto mayusculas = mi_texto.a_mayusculas()
 texto mi_texto = "  HOLA MUNDO  "
 texto procesado = mi_texto.recortar().a_minusculas().capitalizar()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -363,7 +363,7 @@ texto texto2 = "mundo"
 texto concatenado = texto1 + " " + texto2
 entero longitud_total = concatenado.longitud()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 }

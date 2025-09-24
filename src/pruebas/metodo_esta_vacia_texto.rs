@@ -1,6 +1,6 @@
 // Prueba unitaria para el método esta_vacia() de tipos texto
 
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -13,10 +13,10 @@ mod tests {
             log resultado = mi_texto.esta_vacia()
             consola.mostrar("Resultado: " + resultado.texto())
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
-    
+
     #[test]
     fn test_metodo_esta_vacia_texto_vacia() {
         let codigo = r#"
@@ -24,10 +24,10 @@ mod tests {
             log resultado = texto_vacio.esta_vacia()
             consola.mostrar("Texto vacío está vacío: " + resultado.texto())
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
-    
+
     #[test]
     fn test_metodo_esta_vacia_texto_con_espacios() {
         let codigo = r#"
@@ -35,10 +35,10 @@ mod tests {
             log resultado = con_espacios.esta_vacia()
             consola.mostrar("Texto con espacios está vacío: " + resultado.texto())
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
-    
+
     #[test]
     fn test_metodo_esta_vacia_texto_unicode() {
         let codigo = r#"
@@ -46,10 +46,10 @@ mod tests {
             log resultado = unicode.esta_vacia()
             consola.mostrar("Texto Unicode está vacío: " + resultado.texto())
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
-    
+
     #[test]
     fn test_metodo_esta_vacia_comparacion_con_longitud() {
         let codigo = r#"
@@ -64,7 +64,7 @@ mod tests {
             consola.mostrar("Cadena vacía - está_vacia: " + vacia1.texto() + ", longitud: " + long1.texto())
             consola.mostrar("Cadena 'abc' - está_vacia: " + vacia2.texto() + ", longitud: " + long2.texto())
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 }

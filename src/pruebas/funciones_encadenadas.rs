@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -10,7 +10,7 @@ mod tests {
 número numero_test = 42
 texto resultado = numero_test.texto().numero().texto()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -20,7 +20,7 @@ texto resultado = numero_test.texto().numero().texto()
 número numero_decimal = 3.1416
 texto resultado = numero_decimal.texto().numero().texto()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -30,7 +30,7 @@ texto resultado = numero_decimal.texto().numero().texto()
 número numero_test = 123
 consola.imprimir("Resultado: " + numero_test.texto().numero().texto())
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -41,7 +41,7 @@ número numero1 = 10
 número numero2 = 20
 consola.imprimir(numero1.texto() + " y " + numero2.texto())
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -51,7 +51,7 @@ consola.imprimir(numero1.texto() + " y " + numero2.texto())
 texto mi_texto = "123"
 número resultado = mi_texto.numero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -61,7 +61,7 @@ número resultado = mi_texto.numero()
 número decimal = 42.7
 entero resultado = decimal.entero()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -71,7 +71,7 @@ entero resultado = decimal.entero()
 número negativo = -15.5
 texto resultado = negativo.texto().numero().texto()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -81,7 +81,7 @@ texto resultado = negativo.texto().numero().texto()
 entero numero_entero = 999
 texto resultado = numero_entero.texto().entero().numero().texto()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -91,7 +91,7 @@ texto resultado = numero_entero.texto().entero().numero().texto()
 número numero_test = 42
 texto resultado = numero_test.metodo_inexistente()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_err());
     }
 
@@ -101,7 +101,7 @@ texto resultado = numero_test.metodo_inexistente()
 número numero_test = 3.14159
 texto resultado = numero_test.texto().numero().entero().numero().texto()
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -114,7 +114,7 @@ consola.imprimir("Resultado: " + numero_test.texto()
                                     .texto()
         )
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 }

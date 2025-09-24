@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -12,7 +12,7 @@ numeros[0] = 10
 numeros[1] = 20
 numeros[2] = 30
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -25,7 +25,7 @@ valores[0] = "texto"
 valores[1] = verdadero
 valores[2] = 3.14
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -36,7 +36,7 @@ valores[2] = 3.14
 lista var numeros = [1, 2, 3]
 numeros[-1] = 100
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_err()); // Debe fallar con índice negativo
     }
@@ -47,7 +47,7 @@ numeros[-1] = 100
 lista var numeros = [1, 2, 3]
 numeros[1000] = 100
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_err()); // Debe fallar fuera de rango
     }
@@ -60,7 +60,7 @@ entero indice = 2
 numeros[indice] = 999
 numeros[indice + 1] = 888
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -75,7 +75,7 @@ mientras (i < datos.longitud()) {
     i = i + 1
 }
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -87,7 +87,7 @@ lista var numeros = [1, 2, 3]
 numeros[1] = 100
 entero valor = numeros[1]
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -98,7 +98,7 @@ entero valor = numeros[1]
 lista vacia = []
 vacia[0] = 10
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_err()); // Debe fallar en lista vacía
     }
@@ -110,7 +110,7 @@ lista var numeros = [1, 2, 3]
 numeros[0] = numeros.longitud()
 numeros[1] = numeros.primero()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -123,7 +123,7 @@ datos[1] = 10
 datos[1] = 20
 datos[1] = 30
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }

@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -10,7 +10,7 @@ mod tests {
 lista var numeros = [1, 2, 3]
 numeros.agregar(4)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -24,7 +24,7 @@ datos.agregar(2)
 datos.agregar(3)
 entero longitud = datos.longitud()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -38,7 +38,7 @@ mixta.agregar("texto")
 mixta.agregar(verdadero)
 mixta.agregar(3.14)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -50,7 +50,7 @@ lista var cadenas = ["uno", "dos"]
 cadenas.agregar(3.texto())
 cadenas.agregar(verdadero.texto())
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -62,7 +62,7 @@ lista var numeros = [1, 2]
 numeros.agregar(1 + 2)
 numeros.agregar(numeros.longitud())
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -73,7 +73,7 @@ numeros.agregar(numeros.longitud())
 lista var datos = [1, 2, 3]
 datos.agregar()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_err()); // Debe fallar sin argumentos
     }
@@ -84,7 +84,7 @@ datos.agregar()
 lista var datos = [1, 2, 3]
 datos.agregar(4, 5)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok()); // Cambiado a is_ok() porque acepta múltiples argumentos
     }
@@ -97,7 +97,7 @@ entero longitud_antes = numeros.longitud()
 numeros.agregar(4)
 entero longitud_despues = numeros.longitud()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -112,7 +112,7 @@ mientras (i < 5) {
     i = i + 1
 }
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -124,7 +124,7 @@ lista var numeros = [1, 2, 3]
 numeros.agregar(4)
 entero ultimo = numeros.ultimo()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -137,7 +137,7 @@ datos.agregar(3)
 datos[0] = 10
 datos.agregar(4)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -149,7 +149,7 @@ lista var principal = [[1, 2], [3, 4]]
 lista nueva = [5, 6]
 principal.agregar(nueva)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
     }

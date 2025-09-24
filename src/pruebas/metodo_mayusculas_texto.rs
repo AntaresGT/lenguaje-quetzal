@@ -1,6 +1,6 @@
 // Prueba unitaria para el método mayusculas() de tipos texto
 
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {

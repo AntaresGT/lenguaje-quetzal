@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::interprete::interpretar;
+    use crate::nucleo::interprete::interpretar;
 
     #[test]
     fn test_analisis_texto_avanzado() {
@@ -15,7 +15,7 @@ mod tests {
             consola.imprimir("Palabras: " + total_palabras.texto())
             consola.imprimir("Caracteres: " + total_caracteres.texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -32,7 +32,7 @@ mod tests {
             
             consola.imprimir("Texto procesado: " + unido)
         "#;
-        
+
         let resultado = interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -46,7 +46,7 @@ mod tests {
             
             consola.imprimir("Texto modificado: " + nuevo_texto)
         "#;
-        
+
         let resultado = interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -67,7 +67,7 @@ mod tests {
             consola.imprimir("Empieza con 'u': " + empieza_letra.texto())
             consola.imprimir("Termina con '.com': " + termina_com.texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -84,7 +84,7 @@ mod tests {
             consola.imprimir("Texto: " + frase)
             consola.imprimir("Primera palabra en mayúsculas: " + item_caps)
         "#;
-        
+
         let resultado = interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -107,7 +107,7 @@ mod tests {
             consola.imprimir("Primera palabra: " + primera_palabra)
             consola.imprimir("Segunda palabra: " + segunda_palabra)
         "#;
-        
+
         let resultado = interpretar(codigo);
         assert!(resultado.is_ok());
     }

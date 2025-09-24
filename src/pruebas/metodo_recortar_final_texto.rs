@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 pub mod tests {
-    use crate::interprete;
+    use crate::nucleo::interprete;
 
     #[test]
     fn test_metodo_recortar_final_texto_con_espacios_final() {
@@ -14,7 +14,7 @@ pub mod tests {
         "#;
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
-        if let crate::tipos_datos::Valor::Texto(texto) = resultado.unwrap() {
+        if let crate::datos::tipos_datos::Valor::Texto(texto) = resultado.unwrap() {
             assert_eq!(texto, "Hola Mundo");
         } else {
             panic!("Se esperaba un valor de tipo texto");
@@ -30,7 +30,7 @@ pub mod tests {
         "#;
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
-        if let crate::tipos_datos::Valor::Texto(texto) = resultado.unwrap() {
+        if let crate::datos::tipos_datos::Valor::Texto(texto) = resultado.unwrap() {
             assert_eq!(texto, "   Hola Mundo");
         } else {
             panic!("Se esperaba un valor de tipo texto");
@@ -46,7 +46,7 @@ pub mod tests {
         "#;
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
-        if let crate::tipos_datos::Valor::Texto(texto) = resultado.unwrap() {
+        if let crate::datos::tipos_datos::Valor::Texto(texto) = resultado.unwrap() {
             assert_eq!(texto, "Hola Mundo");
         } else {
             panic!("Se esperaba un valor de tipo texto");
@@ -62,7 +62,7 @@ pub mod tests {
         "#;
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
-        if let crate::tipos_datos::Valor::Texto(texto) = resultado.unwrap() {
+        if let crate::datos::tipos_datos::Valor::Texto(texto) = resultado.unwrap() {
             assert_eq!(texto, "");
         } else {
             panic!("Se esperaba un valor de tipo texto");
@@ -78,7 +78,7 @@ pub mod tests {
         "#;
         let resultado = interprete::interpretar(codigo);
         assert!(resultado.is_ok());
-        if let crate::tipos_datos::Valor::Texto(texto) = resultado.unwrap() {
+        if let crate::datos::tipos_datos::Valor::Texto(texto) = resultado.unwrap() {
             assert_eq!(texto, "Hola Mundo");
         } else {
             panic!("Se esperaba un valor de tipo texto");

@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -12,7 +12,7 @@ texto nombre = "Mundo"
 texto mensaje = saludo + " " + nombre
 imprimir(mensaje)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -23,7 +23,7 @@ entero valor_numero = 42
 texto mi_texto = "El número es: " + valor_numero.texto()
 consola.imprimir(mi_texto)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -36,7 +36,7 @@ texto parte3 = "Tercera"
 texto resultado = parte1 + " - " + parte2 + " - " + parte3
 imprimir(resultado)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -48,7 +48,7 @@ entero b = 5
 texto resultado = "La suma de " + a.texto() + " y " + b.texto() + " es " + (a + b).texto()
 imprimir(resultado)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -60,7 +60,7 @@ entero edad = 25
 texto mensaje = "Hola, soy " + nombre + " y tengo " + edad.texto() + " años"
 imprimir(mensaje)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -75,7 +75,7 @@ texto resultado = "Entero: " + entero_val.texto() +
                    ", Booleano: " + booleano_val.texto()
 imprimir(resultado)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -86,7 +86,7 @@ texto vacia = ""
 texto resultado = "Inicio" + vacia + "Final"
 imprimir(resultado)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -97,7 +97,7 @@ texto nombre = "Quetzal"
 número version = 0.1
 imprimir("Lenguaje: " + nombre + ", Versión: " + version.texto())
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -109,7 +109,7 @@ texto palabra2 = "mundo"
 texto con_espacios = palabra1 + " " + palabra2 + " desde Quetzal"
 imprimir(con_espacios)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -122,7 +122,7 @@ texto parte3 = "un mensaje completo y coherente"
 texto mensaje_completo = parte1 + " " + parte2 + " " + parte3
 imprimir(mensaje_completo)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -135,7 +135,7 @@ texto resultado = base.texto() + " elevado a " + exponente.texto() +
                    " es igual a " + (base * base).texto()
 imprimir(resultado)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 }

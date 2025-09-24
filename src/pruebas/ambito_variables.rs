@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -23,9 +23,13 @@ entero funcion2() {
 entero suma = funcion1() + funcion2()
 consola.imprimir("Suma: " + suma.texto())
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_ok(), "Error en ámbito básico entre funciones: {:?}", resultado);
+        assert!(
+            resultado.is_ok(),
+            "Error en ámbito básico entre funciones: {:?}",
+            resultado
+        );
     }
 
     #[test]
@@ -53,9 +57,13 @@ texto procesar_texto() {
 entero conteo = contar_elementos()
 texto mi_texto = procesar_texto()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_ok(), "Error en ámbito de variables entre funciones con bucles: {:?}", resultado);
+        assert!(
+            resultado.is_ok(),
+            "Error en ámbito de variables entre funciones con bucles: {:?}",
+            resultado
+        );
     }
 
     #[test]
@@ -69,9 +77,13 @@ para (entero var iteracion = 0; iteracion < 4; iteracion = iteracion + 1) {
     consola.imprimir(resultado_local)
 }
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_ok(), "Error en ámbito de variables por iteración: {:?}", resultado);
+        assert!(
+            resultado.is_ok(),
+            "Error en ámbito de variables por iteración: {:?}",
+            resultado
+        );
     }
 
     #[test]
@@ -95,9 +107,13 @@ vacio funcion_con_shadowing() {
 funcion_con_shadowing()
 consola.imprimir("En global: " + nombre)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_ok(), "Error en shadowing de variables: {:?}", resultado);
+        assert!(
+            resultado.is_ok(),
+            "Error en shadowing de variables: {:?}",
+            resultado
+        );
     }
 
     #[test]
@@ -122,9 +138,13 @@ vacio test_anidacion() {
 
 test_anidacion()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_ok(), "Error en ámbito de bucles anidados profundos: {:?}", resultado);
+        assert!(
+            resultado.is_ok(),
+            "Error en ámbito de bucles anidados profundos: {:?}",
+            resultado
+        );
     }
 
     #[test]
@@ -148,9 +168,13 @@ texto resultado2 = procesar_con_bucle("otro", 2)
 consola.imprimir("Resultado 1: " + resultado1)
 consola.imprimir("Resultado 2: " + resultado2)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_ok(), "Error en ámbito de parámetros de función: {:?}", resultado);
+        assert!(
+            resultado.is_ok(),
+            "Error en ámbito de parámetros de función: {:?}",
+            resultado
+        );
     }
 
     #[test]
@@ -174,9 +198,13 @@ vacio procesar_listas() {
 
 procesar_listas()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_ok(), "Error en ámbito de variables locales complejas: {:?}", resultado);
+        assert!(
+            resultado.is_ok(),
+            "Error en ámbito de variables locales complejas: {:?}",
+            resultado
+        );
     }
 
     #[test]
@@ -206,9 +234,13 @@ vacio test_bloques_mixtos(log condicion) {
 test_bloques_mixtos(verdadero)
 test_bloques_mixtos(falso)
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_ok(), "Error en ámbito entre bloques condicionales y bucles: {:?}", resultado);
+        assert!(
+            resultado.is_ok(),
+            "Error en ámbito entre bloques condicionales y bucles: {:?}",
+            resultado
+        );
     }
 
     #[test]
@@ -242,9 +274,13 @@ vacio funcion_reutilizacion() {
 
 funcion_reutilizacion()
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_ok(), "Error en reutilización de nombres de variables: {:?}", resultado);
+        assert!(
+            resultado.is_ok(),
+            "Error en reutilización de nombres de variables: {:?}",
+            resultado
+        );
     }
 
     #[test]
@@ -258,9 +294,12 @@ vacio funcion_con_variable_local() {
 funcion_con_variable_local()
 consola.imprimir(variable_local)  // Esto debería fallar
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_err(), "Debería fallar al acceder a variable fuera de su ámbito");
+        assert!(
+            resultado.is_err(),
+            "Debería fallar al acceder a variable fuera de su ámbito"
+        );
     }
 
     #[test]
@@ -273,8 +312,11 @@ para (entero var i = 0; i < 3; i = i + 1) {
 
 consola.imprimir(variable_bucle)  // Esto debería fallar
         "#;
-        
+
         let resultado = interprete::interpretar(codigo);
-        assert!(resultado.is_err(), "Debería fallar al acceder a variable de bucle fuera de su ámbito");
+        assert!(
+            resultado.is_err(),
+            "Debería fallar al acceder a variable de bucle fuera de su ámbito"
+        );
     }
 }

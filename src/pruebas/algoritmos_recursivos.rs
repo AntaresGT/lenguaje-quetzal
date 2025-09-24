@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::interprete::interpretar;
+    use crate::nucleo::interprete::interpretar;
 
     #[test]
     fn test_factorial_recursivo() {
@@ -16,7 +16,7 @@ mod tests {
             entero resultado = factorial(5)
             consola.imprimir("Factorial de 5: " + resultado.texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -35,7 +35,7 @@ mod tests {
             entero resultado = fibonacci(6)
             consola.imprimir("Fibonacci de 6: " + resultado.texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -56,7 +56,7 @@ mod tests {
             entero total = suma_lista(numeros, 0)
             consola.imprimir("Suma total: " + total.texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -79,7 +79,7 @@ mod tests {
             entero resultado = potencia(2, 4)
             consola.imprimir("2 elevado a la 4: " + resultado.texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
         assert!(resultado.is_ok());
     }
@@ -111,7 +111,7 @@ mod tests {
             log resultado = es_primo(17)
             consola.imprimir("17 es primo: " + resultado.texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
         assert!(resultado.is_ok());
     }

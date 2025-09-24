@@ -29,7 +29,7 @@ pub enum Valor {
         clase: String,
         propiedades: HashMap<String, Valor>,
         propiedades_publicas: Vec<String>, // Lista de propiedades públicas
-        metodos_publicos: Vec<String>, // Lista de métodos públicos
+        metodos_publicos: Vec<String>,     // Lista de métodos públicos
     },
 }
 
@@ -42,26 +42,36 @@ impl Valor {
             Valor::Entero(n) => n.to_string(),
             Valor::Numero(n) => n.to_string(),
             Valor::Texto(s) => s.clone(),
-            Valor::Log(b) => if *b { "verdadero".to_string() } else { "falso".to_string() },
+            Valor::Log(b) => {
+                if *b {
+                    "verdadero".to_string()
+                } else {
+                    "falso".to_string()
+                }
+            }
             Valor::Lista(lista) => {
                 let elementos: Vec<String> = lista.iter().map(|v| v.a_texto()).collect();
                 format!("[{}]", elementos.join(", "))
-            },
+            }
             Valor::Json(objeto) => {
-                let pares: Vec<String> = objeto.iter()
+                let pares: Vec<String> = objeto
+                    .iter()
                     .map(|(clave, valor)| format!("{}: {}", clave, valor.a_texto()))
                     .collect();
                 format!("{{{}}}", pares.join(", "))
-            },
-            Valor::Objeto { clase, propiedades, .. } => {
-                let pares: Vec<String> = propiedades.iter()
+            }
+            Valor::Objeto {
+                clase, propiedades, ..
+            } => {
+                let pares: Vec<String> = propiedades
+                    .iter()
                     .map(|(clave, valor)| format!("{}: {}", clave, valor.a_texto()))
                     .collect();
                 format!("{}[{}]", clase, pares.join(", "))
             }
         }
     }
-    
+
     /// Convierte el valor a número entero
     #[allow(dead_code)]
     pub fn a_entero(&self) -> Result<i64, String> {
@@ -69,13 +79,14 @@ impl Valor {
             Valor::Nulo => Err("No se puede convertir 'nulo' a entero".to_string()),
             Valor::Entero(n) => Ok(*n),
             Valor::Numero(n) => Ok(*n as i64),
-            Valor::Texto(s) => s.parse::<i64>()
+            Valor::Texto(s) => s
+                .parse::<i64>()
                 .map_err(|_| format!("No se puede convertir '{}' a entero", s)),
             Valor::Log(b) => Ok(if *b { 1 } else { 0 }),
             _ => Err("Tipo no convertible a entero".to_string()),
         }
     }
-    
+
     /// Convierte el valor a número decimal
     #[allow(dead_code)]
     pub fn a_numero(&self) -> Result<f64, String> {
@@ -83,13 +94,14 @@ impl Valor {
             Valor::Nulo => Err("No se puede convertir 'nulo' a número".to_string()),
             Valor::Entero(n) => Ok(*n as f64),
             Valor::Numero(n) => Ok(*n),
-            Valor::Texto(s) => s.parse::<f64>()
+            Valor::Texto(s) => s
+                .parse::<f64>()
                 .map_err(|_| format!("No se puede convertir '{}' a número", s)),
             Valor::Log(b) => Ok(if *b { 1.0 } else { 0.0 }),
             _ => Err("Tipo no convertible a número".to_string()),
         }
     }
-    
+
     /// Convierte el valor a lógico (booleano)
     pub fn a_log(&self) -> bool {
         match self {
@@ -104,7 +116,7 @@ impl Valor {
             Valor::Objeto { propiedades, .. } => !propiedades.is_empty(),
         }
     }
-    
+
     /// Obtiene el tipo del valor como texto
     pub fn tipo_como_texto(&self) -> &'static str {
         match self {
@@ -119,20 +131,20 @@ impl Valor {
             Valor::Objeto { .. } => "objeto",
         }
     }
-    
+
     // === MÉTODOS DE COMPATIBILIDAD HACIA ATRÁS ===
     // Estos métodos mantienen compatibilidad mientras se migra el código
-    
+
     /// Alias para a_texto() - mantiene compatibilidad
     pub fn a_cadena(&self) -> String {
         self.a_texto()
     }
-    
+
     /// Alias para a_log() - mantiene compatibilidad
     pub fn a_bool(&self) -> bool {
         self.a_log()
     }
-    
+
     /// Alias para tipo_como_texto() - mantiene compatibilidad
     pub fn tipo_como_cadena(&self) -> &'static str {
         self.tipo_como_texto()
@@ -164,7 +176,12 @@ pub struct Variable {
 
 impl Variable {
     /// Crea una nueva variable
-    pub fn nueva(nombre: String, valor: Valor, tipo_variable: TipoVariable, tipo_dato: String) -> Self {
+    pub fn nueva(
+        nombre: String,
+        valor: Valor,
+        tipo_variable: TipoVariable,
+        tipo_dato: String,
+    ) -> Self {
         Variable {
             nombre,
             valor,
@@ -172,12 +189,12 @@ impl Variable {
             tipo_dato,
         }
     }
-    
+
     /// Verifica si la variable es variable (mutable)
     pub fn es_variable(&self) -> bool {
         matches!(self.tipo_variable, TipoVariable::Variable)
     }
-    
+
     /// Alias para compatibilidad - verifica si la variable es mutable
     pub fn es_mutable(&self) -> bool {
         self.es_variable()
@@ -193,32 +210,37 @@ impl std::hash::Hash for Valor {
             Valor::Entero(n) => {
                 2u8.hash(state);
                 n.hash(state);
-            },
+            }
             Valor::Numero(f) => {
                 3u8.hash(state);
                 // Para f64, usamos la representación en bits
                 f.to_bits().hash(state);
-            },
+            }
             Valor::Texto(s) => {
                 4u8.hash(state);
                 s.hash(state);
-            },
+            }
             Valor::Log(b) => {
                 5u8.hash(state);
                 b.hash(state);
-            },
+            }
             Valor::Lista(lista) => {
                 6u8.hash(state);
                 lista.hash(state);
-            },
+            }
             Valor::Json(mapa) => {
                 7u8.hash(state);
                 // Para HashMap, ordenamos las claves para hash consistente
                 let mut items: Vec<_> = mapa.iter().collect();
                 items.sort_by_key(|(k, _)| *k);
                 items.hash(state);
-            },
-            Valor::Objeto { clase, propiedades, propiedades_publicas, metodos_publicos } => {
+            }
+            Valor::Objeto {
+                clase,
+                propiedades,
+                propiedades_publicas,
+                metodos_publicos,
+            } => {
                 8u8.hash(state);
                 clase.hash(state);
                 propiedades_publicas.hash(state);
@@ -227,7 +249,7 @@ impl std::hash::Hash for Valor {
                 let mut items: Vec<_> = propiedades.iter().collect();
                 items.sort_by_key(|(k, _)| *k);
                 items.hash(state);
-            },
+            }
         }
     }
 }

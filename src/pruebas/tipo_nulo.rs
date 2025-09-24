@@ -1,4 +1,4 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
@@ -11,7 +11,7 @@ mod tests {
 auto valor_nulo = nulo
 consola.imprimir(valor_nulo)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -29,7 +29,7 @@ consola.imprimir("Entero nulo: " + entero_nulo)
 consola.imprimir("Número nulo: " + numero_nulo)
 consola.imprimir("Bool nulo: " + bool_nulo)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -51,7 +51,7 @@ consola.imprimir("Apellido: " + apellido)
 consola.imprimir("Telefono: " + telefono)
 consola.imprimir("Salario: " + salario)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -79,7 +79,7 @@ si (valor3 == nulo) {
     consola.imprimir("valor3 NO es nulo: CORRECTO")
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -102,7 +102,7 @@ si (valor_nulo != nulo) {
     consola.imprimir("valor_nulo ES nulo: CORRECTO")
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -133,7 +133,7 @@ si (datos["nombre"] == nulo) {
     consola.imprimir("datos['nombre'] NO es nulo: CORRECTO")
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -151,7 +151,7 @@ consola.imprimir("Nulo como texto: '" + nulo_como_texto + "'")
 texto resultado = "Valor: " + valor_nulo
 consola.imprimir(resultado)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -181,7 +181,7 @@ si (timeout != nulo) {
     consola.imprimir("Timeout no configurado, usando valor por defecto")
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -202,7 +202,7 @@ para (entero var i = 0; i < valores.longitud(); i++) {
     }
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -233,7 +233,7 @@ si (puntos == nulo) {
     consola.imprimir("Puntos no disponibles")
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -252,7 +252,7 @@ entero var entero_var = 42
 entero_var = nulo
 consola.imprimir("Entero después de asignar nulo: " + entero_var)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -279,7 +279,7 @@ si (datos["nombre"] == nulo y datos["activo"] == verdadero) {
     consola.imprimir("Nombre no configurado pero está activo")
 }
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 
@@ -299,7 +299,7 @@ si (valor1 == nulo) {
 auto resultado_texto = (valor1 == nulo) ? "es nulo" : "no es nulo"
 consola.imprimir("Resultado: " + resultado_texto)
         "#;
-        
+
         assert!(interprete::interpretar(codigo).is_ok());
     }
 }

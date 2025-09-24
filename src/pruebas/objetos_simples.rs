@@ -1,10 +1,10 @@
-use crate::interprete;
+use crate::nucleo::interprete;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn interpretar(codigo: &str) -> Result<(), crate::errores::ErrorQuetzal> {
+    fn interpretar(codigo: &str) -> Result<(), crate::infraestructura::errores::ErrorQuetzal> {
         match interprete::interpretar(codigo) {
             Ok(_) => Ok(()),
             Err(e) => Err(e),
@@ -32,9 +32,13 @@ mod tests {
             contador.incrementar()
             consola.imprimir("Contador: " + contador.obtener().texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error con contador simple: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error con contador simple: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -59,9 +63,13 @@ mod tests {
             persona.establecer("Juan", 25)
             consola.imprimir(persona.saludar())
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error con constructor básico: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error con constructor básico: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -85,9 +93,13 @@ mod tests {
             cuenta.depositar(50.0)
             consola.imprimir("Saldo: " + cuenta.consultar_saldo().texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error con propiedades privadas: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error con propiedades privadas: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -121,9 +133,13 @@ mod tests {
             consola.imprimir("Producto: " + producto.texto())
             consola.imprimir("3^2: " + cuadrado.texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error con calculadora: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error con calculadora: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -155,9 +171,13 @@ mod tests {
             consola.imprimir("Punto 1 - X: " + p1.coordX.texto() + ", Y: " + p1.coordY.texto())
             consola.imprimir("Distancia P1: " + p1.distancia().texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error con múltiples objetos: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error con múltiples objetos: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -199,9 +219,13 @@ mod tests {
             juego.perder_vida()
             consola.imprimir(juego.obtener_estado())
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error con estado de juego: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error con estado de juego: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -226,9 +250,13 @@ mod tests {
             producto.establecer("Laptop", 999.99)
             consola.imprimir(producto.informacion())
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error con inicialización: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error con inicialización: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -266,8 +294,12 @@ mod tests {
             consola.imprimir("Fibonacci de 6: " + fib6.texto())
             consola.imprimir("Promedio: " + prom.texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error con métodos matemáticos: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error con métodos matemáticos: {:?}",
+            resultado.err()
+        );
     }
 }

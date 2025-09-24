@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::interprete::interpretar;
+    use crate::nucleo::interprete::interpretar;
 
     #[test]
     fn test_declaracion_objeto_basico() {
@@ -14,9 +14,13 @@ mod tests {
                 }
             }
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error al declarar objeto básico: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error al declarar objeto básico: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -30,9 +34,13 @@ mod tests {
             Persona persona1 = nuevo Persona()
             consola.imprimir("Persona creada: " + persona1.nombre)
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error al instanciar objeto sin parámetros: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error al instanciar objeto sin parámetros: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -51,9 +59,13 @@ mod tests {
             Persona persona1 = nuevo Persona("María", 30)
             consola.imprimir("Nombre: " + persona1.nombre + ", Edad: " + persona1.edad.texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error al instanciar objeto con constructor: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error al instanciar objeto con constructor: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -71,9 +83,13 @@ mod tests {
             Contador contador = nuevo Contador()
             consola.imprimir("Valor inicial: " + contador.obtener_valor().texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error al acceder a propiedades públicas: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error al acceder a propiedades públicas: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -96,9 +112,13 @@ mod tests {
             contador.establecer_valor(5)
             consola.imprimir("Valor actualizado: " + contador.obtener_valor().texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error al modificar propiedades públicas: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error al modificar propiedades públicas: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -121,9 +141,13 @@ mod tests {
             consola.imprimir("Suma: " + suma.texto())
             consola.imprimir("Producto: " + producto.texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error al llamar métodos públicos: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error al llamar métodos públicos: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -141,9 +165,12 @@ mod tests {
             texto publico = obj.publico
             texto secreto = obj.secreto // Esto debe fallar
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_err(), "Debería fallar al acceder a propiedades privadas");
+        assert!(
+            resultado.is_err(),
+            "Debería fallar al acceder a propiedades privadas"
+        );
     }
 
     #[test]
@@ -169,9 +196,13 @@ mod tests {
             usuario.cumplir_años()
             consola.imprimir(usuario.obtener_info())
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error con métodos que usan ambiente: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error con métodos que usan ambiente: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -204,9 +235,13 @@ mod tests {
             consola.imprimir("Saldo Juan: " + cuenta1.obtener_saldo().texto())
             consola.imprimir("Saldo María: " + cuenta2.obtener_saldo().texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error con múltiples instancias independientes: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error con múltiples instancias independientes: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -239,9 +274,13 @@ mod tests {
             consola.imprimir("Total productos: " + inv.contar_productos().texto())
             consola.imprimir("Primer producto: " + inv.obtener_producto(0))
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error con objetos que contienen listas: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error con objetos que contienen listas: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -269,9 +308,13 @@ mod tests {
             consola.imprimir("Idioma: " + config.obtener("idioma"))
             consola.imprimir("Tema: " + config.obtener("tema"))
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error con objetos que contienen JSON: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error con objetos que contienen JSON: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -306,9 +349,13 @@ mod tests {
             Vehiculo auto = nuevo Vehiculo("Toyota")
             auto.arrancar()
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error con composición de objetos: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error con composición de objetos: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -338,9 +385,13 @@ mod tests {
             consola.imprimir("Promedio: " + promedio.texto())
             consola.imprimir(mensaje)
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error con métodos de múltiples parámetros: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error con métodos de múltiples parámetros: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -365,9 +416,13 @@ mod tests {
             consola.imprimir(util.saludar("Mundo"))
             consola.imprimir("Factorial de 3: " + util.factorial(3).texto())
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error con objeto sin propiedades: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error con objeto sin propiedades: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -403,9 +458,13 @@ mod tests {
             
             Empleado emp2 = nuevo Empleado("Ana", 16, 30000.0) // Debería mostrar error
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error con constructor con validaciones: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error con constructor con validaciones: {:?}",
+            resultado.err()
+        );
     }
 
     #[test]
@@ -447,8 +506,12 @@ mod tests {
             
             juego.perder_vida() // Debería mostrar Game Over
         "#;
-        
+
         let resultado = interpretar(codigo);
-        assert!(resultado.is_ok(), "Error al modificar propiedades a través de métodos: {:?}", resultado.err());
+        assert!(
+            resultado.is_ok(),
+            "Error al modificar propiedades a través de métodos: {:?}",
+            resultado.err()
+        );
     }
 }

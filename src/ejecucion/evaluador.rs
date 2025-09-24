@@ -62,6 +62,28 @@ pub enum ControlFlujo {
     Continuar,
 }
 
+/// Resultado producido por un método nativo registrado para un objeto
+pub struct ResultadoMetodoObjetoNativo {
+    pub valor_retorno: Valor,
+    pub control_flujo: ControlFlujo,
+    pub reemplazo_objeto: Option<Valor>,
+}
+
+impl ResultadoMetodoObjetoNativo {
+    /// Construye un resultado simple sin reemplazar el objeto original
+    pub fn sin_cambios(valor_retorno: Valor) -> Self {
+        ResultadoMetodoObjetoNativo {
+            valor_retorno,
+            control_flujo: ControlFlujo::Ninguno,
+            reemplazo_objeto: None,
+        }
+    }
+}
+
+/// Tipo de función que implementa un método nativo asociado a un objeto
+pub type MetodoObjetoNativo =
+    fn(&mut Evaluador, &Valor, &[Valor], usize) -> ResultadoQuetzal<ResultadoMetodoObjetoNativo>;
+
 impl Entorno {
     /// Crea un nuevo entorno vacío
     pub fn nuevo() -> Self {
@@ -321,6 +343,7 @@ pub struct Evaluador {
     ruta_archivo_actual: Option<String>, // Rastrea el archivo que se está evaluando actualmente
     permisos: PermisosEjecucion,
     vm_recursion: MaquinaVirtualRecursion,
+    metodos_objetos_nativos: HashMap<String, HashMap<String, MetodoObjetoNativo>>,
 }
 
 impl Evaluador {
@@ -341,6 +364,7 @@ impl Evaluador {
             ruta_archivo_actual: None,
             permisos: PermisosEjecucion::sin_permisos(),
             vm_recursion: MaquinaVirtualRecursion::nueva(),
+            metodos_objetos_nativos: HashMap::new(),
         }
     }
 
@@ -377,6 +401,19 @@ impl Evaluador {
     /// Toma el manejador de módulos temporalmente
     pub fn tomar_manejador_modulos(&mut self) -> Option<ManejadorModulos> {
         self.manejador_modulos.take()
+    }
+
+    /// Registra un método nativo para un objeto expuesto por un módulo
+    pub fn registrar_metodo_objeto_nativo(
+        &mut self,
+        nombre_objeto: &str,
+        nombre_metodo: &str,
+        implementacion: MetodoObjetoNativo,
+    ) {
+        self.metodos_objetos_nativos
+            .entry(nombre_objeto.to_string())
+            .or_insert_with(HashMap::new)
+            .insert(nombre_metodo.to_string(), implementacion);
     }
 
     /// Expone los permisos activos para las distintas operaciones.
@@ -4290,8 +4327,15 @@ impl Evaluador {
         argumentos: &[Valor],
         linea: usize,
     ) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
-        // Manejar métodos específicos de objetos Quetzal
+        // Verificar si existe un método nativo registrado para este objeto
         if let Valor::Objeto { clase, .. } = valor {
+            if let Some(metodos) = self.metodos_objetos_nativos.get(clase) {
+                if let Some(implementacion) = metodos.get(metodo) {
+                    let resultado = implementacion(self, valor, argumentos, linea)?;
+                    return Ok((resultado.valor_retorno, resultado.control_flujo));
+                }
+            }
+
             // Buscar la clase para obtener los métodos disponibles
             let clase_def = {
                 let entorno_ref = self.entorno_global.borrow();
@@ -5952,8 +5996,26 @@ impl Evaluador {
         entorno: Rc<RefCell<Entorno>>,
         nombre_variable: Option<String>,
     ) -> ResultadoQuetzal<(Valor, ControlFlujo)> {
-        // Manejar métodos específicos de objetos Quetzal
+        // Verificar primero si existe una implementación nativa
         if let Valor::Objeto { clase, .. } = valor {
+            if let Some(metodos) = self.metodos_objetos_nativos.get(clase) {
+                if let Some(implementacion) = metodos.get(metodo) {
+                    let resultado = implementacion(self, valor, argumentos, linea)?;
+
+                    if let (Some(nombre_var), Some(nuevo_objeto)) =
+                        (nombre_variable, resultado.reemplazo_objeto.clone())
+                    {
+                        let mut entorno_mut = entorno.borrow_mut();
+                        if let Some(variable_existente) = entorno_mut.variables.get_mut(&nombre_var)
+                        {
+                            variable_existente.valor = nuevo_objeto;
+                        }
+                    }
+
+                    return Ok((resultado.valor_retorno, resultado.control_flujo));
+                }
+            }
+
             // Buscar la clase para obtener los métodos disponibles
             let clase_def = {
                 let entorno_ref = self.entorno_global.borrow();

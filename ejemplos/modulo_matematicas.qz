@@ -1,0 +1,50 @@
+importar {
+    Matemática
+} desde "quetzal/matemática"
+
+// Operaciones aritméticas básicas
+número suma = Matemática.sumar(12.5, 7.3)
+número diferencia = Matemática.restar(10, 4.25)
+número producto = Matemática.multiplicar(6, 3.5)
+número cociente = Matemática.dividir(42, 6)
+número potencia = Matemática.potencia(2, 10)
+
+// Funciones avanzadas
+número radianes = Matemática.grados_a_radianes(90)
+número seno = Matemática.seno(radianes)
+número hipotenusa = Matemática.hipotenusa(3, 4)
+número log_base = Matemática.logaritmo_base(256, 2)
+número valor_exponencial = Matemática.exponencial(1)
+
+// Estadística sencilla
+lista<número> mediciones = [2.5, 5.0, 10.5, 13.0]
+número promedio = Matemática.promedio(mediciones)
+número valor_maximo = Matemática.maximo(mediciones)
+número valor_minimo = Matemática.minimo(mediciones)
+número suma_total = Matemática.suma_total(mediciones)
+número producto_total = Matemática.producto_total(mediciones)
+
+// Uso de constantes y redondeo
+número mitad_pi = Matemática.PI / 2
+número seno_mitad_pi = Matemática.seno(mitad_pi)
+número redondeado = Matemática.redondear(3.141592, 4)
+
+consola.mostrar(t"PI: {Matemática.PI}")
+consola.mostrar(t"TAU: {Matemática.TAU}")
+consola.mostrar(t"E: {Matemática.E}")
+consola.mostrar(t"Suma: {suma}")
+consola.mostrar(t"Diferencia: {diferencia}")
+consola.mostrar(t"Producto: {producto}")
+consola.mostrar(t"Cociente: {cociente}")
+consola.mostrar(t"2^10: {potencia}")
+consola.mostrar(t"Seno 90°: {seno}")
+consola.mostrar(t"Hipotenusa (3,4): {hipotenusa}")
+consola.mostrar(t"Log base 2 de 256: {log_base}")
+consola.mostrar(t"e^1: {valor_exponencial}")
+consola.mostrar(t"Promedio: {promedio}")
+consola.mostrar(t"Máximo: {valor_maximo}")
+consola.mostrar(t"Mínimo: {valor_minimo}")
+consola.mostrar(t"Suma total: {suma_total}")
+consola.mostrar(t"Producto total: {producto_total}")
+consola.mostrar(t"Seno de PI/2: {seno_mitad_pi}")
+consola.mostrar(t"Redondeo a 4 decimales: {redondeado}")

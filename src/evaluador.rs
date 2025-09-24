@@ -32,6 +32,7 @@ pub struct FuncionDefinida {
     pub cuerpo: Nodo,
     #[allow(dead_code)]
     pub es_asincrona: bool,
+    pub implementacion_nativa: Option<fn(&mut Evaluador, &[Valor], usize) -> ResultadoQuetzal<Valor>>,
 }
 
 /// Definición de una clase de objeto
@@ -408,7 +409,7 @@ impl Evaluador {
     }
     
     /// Redondea un número de punto flotante para evitar problemas de precisión
-    fn redondear_numero(&self, numero: f64) -> f64 {
+    pub(crate) fn redondear_numero(&self, numero: f64) -> f64 {
         // Redondear a 15 decimales para evitar problemas de precisión de punto flotante
         // pero mantener suficiente precisión para cálculos normales
         let factor = 1e15;
@@ -548,6 +549,7 @@ impl Evaluador {
                     tipo_retorno: tipo_retorno.clone(),
                     cuerpo: (**cuerpo).clone(),
                     es_asincrona: *es_asincrona,
+                    implementacion_nativa: None,
                 };
                 
                 entorno.borrow_mut().definir_funcion(nombre.clone(), funcion)?;
@@ -1629,12 +1631,12 @@ impl Evaluador {
                 let (valor, _) = self.evaluar_con_entorno(argumento, entorno.clone())?;
                 valores_argumentos.push(valor);
             }
-            
+
             // Contar parámetros obligatorios (sin valor por defecto)
             let parametros_obligatorios = funcion.parametros.iter()
                 .filter(|p| p.valor_defecto.is_none())
                 .count();
-            
+
             // Verificar número de argumentos
             if valores_argumentos.len() < parametros_obligatorios || valores_argumentos.len() > funcion.parametros.len() {
                 return Err(ErrorQuetzal::ArgumentosIncorrectos {
@@ -1643,10 +1645,36 @@ impl Evaluador {
                     recibidos: valores_argumentos.len(),
                 });
             }
-            
+
+            // Completar con valores por defecto cuando sea necesario
+            let mut argumentos_completos = Vec::new();
+            for (indice, parametro) in funcion.parametros.iter().enumerate() {
+                if indice < valores_argumentos.len() {
+                    argumentos_completos.push(valores_argumentos[indice].clone());
+                } else if let Some(valor_defecto) = &parametro.valor_defecto {
+                    argumentos_completos.push(valor_defecto.clone());
+                }
+            }
+
+            if argumentos_completos.len() != funcion.parametros.len() {
+                return Err(ErrorQuetzal::ArgumentosIncorrectos {
+                    linea,
+                    esperados: funcion.parametros.len(),
+                    recibidos: valores_argumentos.len(),
+                });
+            }
+
+            if let Some(funcion_nativa) = funcion.implementacion_nativa {
+                let estado_anterior = self.dentro_de_funcion;
+                self.dentro_de_funcion = true;
+                let resultado = funcion_nativa(self, &argumentos_completos, linea)?;
+                self.dentro_de_funcion = estado_anterior;
+                return Ok((resultado, ControlFlujo::Ninguno));
+            }
+
             // Crear entorno para la función
             let entorno_funcion = Rc::new(RefCell::new(Entorno::nuevo_hijo(entorno)));
-            
+
             // Asignar parámetros
             for (i, parametro) in funcion.parametros.iter().enumerate() {
                 let tipo_variable = if parametro.es_variable {
@@ -1654,29 +1682,16 @@ impl Evaluador {
                 } else {
                     TipoVariable::Inmutable
                 };
-                
-                // Determinar el valor a usar
-                let valor = if i < valores_argumentos.len() {
-                    // Usar argumento proporcionado
-                    valores_argumentos[i].clone()
-                } else if let Some(valor_defecto) = &parametro.valor_defecto {
-                    // Usar valor por defecto
-                    valor_defecto.clone()
-                } else {
-                    return Err(ErrorQuetzal::ArgumentosIncorrectos {
-                        linea,
-                        esperados: parametros_obligatorios,
-                        recibidos: valores_argumentos.len(),
-                    });
-                };
-                
+
+                let valor = argumentos_completos[i].clone();
+
                 let variable = Variable::nueva(
                     parametro.nombre.clone(),
                     valor,
                     tipo_variable,
                     parametro.tipo_dato.clone(),
                 );
-                
+
                 entorno_funcion.borrow_mut().definir_variable(parametro.nombre.clone(), variable)?;
             }
             

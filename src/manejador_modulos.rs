@@ -5,6 +5,7 @@ use crate::analizador_lexico::AnalizadorLexico;
 use crate::analizador_sintactico::{AnalizadorSintactico, Nodo, ElementoImportar};
 use crate::evaluador::{Evaluador, Entorno, FuncionDefinida, ClaseDefinida};
 use crate::errores::{ErrorQuetzal, ResultadoQuetzal};
+use crate::modulos;
 use crate::tipos_datos::Variable;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -35,12 +36,16 @@ pub struct ManejadorModulos {
 /// Información de un módulo cargado
 #[derive(Debug, Clone)]
 pub struct ModuloInfo {
-    /// Ruta absoluta del módulo
-    pub ruta: PathBuf,
+    /// Nombre legible del módulo (ruta o identificador)
+    pub nombre: String,
+    /// Ruta absoluta del módulo cuando proviene de un archivo
+    pub ruta: Option<PathBuf>,
     /// Variables y funciones exportadas por el módulo
     pub exportaciones: HashMap<String, ElementoExportado>,
     /// AST del módulo (para debug y análisis)
-    pub ast: Nodo,
+    pub ast: Option<Nodo>,
+    /// Indica si el módulo es nativo
+    pub es_nativo: bool,
 }
 
 impl ManejadorModulos {
@@ -67,19 +72,29 @@ impl ManejadorModulos {
         evaluador: &mut Evaluador,
         linea: usize,
     ) -> ResultadoQuetzal<()> {
-        // Resolver la ruta del módulo
-        let ruta_absoluta = self.resolver_ruta_modulo(ruta_modulo, linea)?;
-        
-        // Cargar el módulo si no está en caché
-        let ruta_str = ruta_absoluta.to_string_lossy().to_string();
-        
-        if !self.modulos_cargados.contains_key(&ruta_str) {
-            self.cargar_modulo(&ruta_absoluta, evaluador, linea)?;
-        }
-        
+        // Determinar si se trata de un módulo nativo
+        let clave_modulo = if Self::es_modulo_nativo(ruta_modulo) {
+            let nombre_normalizado = Self::normalizar_nombre_modulo(ruta_modulo);
+
+            if !self.modulos_cargados.contains_key(&nombre_normalizado) {
+                self.cargar_modulo_nativo(&nombre_normalizado, ruta_modulo, evaluador, linea)?;
+            }
+
+            nombre_normalizado
+        } else {
+            let ruta_absoluta = self.resolver_ruta_modulo(ruta_modulo, linea)?;
+            let ruta_str = ruta_absoluta.to_string_lossy().to_string();
+
+            if !self.modulos_cargados.contains_key(&ruta_str) {
+                self.cargar_modulo(&ruta_absoluta, evaluador, linea)?;
+            }
+
+            ruta_str
+        };
+
         // Obtener las exportaciones del módulo
         let modulo = self.modulos_cargados
-            .get(&ruta_str)
+            .get(&clave_modulo)
             .ok_or_else(|| ErrorQuetzal::ErrorCargaModulo {
                 linea,
                 ruta: ruta_modulo.to_string(),
@@ -130,6 +145,55 @@ impl ManejadorModulos {
             }
         }
         
+        Ok(())
+    }
+
+    /// Determina si una ruta corresponde a un módulo nativo registrado
+    fn es_modulo_nativo(ruta_modulo: &str) -> bool {
+        Self::normalizar_nombre_modulo(ruta_modulo).starts_with("quetzal/")
+    }
+
+    /// Normaliza el identificador del módulo para evitar inconsistencias
+    fn normalizar_nombre_modulo(ruta_modulo: &str) -> String {
+        ruta_modulo.replace('\\', "/")
+    }
+
+    /// Carga un módulo nativo implementado en Rust
+    fn cargar_modulo_nativo(
+        &mut self,
+        clave_normalizada: &str,
+        nombre_original: &str,
+        evaluador: &mut Evaluador,
+        linea: usize,
+    ) -> ResultadoQuetzal<()> {
+        let registrador = modulos::obtener_registrador(clave_normalizada).ok_or_else(|| {
+            let disponibles = modulos::nombres_registrados();
+            let detalle = if disponibles.is_empty() {
+                "No hay módulos nativos registrados actualmente".to_string()
+            } else {
+                format!("Módulos nativos disponibles: {}", disponibles.join(", "))
+            };
+
+            ErrorQuetzal::ModuloNoEncontrado {
+                linea,
+                ruta: nombre_original.to_string(),
+                detalle,
+            }
+        })?;
+
+        let exportaciones = registrador(evaluador)?;
+
+        let modulo_info = ModuloInfo {
+            nombre: nombre_original.to_string(),
+            ruta: None,
+            exportaciones,
+            ast: None,
+            es_nativo: true,
+        };
+
+        self.modulos_cargados
+            .insert(clave_normalizada.to_string(), modulo_info);
+
         Ok(())
     }
     
@@ -441,15 +505,17 @@ impl ManejadorModulos {
         evaluador.intercambiar_entorno(entorno_anterior);
         
         // Crear información del módulo con las exportaciones recopiladas
+        let nombre_modulo = ruta.to_string_lossy().to_string();
         let modulo_info = ModuloInfo {
-            ruta: ruta.to_path_buf(),
+            nombre: nombre_modulo.clone(),
+            ruta: Some(ruta.to_path_buf()),
             exportaciones: exportaciones_encontradas,
-            ast,
+            ast: Some(ast),
+            es_nativo: false,
         };
-        
+
         // Agregar al caché
-        let ruta_cache = ruta.to_string_lossy().to_string();
-        self.modulos_cargados.insert(ruta_cache, modulo_info);
+        self.modulos_cargados.insert(nombre_modulo, modulo_info);
         
         Ok(())
     }

@@ -1,0 +1,16 @@
+{
+  "versión": "1.0.0",
+  "aplicación": "ejemplo-intérprete-limitado",
+  "permisos": [
+    "red",
+    {
+      "nombre": "sistema-archivos",
+      "alcance": "directorios",
+      "directorios": [
+        "./datos",
+        "./recursos/plantillas",
+        "/var/log/quetzal"
+      ]
+    }
+  ]
+}

@@ -793,17 +793,17 @@ impl AnalizadorLexico {
         // Verificar si es una palabra clave
         let tipo_token = match texto.as_str() {
             // Tipos de datos
-            "vacio" => TipoToken::TipoVacio,
+            "vacio" | "vacío" => TipoToken::TipoVacio,
             "entero" => TipoToken::TipoEntero,
             "número" => TipoToken::TipoNumero,
             "texto" => TipoToken::TipoTexto,
-            "log" => TipoToken::TipoLog,
+            "log" | "lóg" => TipoToken::TipoLog,
             "lista" => TipoToken::TipoLista,
             "jsn" => TipoToken::TipoJson,
 
             // Modificadores
             "var" => TipoToken::Var,
-            "publico" => TipoToken::Publico,
+            "publico" | "público" => TipoToken::Publico,
             "privado" => TipoToken::Privado,
             "libre" => TipoToken::Libre,
 
@@ -824,7 +824,7 @@ impl AnalizadorLexico {
             "nuevo" => TipoToken::Nuevo,
             "ambiente" => TipoToken::Ambiente,
             "constructor" => TipoToken::Constructor,
-            "asincrono" => TipoToken::Asincrono,
+            "asincrono" | "asíncrono" => TipoToken::Asincrono,
             "esperar" => TipoToken::Esperar,
 
             // Excepciones
@@ -832,7 +832,7 @@ impl AnalizadorLexico {
             "capturar" => TipoToken::Capturar,
             "finalmente" => TipoToken::Finalmente,
             "lanzar" => TipoToken::Lanzar,
-            "excepción" => TipoToken::Excepcion,
+            "excepción" | "excepcion" => TipoToken::Excepcion,
 
             // Módulos
             "importar" => TipoToken::Importar,

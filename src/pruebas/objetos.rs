@@ -93,6 +93,35 @@ mod tests {
     }
 
     #[test]
+    fn test_seccion_publica_con_tilde() {
+        let codigo = r#"
+            objeto Punto {
+                público:
+                    entero var eje_x = 0
+
+                    Punto(entero x) {
+                        ambiente.eje_x = x
+                    }
+
+                    entero obtener_x() {
+                        retornar ambiente.eje_x
+                    }
+            }
+
+            Punto punto = nuevo Punto(7)
+            entero resultado = punto.obtener_x()
+            consola.imprimir(resultado.texto())
+        "#;
+
+        let resultado = interpretar(codigo);
+        assert!(
+            resultado.is_ok(),
+            "Error al interpretar secciones públicas con tilde: {:?}",
+            resultado.err()
+        );
+    }
+
+    #[test]
     fn test_modificacion_propiedades_publicas() {
         let codigo = r#"
             objeto Contador {

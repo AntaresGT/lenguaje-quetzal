@@ -912,6 +912,24 @@ impl Evaluador {
                                 CONSOLA_GLOBAL.mostrar_informacion(&mensaje);
                                 return Ok((Valor::Vacio, ControlFlujo::Ninguno));
                             }
+                            "pedir" => {
+                                let mensaje = if !args_evaluados.is_empty() {
+                                    args_evaluados[0].a_cadena()
+                                } else {
+                                    "Ingrese un valor: ".to_string()
+                                };
+                                let entrada = CONSOLA_GLOBAL.pedir(&mensaje);
+                                return Ok((Valor::Texto(entrada), ControlFlujo::Ninguno));
+                            }
+                            "pedir_secreto" => {
+                                let mensaje = if !args_evaluados.is_empty() {
+                                    args_evaluados[0].a_cadena()
+                                } else {
+                                    "Ingrese un valor secreto: ".to_string()
+                                };
+                                let entrada_secreta = CONSOLA_GLOBAL.pedir_secreto(&mensaje);
+                                return Ok((Valor::Texto(entrada_secreta), ControlFlujo::Ninguno));
+                            }
                             _ => {
                                 return Err(ErrorQuetzal::ErrorEjecucion {
                                     linea: *linea,

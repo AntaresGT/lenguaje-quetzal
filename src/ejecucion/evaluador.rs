@@ -1323,11 +1323,11 @@ impl Evaluador {
                 valor,
                 linea,
             } => {
-                // Obtener el valor actual de la variable
-                let valor_actual = {
+                // Obtener la variable existente para preservar tipo y mutabilidad
+                let variable_existente = {
                     let entorno_ref = entorno.borrow();
                     if let Some(variable) = entorno_ref.obtener_variable(nombre) {
-                        variable.valor.clone()
+                        variable
                     } else {
                         return Err(ErrorQuetzal::VariableNoDefinida {
                             linea: *linea,
@@ -1335,6 +1335,8 @@ impl Evaluador {
                         });
                     }
                 };
+
+                let valor_actual = variable_existente.valor.clone();
 
                 // Evaluar el valor a asignar
                 let (nuevo_valor, _) = self.evaluar_con_entorno(valor, entorno.clone())?;
@@ -1344,18 +1346,22 @@ impl Evaluador {
                 let resultado =
                     self.evaluar_operacion_binaria(&valor_actual, operador_base, &nuevo_valor)?;
 
-                // Asignar el resultado (las asignaciones compuestas funcionan en variables inmutables)
+                // Crear una nueva variable con el resultado preservando los metadatos
+                let variable_actualizada = Variable::nueva(
+                    nombre.clone(),
+                    resultado.clone(),
+                    variable_existente.tipo_variable,
+                    variable_existente.tipo_dato.clone(),
+                );
+
+                if !entorno
+                    .borrow_mut()
+                    .actualizar_variable(nombre, variable_actualizada)
                 {
-                    let mut entorno_ref = entorno.borrow_mut();
-                    if let Some(variable) = entorno_ref.variables.get_mut(nombre) {
-                        // En Quetzal, las asignaciones compuestas (+=, -=, etc.) funcionan incluso en variables inmutables
-                        variable.valor = resultado.clone();
-                    } else {
-                        return Err(ErrorQuetzal::VariableNoDefinida {
-                            linea: *linea,
-                            nombre: nombre.clone(),
-                        });
-                    }
+                    return Err(ErrorQuetzal::VariableNoDefinida {
+                        linea: *linea,
+                        nombre: nombre.clone(),
+                    });
                 }
 
                 Ok((resultado, ControlFlujo::Ninguno))
@@ -1415,34 +1421,68 @@ impl Evaluador {
                                 // Asignar la nueva propiedad
                                 mapa.insert(propiedad.clone(), nuevo_valor.clone());
 
-                                // Actualizar la variable en el entorno
+                                // Actualizar la variable en el entorno correcto
                                 drop(entorno_ref); // Liberar la referencia inmutable
+                                let mut entorno_mut = entorno.borrow_mut();
+                                let nombre_variable = nombre_objeto.clone();
                                 let nueva_variable = Variable::nueva(
-                                    nombre_objeto.clone(),
+                                    nombre_variable.clone(),
                                     Valor::Json(mapa),
                                     variable.tipo_variable,
                                     variable.tipo_dato.clone(),
                                 );
-                                entorno.borrow_mut().variables.insert(nombre_objeto.clone(), nueva_variable);
+
+                                if !entorno_mut
+                                    .actualizar_variable(
+                                        &nombre_variable,
+                                        nueva_variable.clone(),
+                                    )
+                                {
+                                    entorno_mut
+                                        .variables
+                                        .insert(nombre_variable, nueva_variable);
+                                }
 
                                 Ok((nuevo_valor, ControlFlujo::Ninguno))
-                            },
-                            Valor::Objeto { clase, mut propiedades, propiedades_publicas, metodos_publicos } => {
+                            }
+                            Valor::Objeto {
+                                clase,
+                                mut propiedades,
+                                propiedades_publicas,
+                                metodos_publicos,
+                            } => {
                                 // Asignar la nueva propiedad a objeto personalizado
                                 propiedades.insert(propiedad.clone(), nuevo_valor.clone());
 
-                                // Actualizar la variable en el entorno
+                                // Actualizar la variable en el entorno correcto
                                 drop(entorno_ref); // Liberar la referencia inmutable
+                                let mut entorno_mut = entorno.borrow_mut();
+                                let nombre_variable = nombre_objeto.clone();
                                 let nueva_variable = Variable::nueva(
-                                    nombre_objeto.clone(),
-                                    Valor::Objeto { clase, propiedades, propiedades_publicas, metodos_publicos },
+                                    nombre_variable.clone(),
+                                    Valor::Objeto {
+                                        clase,
+                                        propiedades,
+                                        propiedades_publicas,
+                                        metodos_publicos,
+                                    },
                                     variable.tipo_variable,
                                     variable.tipo_dato.clone(),
                                 );
-                                entorno.borrow_mut().variables.insert(nombre_objeto.clone(), nueva_variable);
+
+                                if !entorno_mut
+                                    .actualizar_variable(
+                                        &nombre_variable,
+                                        nueva_variable.clone(),
+                                    )
+                                {
+                                    entorno_mut
+                                        .variables
+                                        .insert(nombre_variable, nueva_variable);
+                                }
 
                                 Ok((nuevo_valor, ControlFlujo::Ninguno))
-                            },
+                            }
                             _ => {
                                 Err(ErrorQuetzal::ErrorEjecucion {
                                     linea: *linea,
@@ -4415,10 +4455,14 @@ impl Evaluador {
 
                             // Ejecutar el método
                             let anterior_dentro_de_funcion = self.dentro_de_funcion;
+                            let anterior_dentro_de_metodo_clase =
+                                self.dentro_de_metodo_clase;
                             self.dentro_de_funcion = true;
+                            self.dentro_de_metodo_clase = true;
                             let resultado =
                                 self.evaluar_con_entorno(cuerpo, entorno_metodo.clone());
                             self.dentro_de_funcion = anterior_dentro_de_funcion;
+                            self.dentro_de_metodo_clase = anterior_dentro_de_metodo_clase;
 
                             return resultado;
                         }
@@ -8119,6 +8163,83 @@ impl Evaluador {
                 entorno_objeto
                     .borrow_mut()
                     .definir_variable(nombre_prop.clone(), variable)?;
+            }
+        }
+
+        // Ejecutar constructor si existe
+        if let Some(constructor) = &clase.constructor {
+            // Evaluar argumentos del constructor
+            let mut argumentos_evaluados = Vec::new();
+            for arg in argumentos {
+                let (valor, _) = self.evaluar_con_entorno(arg, entorno.clone())?;
+                argumentos_evaluados.push(valor);
+            }
+
+            // Agregar el objeto 'ambiente' al entorno del constructor
+            let mut todas_las_propiedades_temp = propiedades_publicas.clone();
+            todas_las_propiedades_temp.extend(propiedades_privadas.clone());
+            
+            let ambiente_inicial = Valor::Json(todas_las_propiedades_temp.clone()
+                .into_iter()
+                .map(|(k, v)| (k, v))
+                .collect());
+
+            let variable_ambiente = Variable::nueva(
+                "ambiente".to_string(),
+                ambiente_inicial,
+                TipoVariable::Variable,
+                "jsn".to_string(),
+            );
+
+            entorno_objeto
+                .borrow_mut()
+                .definir_variable("ambiente".to_string(), variable_ambiente)?;
+
+            // Ejecutar constructor en el contexto del objeto
+            let entorno_constructor = Rc::new(RefCell::new(Entorno::con_padre(entorno_objeto.clone())));
+            
+            // Definir parámetros del constructor en su entorno
+            if let Nodo::DeclaracionFuncion { parametros, .. } = constructor {
+                for (i, parametro) in parametros.iter().enumerate() {
+                    if i < argumentos_evaluados.len() {
+                        let valor_parametro = argumentos_evaluados[i].clone();
+                        let variable_param = Variable::nueva(
+                            parametro.nombre.clone(),
+                            valor_parametro,
+                            TipoVariable::Inmutable,
+                            parametro.tipo_dato.clone(),
+                        );
+                        entorno_constructor
+                            .borrow_mut()
+                            .definir_variable(parametro.nombre.clone(), variable_param)?;
+                    }
+                }
+            }
+
+            // Marcar que estamos dentro de un constructor
+            let dentro_constructor_anterior = self.dentro_de_constructor;
+            self.dentro_de_constructor = true;
+
+            // Ejecutar el cuerpo del constructor
+            if let Nodo::DeclaracionFuncion { cuerpo, .. } = constructor {
+                self.evaluar_con_entorno(cuerpo, entorno_constructor.clone())?;
+            }
+
+            // Restaurar estado anterior
+            self.dentro_de_constructor = dentro_constructor_anterior;
+
+            // Recuperar las propiedades actualizadas del ambiente
+            if let Some(variable_ambiente) = entorno_objeto.borrow().obtener_variable("ambiente") {
+                if let Valor::Json(mapa_ambiente) = &variable_ambiente.valor {
+                    // Actualizar las propiedades del objeto con los valores del ambiente
+                    for (nombre, valor) in mapa_ambiente {
+                        if propiedades_publicas.contains_key(nombre) {
+                            propiedades_publicas.insert(nombre.clone(), valor.clone());
+                        } else if propiedades_privadas.contains_key(nombre) {
+                            propiedades_privadas.insert(nombre.clone(), valor.clone());
+                        }
+                    }
+                }
             }
         }
 

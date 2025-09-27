@@ -310,11 +310,6 @@ impl ManejadorModulos {
 
     /// Resuelve la ruta de un módulo relativa al punto de entrada
     fn resolver_ruta_modulo(&self, ruta_modulo: &str, linea: usize) -> ResultadoQuetzal<PathBuf> {
-        self.permisos.verificar_uso_sistema_archivos(
-            linea,
-            "importar módulos desde el sistema de archivos",
-        )?;
-
         // Validaciones básicas de la ruta
         if ruta_modulo.is_empty() {
             return Err(ErrorQuetzal::RutaModuloInvalida {
@@ -356,12 +351,6 @@ impl ManejadorModulos {
                             ),
                         })?;
 
-                self.permisos.verificar_acceso_a_ruta(
-                    &ruta_canonica,
-                    linea,
-                    "importar el módulo",
-                )?;
-
                 return Ok(ruta_canonica);
             } else {
                 return Err(ErrorQuetzal::ModuloNoEncontrado {
@@ -402,21 +391,16 @@ impl ManejadorModulos {
                         detalle: format!("No se pudo resolver la ruta canónica: {}", error),
                     })?;
 
-            self.permisos
-                .verificar_acceso_a_ruta(&ruta_canonica, linea, "importar el módulo")?;
-
             Ok(ruta_canonica)
         } else {
             // Generar sugerencias de archivos .qz cercanos
             let mut archivos_cercanos = Vec::new();
-            if self.permisos.puede_listar_directorio(directorio_principal) {
-                if let Ok(entradas) = fs::read_dir(directorio_principal) {
-                    for entrada in entradas.flatten() {
-                        if let Some(extension) = entrada.path().extension() {
-                            if extension == "qz" {
-                                if let Some(nombre) = entrada.file_name().to_str() {
-                                    archivos_cercanos.push(nombre.to_string());
-                                }
+            if let Ok(entradas) = fs::read_dir(directorio_principal) {
+                for entrada in entradas.flatten() {
+                    if let Some(extension) = entrada.path().extension() {
+                        if extension == "qz" {
+                            if let Some(nombre) = entrada.file_name().to_str() {
+                                archivos_cercanos.push(nombre.to_string());
                             }
                         }
                     }
@@ -466,8 +450,6 @@ impl ManejadorModulos {
         }
 
         // Leer el contenido del archivo
-        self.permisos
-            .verificar_acceso_a_ruta(ruta, linea, "leer el módulo")?;
         let codigo = fs::read_to_string(ruta).map_err(|error| {
             let detalle = match error.kind() {
                 std::io::ErrorKind::NotFound => "El archivo no existe".to_string(),

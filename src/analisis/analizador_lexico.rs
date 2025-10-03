@@ -795,7 +795,7 @@ impl AnalizadorLexico {
             // Tipos de datos
             "vacio" | "vacío" => TipoToken::TipoVacio,
             "entero" => TipoToken::TipoEntero,
-            "número" => TipoToken::TipoNumero,
+            "número" | "numero" => TipoToken::TipoNumero,
             "texto" => TipoToken::TipoTexto,
             "log" | "lóg" => TipoToken::TipoLog,
             "lista" => TipoToken::TipoLista,

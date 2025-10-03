@@ -54,3 +54,7 @@ lista valor_lista_nula = nulo
 lista<entero> valor_lista_tipada_nula = nulo
 // JSON nulo
 jsn valor_json_nulo = nulo
+
+// Distinción de tildes
+número valor_con_tilde = 5.5
+numero valor_sin_tilde = 10.10

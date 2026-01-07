@@ -1,0 +1,103 @@
+// Herencia de objetos
+
+// Herencia simple
+objeto Animal {
+    privado:
+        texto var nombre
+        texto var especie
+    publico:
+        Animal(texto nombre, texto especie) {
+            ambiente.nombre = nombre
+            ambiente.especie = especie
+        }
+        texto obtener_nombre() {
+            retornar ambiente.nombre
+        }
+        texto obtener_especie() {
+            retornar ambiente.especie
+        }
+
+        vacio comer() {
+            consola.mostrar("El animal come.")
+        }
+}
+
+objeto Perro como Animal {
+    publico:
+        Perro(texto nombre, texto especie) {
+            padre.Animal(nombre, especie)
+        }
+
+        texto ladrar() {
+            retornar "Guau!"
+        }
+}
+
+// Herencia en cascada
+objeto Mamifero como Animal {
+    publico:
+        Mamifero(texto nombre, texto especie) {
+            padre.Animal(nombre, especie)
+        }
+
+        texto comer() {
+            retornar "El mamifero come."
+        }
+}
+
+objeto Gato como Mamifero {
+    publico:
+        Gato(texto nombre, texto especie) {
+            padre.Mamifero(nombre, especie)
+        }
+
+        texto maullar() {
+            retornar "Miau!"
+        }
+}
+
+// Herencia multiple
+objeto Felino como Mamifero, Animal {
+    publico:
+        Felino(texto nombre, texto especie) {
+            padre.Mamifero(nombre, especie)
+            padre.Animal(nombre, especie)
+        }
+
+        texto comer() {
+            retornar padre.Mamifero.comer()
+        }
+
+        texto rugir() {
+            retornar "Rugido!"
+        }
+}
+
+// Instanciar objetos
+Perro perro1 = nuevo Perro("Firulais", "Canino")
+Gato gato1 = nuevo Gato("Michi", "Felino")
+Felino felino1 = nuevo Felino("Simba", "Felino")
+
+// Llamar a métodos
+texto nombre_perro = perro1.obtener_nombre()  // "Firulais"
+texto nombre_gato = gato1.obtener_nombre()  // "Michi"
+texto nombre_felino = felino1.obtener_nombre()  // "Simba"
+
+texto sonido_perro = perro1.ladrar()  // "Guau!"
+texto sonido_gato = gato1.maullar()  // "Miau!"
+texto sonido_felino = felino1.rugir()  // "Rugido!"
+
+// Llamar a métodos de la clase padre
+texto especie_perro = perro1.obtener_especie()  // "Canino"
+
+consola.mostrar(nombre_perro)
+consola.mostrar(nombre_gato)
+consola.mostrar(nombre_felino)
+consola.mostrar(sonido_perro)
+consola.mostrar(sonido_gato)
+consola.mostrar(sonido_felino)
+consola.mostrar(especie_perro)
+
+// Llamar a métodos de la clase padre
+texto especie_gato = gato1.obtener_especie()  // "Felino"
+consola.mostrar(especie_gato)

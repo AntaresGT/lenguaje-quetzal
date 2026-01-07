@@ -70,6 +70,9 @@ pub enum TokenLogos {
     #[token("ambiente")]
     Ambiente,
     
+    #[token("padre")]
+    Padre,
+    
     // Programación asíncrona
     #[token("asincrono")]
     #[token("asíncrono")]
@@ -453,6 +456,7 @@ impl Lexer {
             TokenLogos::Objeto => Token::Objeto,
             TokenLogos::Nuevo => Token::Nuevo,
             TokenLogos::Ambiente => Token::Ambiente,
+            TokenLogos::Padre => Token::Padre,
             TokenLogos::Asincrono => Token::Asincrono,
             TokenLogos::Esperar => Token::Esperar,
             TokenLogos::Si => Token::Si,

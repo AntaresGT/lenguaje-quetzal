@@ -10,6 +10,7 @@ pub struct Entorno {
     funciones: Vec<HashMap<String, Funcion>>,
     objetos: Vec<HashMap<String, Objeto>>,
     objetos_nativos: HashMap<String, Arc<dyn ModuloNativo>>,
+    definiciones_objetos: HashMap<String, DefinicionObjeto>,
     archivo_actual: Option<String>,
     permisos: Option<SistemaPermisos>,
 }
@@ -36,6 +37,15 @@ pub struct Objeto {
     pub propiedades: HashMap<String, Valor>,
 }
 
+/// Definición de un objeto (clase) con información de herencia
+#[derive(Debug, Clone)]
+pub struct DefinicionObjeto {
+    pub nombre: String,
+    pub padres: Vec<String>,
+    pub miembros: Vec<crate::nucleo::sintactico::ast::MiembroObjetoAst>,
+    pub constructor: Option<crate::nucleo::sintactico::ast::NodoAst>,
+}
+
 impl Entorno {
     /// Crea un nuevo entorno
     pub fn nuevo() -> Self {
@@ -44,6 +54,7 @@ impl Entorno {
             funciones: vec![HashMap::new()],
             objetos: vec![HashMap::new()],
             objetos_nativos: HashMap::new(),
+            definiciones_objetos: HashMap::new(),
             archivo_actual: None,
             permisos: None,
         }
@@ -56,6 +67,7 @@ impl Entorno {
             funciones: vec![HashMap::new()],
             objetos: vec![HashMap::new()],
             objetos_nativos: HashMap::new(),
+            definiciones_objetos: HashMap::new(),
             archivo_actual: Some(archivo),
             permisos: None,
         }
@@ -155,6 +167,29 @@ impl Entorno {
         Ok(())
     }
     
+    /// Define una nueva variable en el ámbito base (nivel 1, por encima del global)
+    /// Útil para variables ambiente.X que deben persistir a través de bloques anidados
+    pub fn definir_variable_en_base(&mut self, nombre: String, valor: Valor, mutable: bool) -> Result<(), String> {
+        // Buscar si la variable ya existe en algún ámbito
+        for ambito in self.variables.iter_mut().rev() {
+            if ambito.contains_key(&nombre) {
+                ambito.insert(nombre, Variable { valor, mutable });
+                return Ok(());
+            }
+        }
+        
+        // Si no existe, crear en el ámbito justo por encima del global (índice 1)
+        // Esto asegura que persista durante toda la construcción del objeto
+        let indice = if self.variables.len() > 1 { 1 } else { 0 };
+        
+        if let Some(ambito) = self.variables.get_mut(indice) {
+            ambito.insert(nombre, Variable { valor, mutable });
+            Ok(())
+        } else {
+            Err("no hay ámbito disponible".to_string())
+        }
+    }
+    
     /// Asigna un valor a una variable existente
     pub fn asignar_variable(&mut self, nombre: &str, valor: Valor) -> Result<(), String> {
         for ambito in self.variables.iter_mut().rev() {
@@ -241,5 +276,28 @@ impl Entorno {
             }
         }
         None
+    }
+    
+    /// Registra una definición de objeto (clase)
+    pub fn registrar_definicion_objeto(&mut self, definicion: DefinicionObjeto) {
+        self.definiciones_objetos.insert(definicion.nombre.clone(), definicion);
+    }
+    
+    /// Obtiene una definición de objeto (clase)
+    pub fn obtener_definicion_objeto(&self, nombre: &str) -> Option<&DefinicionObjeto> {
+        self.definiciones_objetos.get(nombre)
+    }
+    
+    /// Obtiene todas las variables que comienzan con un prefijo específico
+    pub fn obtener_variables_con_prefijo(&self, prefijo: &str) -> Vec<(String, Valor)> {
+        let mut resultado = Vec::new();
+        for ambito in self.variables.iter().rev() {
+            for (nombre, variable) in ambito {
+                if nombre.starts_with(prefijo) {
+                    resultado.push((nombre.clone(), variable.valor.clone()));
+                }
+            }
+        }
+        resultado
     }
 }

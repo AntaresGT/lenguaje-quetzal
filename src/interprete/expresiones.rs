@@ -49,6 +49,24 @@ pub fn evaluar_expresion(nodo: &NodoAst, entorno: &mut Entorno) -> Resultado<Val
                 });
             }
             
+            // Manejar 'ambiente' como identificador especial (referencia al objeto actual)
+            if nombre == "ambiente" {
+                // Retornar un objeto especial que representa el ambiente actual
+                return Ok(Valor::Objeto {
+                    tipo: "ambiente".to_string(),
+                    propiedades: HashMap::new(),
+                });
+            }
+            
+            // Manejar 'padre' como identificador especial
+            if nombre == "padre" {
+                // Retornar un objeto especial que representa el padre
+                return Ok(Valor::Objeto {
+                    tipo: "padre".to_string(),
+                    propiedades: HashMap::new(),
+                });
+            }
+            
             // Primero verificar si es un objeto nativo global (como consola)
             if let Some(_modulo_nativo) = entorno.obtener_objeto_nativo(nombre) {
                 // Crear un valor objeto especial para objetos nativos
@@ -73,6 +91,30 @@ pub fn evaluar_expresion(nodo: &NodoAst, entorno: &mut Entorno) -> Resultado<Val
         NodoAst::ExpresionAcceso { objeto, miembro, .. } => {
             // Si el objeto es un identificador que apunta a un objeto nativo (ej: consola, Matemática)
             if let NodoAst::ExpresionIdentificador { nombre, .. } = objeto.as_ref() {
+                // Manejar acceso a ambiente.X (propiedades del objeto actual)
+                if nombre == "ambiente" {
+                    // Buscar la variable ambiente.X
+                    let nombre_completo = format!("ambiente.{}", miembro);
+                    if let Some(valor) = entorno.obtener_variable(&nombre_completo) {
+                        return Ok(valor.clone());
+                    }
+                    // Si no existe, retornar nulo
+                    return Ok(Valor::Vacio);
+                }
+                
+                // Manejar acceso a padre.X
+                if nombre == "padre" {
+                    // padre.NombrePadre - crear un valor especial para acceder al padre
+                    let mut props = HashMap::new();
+                    props.insert("nombre_padre".to_string(), Valor::Texto(miembro.clone()));
+                    props.insert("es_acceso_padre".to_string(), Valor::Logico(true));
+                    
+                    return Ok(Valor::Objeto {
+                        tipo: "acceso_padre".to_string(),
+                        propiedades: props,
+                    });
+                }
+                
                 if let Some(modulo_nativo) = entorno.obtener_objeto_nativo(nombre) {
                     // Primero verificar si es una constante del módulo nativo (ej: Matemática.PI)
                     if let Some(constante) = modulo_nativo.obtener_constante(miembro) {
@@ -97,7 +139,7 @@ pub fn evaluar_expresion(nodo: &NodoAst, entorno: &mut Entorno) -> Resultado<Val
             let valor_objeto = evaluar_expresion(objeto, entorno)?;
             
             // Si el valor es un objeto nativo especial (de una llamada anterior)
-            if let Valor::Objeto { tipo, .. } = &valor_objeto {
+            if let Valor::Objeto { tipo, propiedades } = &valor_objeto {
                 if tipo.starts_with("nativo:") {
                     // Esto es un acceso encadenado a objeto nativo, no soportado aún
                     return Err(Error::ejecucion(
@@ -107,6 +149,22 @@ pub fn evaluar_expresion(nodo: &NodoAst, entorno: &mut Entorno) -> Resultado<Val
                         Some(nodo.posicion().linea),
                         Some(nodo.posicion().columna),
                     ));
+                }
+                
+                // Si es un acceso_padre (padre.NombrePadre), manejar acceso a método
+                if tipo == "acceso_padre" {
+                    if let Some(Valor::Texto(nombre_padre)) = propiedades.get("nombre_padre") {
+                        // padre.Mamifero.metodo -> crear valor especial para método de padre
+                        let mut props = HashMap::new();
+                        props.insert("nombre_padre".to_string(), Valor::Texto(nombre_padre.clone()));
+                        props.insert("metodo".to_string(), Valor::Texto(miembro.clone()));
+                        props.insert("es_metodo_padre".to_string(), Valor::Logico(true));
+                        
+                        return Ok(Valor::Objeto {
+                            tipo: "metodo_padre".to_string(),
+                            propiedades: props,
+                        });
+                    }
                 }
             }
             
@@ -149,16 +207,41 @@ pub fn evaluar_expresion(nodo: &NodoAst, entorno: &mut Entorno) -> Resultado<Val
                         propiedades: props,
                     })
                 }
-                Valor::Objeto { propiedades, .. } => {
-                    propiedades.get(miembro)
-                        .cloned()
-                        .ok_or_else(|| Error::ejecucion(
-                            CodigoError::PropiedadInexistenteJson,
-                            format!("propiedad '{}' no existe", miembro),
-                            None,
-                            Some(nodo.posicion().linea),
-                            Some(nodo.posicion().columna),
-                        ))
+                Valor::Objeto { propiedades, tipo } => {
+                    if let Some(valor_miembro) = propiedades.get(miembro) {
+                        // Si el miembro es una función, crear un método enlazado que incluya las propiedades del objeto
+                        if let Valor::Funcion { nombre, parametros, parametros_mutables, cuerpo, asincrono } = valor_miembro {
+                            let mut props = HashMap::new();
+                            props.insert("__es_metodo_objeto__".to_string(), Valor::Logico(true));
+                            props.insert("__tipo_objeto__".to_string(), Valor::Texto(tipo.clone()));
+                            props.insert("__nombre_funcion__".to_string(), Valor::Texto(nombre.clone()));
+                            props.insert("__funcion__".to_string(), Valor::Funcion {
+                                nombre: nombre.clone(),
+                                parametros: parametros.clone(),
+                                parametros_mutables: parametros_mutables.clone(),
+                                cuerpo: cuerpo.clone(),
+                                asincrono: *asincrono,
+                            });
+                            // Copiar las propiedades del objeto para ambiente.X
+                            for (prop_nombre, prop_valor) in propiedades {
+                                if !prop_nombre.starts_with("__") {
+                                    props.insert(format!("__prop_{}__", prop_nombre), prop_valor.clone());
+                                }
+                            }
+                            return Ok(Valor::Objeto {
+                                tipo: "metodo_objeto".to_string(),
+                                propiedades: props,
+                            });
+                        }
+                        return Ok(valor_miembro.clone());
+                    }
+                    Err(Error::ejecucion(
+                        CodigoError::PropiedadInexistenteJson,
+                        format!("propiedad '{}' no existe", miembro),
+                        None,
+                        Some(nodo.posicion().linea),
+                        Some(nodo.posicion().columna),
+                    ))
                 }
                 _ => Err(Error::ejecucion(
                     CodigoError::TiposIncompatibles,
@@ -213,6 +296,213 @@ pub fn evaluar_expresion(nodo: &NodoAst, entorno: &mut Entorno) -> Resultado<Val
                             .unwrap_or(false);
                         
                         return aplicar_metodo_primitivo(metodo, valor, argumentos_evaluados, nodo, entorno, nombre_variable, es_mutable);
+                    }
+                }
+                
+                // Si es una llamada a constructor de padre (padre.Mamifero(args))
+                if tipo == "acceso_padre" {
+                    if let Some(Valor::Texto(nombre_padre)) = propiedades.get("nombre_padre") {
+                        // Obtener la definición del padre
+                        if let Some(def_padre) = entorno.obtener_definicion_objeto(nombre_padre) {
+                            let def_padre = def_padre.clone();
+                            
+                            // Buscar y ejecutar el constructor del padre
+                            if let Some(constructor) = &def_padre.constructor {
+                                if let NodoAst::DeclaracionFuncion { parametros, cuerpo, .. } = constructor {
+                                    if parametros.len() != argumentos_evaluados.len() {
+                                        return Err(Error::ejecucion(
+                                            CodigoError::NumeroArgumentosIncorrecto,
+                                            format!("constructor de '{}' espera {} argumentos, se recibieron {}", nombre_padre, parametros.len(), argumentos_evaluados.len()),
+                                            None,
+                                            Some(nodo.posicion().linea),
+                                            Some(nodo.posicion().columna),
+                                        ));
+                                    }
+                                    
+                                    // Definir los parámetros en el ámbito actual (no crear nuevo ámbito)
+                                    // para que las variables ambiente.X se compartan con el constructor hijo
+                                    for (param, arg) in parametros.iter().zip(argumentos_evaluados.iter()) {
+                                        // Usar una variable temporal para el parámetro
+                                        let nombre_param = format!("__param_{}__", param.nombre);
+                                        let _ = entorno.definir_variable(nombre_param.clone(), arg.clone(), param.mutable);
+                                        // También definir con el nombre normal para acceso en el constructor
+                                        let _ = entorno.asignar_variable(&param.nombre, arg.clone())
+                                            .or_else(|_| entorno.definir_variable(param.nombre.clone(), arg.clone(), param.mutable));
+                                    }
+                                    
+                                    // Ejecutar el cuerpo del constructor del padre
+                                    let resultado = crate::interprete::declaraciones::evaluar_declaracion(&cuerpo, entorno)?;
+                                    
+                                    return Ok(resultado);
+                                }
+                            }
+                            
+                            return Err(Error::ejecucion(
+                                CodigoError::MetodoNoEncontrado,
+                                format!("constructor no encontrado para '{}'", nombre_padre),
+                                None,
+                                Some(nodo.posicion().linea),
+                                Some(nodo.posicion().columna),
+                            ));
+                        } else {
+                            return Err(Error::ejecucion(
+                                CodigoError::ObjetoNoEncontrado,
+                                format!("objeto padre '{}' no está definido", nombre_padre),
+                                None,
+                                Some(nodo.posicion().linea),
+                                Some(nodo.posicion().columna),
+                            ));
+                        }
+                    }
+                }
+                
+                // Si es una llamada a método de objeto (objeto.metodo())
+                if tipo == "metodo_objeto" {
+                    let es_metodo = propiedades.get("__es_metodo_objeto__")
+                        .map(|v| matches!(v, Valor::Logico(true)))
+                        .unwrap_or(false);
+                    
+                    if es_metodo {
+                        if let Some(funcion) = propiedades.get("__funcion__") {
+                            if let Valor::Funcion { nombre, parametros, parametros_mutables, cuerpo, asincrono } = funcion {
+                                if parametros.len() != argumentos_evaluados.len() {
+                                    return Err(Error::ejecucion(
+                                        CodigoError::NumeroArgumentosIncorrecto,
+                                        format!("método '{}' espera {} argumentos, se recibieron {}", nombre, parametros.len(), argumentos_evaluados.len()),
+                                        None,
+                                        Some(nodo.posicion().linea),
+                                        Some(nodo.posicion().columna),
+                                    ));
+                                }
+                                
+                                // Crear ámbito para el método
+                                entorno.entrar_ambito();
+                                
+                                // Definir los parámetros
+                                for (i, (param, arg)) in parametros.iter().zip(argumentos_evaluados.iter()).enumerate() {
+                                    let es_mutable = parametros_mutables.get(i).copied().unwrap_or(false);
+                                    entorno.definir_variable(param.clone(), arg.clone(), es_mutable)
+                                        .map_err(|e| Error::ejecucion(
+                                            CodigoError::ErrorInternoInterprete,
+                                            e,
+                                            None,
+                                            Some(nodo.posicion().linea),
+                                            Some(nodo.posicion().columna),
+                                        ))?;
+                                }
+                                
+                        // Configurar las variables ambiente.X con las propiedades del objeto
+                        for (prop_nombre, prop_valor) in propiedades.iter() {
+                            if let Some(nombre_con_sufijo) = prop_nombre.strip_prefix("__prop_") {
+                                // Quitar también el sufijo "__"
+                                let nombre_prop = nombre_con_sufijo.strip_suffix("__").unwrap_or(nombre_con_sufijo);
+                                let _ = entorno.definir_variable(format!("ambiente.{}", nombre_prop), prop_valor.clone(), true);
+                            }
+                        }
+                                
+                                // Ejecutar el cuerpo del método
+                                let resultado = if *asincrono {
+                                    ejecutar_funcion_asincrona(
+                                        nombre.clone(),
+                                        parametros.clone(),
+                                        parametros_mutables.clone(),
+                                        cuerpo.clone(),
+                                        argumentos_evaluados,
+                                        entorno,
+                                        nodo,
+                                    )?
+                                } else {
+                                    crate::interprete::declaraciones::evaluar_declaracion(cuerpo, entorno)?
+                                };
+                                
+                                entorno.salir_ambito();
+                                
+                                return Ok(resultado);
+                            }
+                        }
+                    }
+                }
+                
+                // Si es una llamada a método de padre (padre.Mamifero.metodo())
+                if tipo == "metodo_padre" {
+                    if let (Some(Valor::Texto(nombre_padre)), Some(Valor::Texto(nombre_metodo))) = 
+                        (propiedades.get("nombre_padre"), propiedades.get("metodo")) {
+                        // Obtener la definición del padre
+                        if let Some(def_padre) = entorno.obtener_definicion_objeto(nombre_padre) {
+                            let def_padre = def_padre.clone();
+                            
+                            // Buscar el método en el padre
+                            for miembro in &def_padre.miembros {
+                                if !miembro.libre {
+                                    if let NodoAst::DeclaracionFuncion { nombre: fn_nombre, parametros, cuerpo, asincrono, .. } = miembro.declaracion.as_ref() {
+                                        if fn_nombre == nombre_metodo {
+                                            if parametros.len() != argumentos_evaluados.len() {
+                                                return Err(Error::ejecucion(
+                                                    CodigoError::NumeroArgumentosIncorrecto,
+                                                    format!("método '{}' de '{}' espera {} argumentos, se recibieron {}", nombre_metodo, nombre_padre, parametros.len(), argumentos_evaluados.len()),
+                                                    None,
+                                                    Some(nodo.posicion().linea),
+                                                    Some(nodo.posicion().columna),
+                                                ));
+                                            }
+                                            
+                                            // Crear ámbito para el método
+                                            entorno.entrar_ambito();
+                                            
+                                            // Definir los parámetros
+                                            for (param, arg) in parametros.iter().zip(argumentos_evaluados.iter()) {
+                                                entorno.definir_variable(param.nombre.clone(), arg.clone(), param.mutable)
+                                                    .map_err(|e| Error::ejecucion(
+                                                        CodigoError::ErrorInternoInterprete,
+                                                        e,
+                                                        None,
+                                                        Some(nodo.posicion().linea),
+                                                        Some(nodo.posicion().columna),
+                                                    ))?;
+                                            }
+                                            
+                                            // Si es asíncrono, ejecutar de forma asíncrona
+                                            if *asincrono {
+                                                let resultado = ejecutar_funcion_asincrona(
+                                                    fn_nombre.clone(),
+                                                    parametros.iter().map(|p| p.nombre.clone()).collect(),
+                                                    parametros.iter().map(|p| p.mutable).collect(),
+                                                    cuerpo.clone(),
+                                                    argumentos_evaluados,
+                                                    entorno,
+                                                    nodo,
+                                                )?;
+                                                entorno.salir_ambito();
+                                                return Ok(resultado);
+                                            }
+                                            
+                                            // Ejecutar el cuerpo del método
+                                            let resultado = crate::interprete::declaraciones::evaluar_declaracion(&cuerpo, entorno)?;
+                                            
+                                            entorno.salir_ambito();
+                                            
+                                            return Ok(resultado);
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            return Err(Error::ejecucion(
+                                CodigoError::MetodoNoEncontrado,
+                                format!("método '{}' no encontrado en '{}'", nombre_metodo, nombre_padre),
+                                None,
+                                Some(nodo.posicion().linea),
+                                Some(nodo.posicion().columna),
+                            ));
+                        } else {
+                            return Err(Error::ejecucion(
+                                CodigoError::ObjetoNoEncontrado,
+                                format!("objeto padre '{}' no está definido", nombre_padre),
+                                None,
+                                Some(nodo.posicion().linea),
+                                Some(nodo.posicion().columna),
+                            ));
+                        }
                     }
                 }
             }
@@ -428,27 +718,30 @@ pub fn evaluar_expresion(nodo: &NodoAst, entorno: &mut Entorno) -> Resultado<Val
                     if let NodoAst::ExpresionIdentificador { nombre: nombre_objeto, .. } = objeto.as_ref() {
                         if nombre_objeto == "ambiente" {
                             // Asignar a variable con nombre "ambiente.{miembro}"
+                            // Las variables ambiente.X son especiales y deben persistir a través de los ámbitos
                             let nombre_completo = format!("ambiente.{}", miembro);
-                            let nombre_completo_clone = nombre_completo.clone();
-                            entorno.asignar_variable(&nombre_completo, valor_asignar.clone())
-                                .or_else(|_| {
-                                    // Si no existe, crear la variable
-                                    entorno.definir_variable(nombre_completo_clone.clone(), valor_asignar.clone(), true)
-                                        .map_err(|e| Error::ejecucion(
-                                            CodigoError::ErrorInternoInterprete,
-                                            e,
-                                            None,
-                                            Some(nodo.posicion().linea),
-                                            Some(nodo.posicion().columna),
-                                        ))
-                                })
-                                .map_err(|e| Error::ejecucion(
-                                    CodigoError::ErrorInternoInterprete,
-                                    format!("no se puede asignar a {}: {}", nombre_completo_clone, e),
-                                    None,
-                                    Some(nodo.posicion().linea),
-                                    Some(nodo.posicion().columna),
-                                ))?;
+                            
+                            // Intentar asignar en cualquier ámbito donde exista, o crear en el ámbito base
+                            if entorno.obtener_variable(&nombre_completo).is_some() {
+                                entorno.asignar_variable(&nombre_completo, valor_asignar.clone())
+                                    .map_err(|e| Error::ejecucion(
+                                        CodigoError::ErrorInternoInterprete,
+                                        format!("no se puede asignar a {}: {}", nombre_completo, e),
+                                        None,
+                                        Some(nodo.posicion().linea),
+                                        Some(nodo.posicion().columna),
+                                    ))?;
+                            } else {
+                                // Crear la variable en el ámbito base (para que persista)
+                                entorno.definir_variable_en_base(nombre_completo.clone(), valor_asignar.clone(), true)
+                                    .map_err(|e| Error::ejecucion(
+                                        CodigoError::ErrorInternoInterprete,
+                                        e,
+                                        None,
+                                        Some(nodo.posicion().linea),
+                                        Some(nodo.posicion().columna),
+                                    ))?;
+                            }
                             Ok(valor_asignar)
                         } else {
                             // Intentar asignar a propiedad de JSON
@@ -673,20 +966,203 @@ pub fn evaluar_expresion(nodo: &NodoAst, entorno: &mut Entorno) -> Resultado<Val
             
             // Crear un objeto con las propiedades iniciales
             let mut propiedades = HashMap::new();
-            
-            // Por ahora, creamos un objeto simple con el tipo y los argumentos como propiedades
-            // Esto permite que el objeto tenga un tipo identificable
             propiedades.insert("__tipo__".to_string(), Valor::Texto(tipo.clone()));
             
-            // Guardar los argumentos como propiedades numeradas (arg0, arg1, etc.)
-            for (i, arg) in argumentos_evaluados.iter().enumerate() {
-                propiedades.insert(format!("__arg{}__", i), arg.clone());
+            // Obtener la definición del objeto
+            if let Some(definicion) = entorno.obtener_definicion_objeto(tipo) {
+                let definicion = definicion.clone();
+                
+                // Almacenar lista de padres
+                propiedades.insert("__padres__".to_string(), Valor::Lista(
+                    definicion.padres.iter().map(|p| Valor::Texto(p.clone())).collect()
+                ));
+                
+                // Función auxiliar para recopilar métodos heredados recursivamente
+                fn recopilar_metodos_heredados(
+                    nombre_objeto: &str,
+                    entorno: &crate::interprete::entorno::Entorno,
+                    metodos: &mut HashMap<String, Valor>,
+                    propiedades: &mut HashMap<String, Valor>,
+                    visitados: &mut std::collections::HashSet<String>,
+                ) -> Resultado<()> {
+                    // Evitar ciclos infinitos
+                    if visitados.contains(nombre_objeto) {
+                        return Ok(());
+                    }
+                    visitados.insert(nombre_objeto.to_string());
+                    
+                    if let Some(def) = entorno.obtener_definicion_objeto(nombre_objeto) {
+                        let def = def.clone();
+                        
+                        // Primero, heredar de los padres (recursivamente)
+                        for nombre_padre in &def.padres {
+                            recopilar_metodos_heredados(nombre_padre, entorno, metodos, propiedades, visitados)?;
+                            // Almacenar referencia al padre
+                            propiedades.insert(format!("__padre_{}__", nombre_padre), Valor::Texto(nombre_padre.clone()));
+                        }
+                        
+                        // Luego, agregar métodos y atributos del objeto actual (sobrescriben los heredados)
+                        for miembro in &def.miembros {
+                            if !miembro.libre {
+                                match miembro.declaracion.as_ref() {
+                                    NodoAst::DeclaracionFuncion { nombre: nombre_fn, parametros, cuerpo, asincrono, .. } => {
+                                        // No incluir el constructor
+                                        if nombre_fn != nombre_objeto {
+                                            let param_nombres: Vec<String> = parametros.iter().map(|p| p.nombre.clone()).collect();
+                                            let param_mutables: Vec<bool> = parametros.iter().map(|p| p.mutable).collect();
+                                            let funcion = Valor::Funcion {
+                                                nombre: nombre_fn.clone(),
+                                                parametros: param_nombres,
+                                                parametros_mutables: param_mutables,
+                                                cuerpo: cuerpo.clone(),
+                                                asincrono: *asincrono,
+                                            };
+                                            metodos.insert(nombre_fn.clone(), funcion);
+                                        }
+                                    }
+                                    NodoAst::DeclaracionVariable { .. } => {
+                                        // Los atributos se inicializan en el constructor
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                    Ok(())
+                }
+                
+                // Recopilar métodos y atributos de los padres (herencia en cascada)
+                let mut metodos_heredados: HashMap<String, Valor> = HashMap::new();
+                let mut visitados = std::collections::HashSet::new();
+                for nombre_padre in &definicion.padres {
+                    recopilar_metodos_heredados(nombre_padre, entorno, &mut metodos_heredados, &mut propiedades, &mut visitados)?;
+                    propiedades.insert(format!("__padre_{}__", nombre_padre), Valor::Texto(nombre_padre.clone()));
+                }
+                
+                // Agregar métodos heredados a propiedades
+                for (nombre, valor) in metodos_heredados {
+                    propiedades.insert(nombre, valor);
+                }
+                
+                // Agregar métodos y atributos propios del objeto (pueden sobrescribir heredados)
+                for miembro in &definicion.miembros {
+                    if !miembro.libre {
+                        match miembro.declaracion.as_ref() {
+                            NodoAst::DeclaracionFuncion { nombre: nombre_fn, parametros, cuerpo, asincrono, .. } => {
+                                // Saltar el constructor (se ejecutará después)
+                                if nombre_fn != tipo {
+                                    let param_nombres: Vec<String> = parametros.iter().map(|p| p.nombre.clone()).collect();
+                                    let param_mutables: Vec<bool> = parametros.iter().map(|p| p.mutable).collect();
+                                    let funcion = Valor::Funcion {
+                                        nombre: nombre_fn.clone(),
+                                        parametros: param_nombres,
+                                        parametros_mutables: param_mutables,
+                                        cuerpo: cuerpo.clone(),
+                                        asincrono: *asincrono,
+                                    };
+                                    propiedades.insert(nombre_fn.clone(), funcion);
+                                }
+                            }
+                            NodoAst::DeclaracionVariable { nombre: nombre_var, valor, mutable, .. } => {
+                                let valor_evaluado = evaluar_expresion(valor, entorno)?;
+                                propiedades.insert(nombre_var.clone(), valor_evaluado);
+                                if *mutable {
+                                    propiedades.insert(format!("__mutable_{}__", nombre_var), Valor::Logico(true));
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                
+                // Crear el objeto
+                let objeto = Valor::Objeto {
+                    tipo: tipo.clone(),
+                    propiedades: propiedades.clone(),
+                };
+                
+                // Ejecutar el constructor si existe
+                if let Some(constructor) = &definicion.constructor {
+                    if let NodoAst::DeclaracionFuncion { parametros, cuerpo, .. } = constructor {
+                        if parametros.len() != argumentos_evaluados.len() {
+                            return Err(Error::ejecucion(
+                                CodigoError::NumeroArgumentosIncorrecto,
+                                format!("constructor de '{}' espera {} argumentos, se recibieron {}", tipo, parametros.len(), argumentos_evaluados.len()),
+                                None,
+                                Some(nodo.posicion().linea),
+                                Some(nodo.posicion().columna),
+                            ));
+                        }
+                        
+                        // Crear ámbito para el constructor
+                        entorno.entrar_ambito();
+                        
+                        // Definir los parámetros
+                        for (param, arg) in parametros.iter().zip(argumentos_evaluados.iter()) {
+                            entorno.definir_variable(param.nombre.clone(), arg.clone(), param.mutable)
+                                .map_err(|e| Error::ejecucion(
+                                    CodigoError::ErrorInternoInterprete,
+                                    e,
+                                    None,
+                                    Some(nodo.posicion().linea),
+                                    Some(nodo.posicion().columna),
+                                ))?;
+                        }
+                        
+                        // Definir las variables de ambiente.X como variables accesibles
+                        for (nombre_prop, valor_prop) in &propiedades {
+                            if !nombre_prop.starts_with("__") {
+                                let nombre_amb = format!("ambiente.{}", nombre_prop);
+                                let _ = entorno.definir_variable(nombre_amb, valor_prop.clone(), true);
+                            }
+                        }
+                        
+                        // Almacenar información del objeto actual para acceso a padre
+                        entorno.definir_variable("__objeto_actual__".to_string(), objeto.clone(), false)
+                            .map_err(|e| Error::ejecucion(
+                                CodigoError::ErrorInternoInterprete,
+                                e,
+                                None,
+                                Some(nodo.posicion().linea),
+                                Some(nodo.posicion().columna),
+                            ))?;
+                        
+                        // Ejecutar el cuerpo del constructor
+                        crate::interprete::declaraciones::evaluar_declaracion(&cuerpo, entorno)?;
+                        
+                        // Recopilar TODAS las variables ambiente.X (incluyendo las nuevas creadas en el constructor)
+                        let mut propiedades_actualizadas = propiedades.clone();
+                        
+                        // Obtener todas las variables del ámbito actual que comienzan con "ambiente."
+                        let variables_ambiente = entorno.obtener_variables_con_prefijo("ambiente.");
+                        for (nombre_completo, valor) in variables_ambiente {
+                            // Extraer el nombre de la propiedad sin el prefijo "ambiente."
+                            if let Some(nombre_prop) = nombre_completo.strip_prefix("ambiente.") {
+                                propiedades_actualizadas.insert(nombre_prop.to_string(), valor);
+                            }
+                        }
+                        
+                        entorno.salir_ambito();
+                        
+                        return Ok(Valor::Objeto {
+                            tipo: tipo.clone(),
+                            propiedades: propiedades_actualizadas,
+                        });
+                    }
+                }
+                
+                Ok(objeto)
+            } else {
+                // Si no hay definición, crear un objeto simple
+                for (i, arg) in argumentos_evaluados.iter().enumerate() {
+                    propiedades.insert(format!("__arg{}__", i), arg.clone());
+                }
+                
+                Ok(Valor::Objeto {
+                    tipo: tipo.clone(),
+                    propiedades,
+                })
             }
-            
-            Ok(Valor::Objeto {
-                tipo: tipo.clone(),
-                propiedades,
-            })
         }
         
         _ => Err(Error::ejecucion(

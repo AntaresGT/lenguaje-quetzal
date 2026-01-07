@@ -206,6 +206,18 @@ impl Verificador {
             }
             
             NodoAst::ExpresionIdentificador { nombre, .. } => {
+                // Manejar identificadores especiales
+                if nombre == "ambiente" || nombre == "padre" {
+                    // ambiente y padre son identificadores especiales que se resuelven en tiempo de ejecución
+                    return Ok(Tipo::Vacio);
+                }
+                
+                // Manejar objetos nativos globales
+                if nombre == "consola" || nombre == "Matemática" || nombre == "Matematica" || nombre == "rango" {
+                    // Objetos nativos se resuelven en tiempo de ejecución
+                    return Ok(Tipo::Vacio);
+                }
+                
                 // Primero buscar como variable
                 if let Some(variable) = self.tabla_simbolos.buscar_variable(nombre) {
                     return Ok(variable.tipo.clone());
@@ -218,6 +230,11 @@ impl Verificador {
                         parametros: params,
                         retorno: Box::new(funcion.tipo_retorno.clone()),
                     });
+                }
+                
+                // Buscar como objeto registrado (clase)
+                if self.tabla_simbolos.buscar_objeto(nombre).is_some() {
+                    return Ok(Tipo::Objeto(nombre.clone()));
                 }
                 
                 Err(Error::semantico(
@@ -414,13 +431,8 @@ impl Verificador {
                                 }
                             }
                         } else {
-                            Err(Error::semantico(
-                                CodigoError::MiembroNoExiste,
-                                format!("'{}' no tiene miembro '{}'", nombre_objeto, miembro),
-                                None,
-                                Some(nodo.posicion().linea),
-                                Some(nodo.posicion().columna),
-                            ))
+                            // El miembro podría ser heredado de un padre, permitir acceso dinámico
+                            Ok(Tipo::Vacio)
                         }
                     } else {
                         // Objeto no registrado, permitir acceso dinámico

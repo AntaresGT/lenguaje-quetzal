@@ -322,10 +322,35 @@ pub fn evaluar_declaracion(nodo: &NodoAst, entorno: &mut Entorno) -> Resultado<V
         }
         
         // Declaración de objeto: registra el tipo y los miembros libres
-        NodoAst::DeclaracionObjeto { nombre, miembros, .. } => {
+        NodoAst::DeclaracionObjeto { nombre, padres, miembros, .. } => {
             use std::collections::HashMap;
+            use crate::interprete::entorno::DefinicionObjeto;
+            
             let mut propiedades = HashMap::new();
             propiedades.insert("__tipo__".to_string(), Valor::Texto(format!("tipo:{}", nombre)));
+            propiedades.insert("__padres__".to_string(), Valor::Lista(
+                padres.iter().map(|p| Valor::Texto(p.clone())).collect()
+            ));
+            
+            // Buscar el constructor (función con el mismo nombre que el objeto)
+            let mut constructor = None;
+            for miembro in miembros {
+                match miembro.declaracion.as_ref() {
+                    NodoAst::DeclaracionFuncion { nombre: nombre_fn, .. } if nombre_fn == nombre => {
+                        constructor = Some(miembro.declaracion.as_ref().clone());
+                    }
+                    _ => {}
+                }
+            }
+            
+            // Registrar la definición del objeto con información de herencia
+            let definicion = DefinicionObjeto {
+                nombre: nombre.clone(),
+                padres: padres.clone(),
+                miembros: miembros.clone(),
+                constructor,
+            };
+            entorno.registrar_definicion_objeto(definicion);
             
             // Procesar miembros libres (estáticos)
             for miembro in miembros {

@@ -553,7 +553,7 @@ impl Parser {
         })
     }
     
-    /// Parsea una declaración de objeto: objeto nombre { miembros }
+    /// Parsea una declaración de objeto: objeto nombre [como Padre1, Padre2] { miembros }
     fn parsear_declaracion_objeto(&mut self) -> Resultado<NodoAst> {
         let posicion_inicial = self.token_actual()
             .map(|t| t.posicion)
@@ -587,6 +587,49 @@ impl Parser {
                 None,
             ));
         };
+        
+        // Parsear herencia opcional: como Padre1, Padre2
+        let mut padres = Vec::new();
+        if let Some(t) = self.token_actual() {
+            if matches!(t.token, crate::nucleo::lexico::token::Token::Como) {
+                self.avanzar();
+                
+                // Parsear lista de padres separados por coma
+                loop {
+                    if let Some(t) = self.token_actual() {
+                        if let crate::nucleo::lexico::token::Token::Identificador(ref nombre_padre) = t.token {
+                            padres.push(nombre_padre.clone());
+                            self.avanzar();
+                            
+                            // Verificar si hay más padres
+                            if let Some(t) = self.token_actual() {
+                                if matches!(t.token, crate::nucleo::lexico::token::Token::Coma) {
+                                    self.avanzar();
+                                    continue;
+                                }
+                            }
+                            break;
+                        } else {
+                            return Err(Error::analisis(
+                                CodigoError::SintaxisGeneral,
+                                "se esperaba un identificador para el nombre del padre",
+                                None,
+                                Some(t.posicion.linea),
+                                Some(t.posicion.columna),
+                            ));
+                        }
+                    } else {
+                        return Err(Error::analisis(
+                            CodigoError::SintaxisGeneral,
+                            "se esperaba un identificador para el nombre del padre",
+                            None,
+                            None,
+                            None,
+                        ));
+                    }
+                }
+            }
+        }
         
         // Verificar '{'
         self.expectar_token(crate::nucleo::lexico::token::Token::LlaveIzq)?;
@@ -827,6 +870,7 @@ impl Parser {
         
         Ok(NodoAst::DeclaracionObjeto {
             nombre,
+            padres,
             miembros,
             posicion: posicion_inicial,
         })
@@ -1401,6 +1445,13 @@ impl Parser {
                     self.avanzar();
                     return Ok(NodoAst::ExpresionIdentificador {
                         nombre: "ambiente".to_string(),
+                        posicion,
+                    });
+                }
+                crate::nucleo::lexico::token::Token::Padre => {
+                    self.avanzar();
+                    return Ok(NodoAst::ExpresionIdentificador {
+                        nombre: "padre".to_string(),
                         posicion,
                     });
                 }

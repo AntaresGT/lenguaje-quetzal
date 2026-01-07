@@ -31,6 +31,7 @@ pub enum Token {
     Objeto,
     Nuevo,
     Ambiente,
+    Padre,
     
     // Programación asíncrona
     Asincrono,
@@ -147,6 +148,7 @@ impl Token {
                 | Token::Objeto
                 | Token::Nuevo
                 | Token::Ambiente
+                | Token::Padre
                 | Token::Asincrono
                 | Token::Esperar
                 | Token::Si
@@ -194,6 +196,7 @@ impl Token {
             Token::Objeto => "objeto",
             Token::Nuevo => "nuevo",
             Token::Ambiente => "ambiente",
+            Token::Padre => "padre",
             Token::Asincrono => "asincrono",
             Token::Esperar => "esperar",
             Token::Si => "si",

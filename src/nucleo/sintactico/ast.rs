@@ -23,6 +23,7 @@ pub enum NodoAst {
     
     DeclaracionObjeto {
         nombre: String,
+        padres: Vec<String>,
         miembros: Vec<MiembroObjetoAst>,
         posicion: Posicion,
     },

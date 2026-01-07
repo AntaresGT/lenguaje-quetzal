@@ -1,162 +1,220 @@
-// Intérprete del Lenguaje Quetzal v0.0.2
-// Desarrollado en Rust para máximo rendimiento
-// Autor: Desarrollado siguiendo las especificaciones del lenguaje Quetzal
+// Permitir código muerto para módulos de infraestructura pendientes de integración
+#![allow(dead_code)]
 
-use colored::Colorize;
-use std::env;
-use std::path::Path;
-use std::thread;
-
-// Organización principal del intérprete
-mod analisis;
-mod datos;
-mod ejecucion;
-mod infraestructura;
-mod modulos;
+mod errores;
 mod nucleo;
+mod interprete;
+mod modulos;
+mod configuracion;
+mod utilidades;
+mod nativos;
+mod comandos;
+mod repl;
 
-// Reexportación local para facilitar el acceso desde este archivo
-use nucleo::interprete;
-
-// Módulo de pruebas
 #[cfg(test)]
 mod pruebas;
 
-const VERSION: &str = "0.0.2";
+use clap::{Arg, Command};
+use std::fs;
 
-/// Función principal del intérprete Quetzal
-fn main() {
-    // Crear un hilo con stack más grande para manejar recursión profunda
-    let builder = thread::Builder::new().stack_size(16 * 1024 * 1024); // 16MB stack
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-    let handle = builder
-        .spawn(|| ejecutar_principal())
-        .expect("No se pudo crear el hilo principal");
 
-    handle.join().expect("Error en el hilo principal");
-}
-
-fn ejecutar_principal() {
-    // Configurar codificación UTF-8 en Windows
-    #[cfg(windows)]
-    {
-        // Habilitar soporte UTF-8 en la consola de Windows
-        unsafe {
-            extern "system" {
-                fn SetConsoleOutputCP(wCodePageID: u32) -> i32;
-                fn SetConsoleCP(wCodePageID: u32) -> i32;
+#[tokio::main]
+async fn main() {
+    let matches = Command::new("quetzal")
+        .version(VERSION)
+        .about("Intérprete del Lenguaje Quetzal")
+        .arg(
+            Arg::new("archivo")
+                .help("Archivo .qz a ejecutar")
+                .index(1)
+        )
+        .arg(
+            Arg::new("ayuda")
+                .long("ayuda")
+                .help("Muestra la ayuda")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .disable_help_flag(true)
+        .disable_version_flag(true)
+        .arg(
+            Arg::new("version")
+                .short('v')
+                .long("version")
+                .help("Muestra la versión")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("nuevo")
+                .long("nuevo")
+                .help("Crea un nuevo proyecto")
+                .value_name("NOMBRE_PROYECTO")
+        )
+        .get_matches();
+    
+    if matches.get_flag("version") {
+        println!("Quetzal v{}", VERSION);
+        return;
+    }
+    
+    if matches.get_flag("ayuda") {
+        println!("Uso: quetzal [OPCIONES] [ARCHIVO]\n");
+        println!("Opciones:");
+        println!("  -v, --version          Muestra la versión");
+        println!("  -h, --ayuda            Muestra esta ayuda");
+        println!("  --nuevo NOMBRE         Crea un nuevo proyecto\n");
+        println!("Ejemplos:");
+        println!("  quetzal programa.qz");
+        println!("  quetzal --nuevo mi-proyecto");
+        println!("  quetzal                (modo REPL)");
+        return;
+    }
+    
+    if let Some(nombre_proyecto) = matches.get_one::<String>("nuevo") {
+        match comandos::crear_proyecto(nombre_proyecto) {
+            Ok(_) => println!("Proyecto '{}' creado exitosamente", nombre_proyecto),
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
             }
-            SetConsoleOutputCP(65001); // UTF-8
-            SetConsoleCP(65001); // UTF-8
+        }
+        return;
+    }
+    
+    if let Some(archivo) = matches.get_one::<String>("archivo") {
+        // Ejecutar archivo
+        match ejecutar_archivo_con_reporte(archivo) {
+            Ok(_) => {}
+            Err(_) => {
+                // El error ya fue reportado
+                std::process::exit(1);
+            }
+        }
+    } else {
+        // Modo REPL
+        println!("Quetzal REPL v{}", VERSION);
+        println!("Escribe código o 'salir' para terminar\n");
+        
+        match repl::Repl::nuevo() {
+            Ok(mut repl) => {
+                loop {
+                    use std::io::{self, Write};
+                    print!("qz> ");
+                    io::stdout().flush().unwrap();
+                    
+                    let mut entrada = String::new();
+                    match io::stdin().read_line(&mut entrada) {
+                        Ok(_) => {
+                            let entrada = entrada.trim();
+                            if entrada == "salir" || entrada.is_empty() {
+                                break;
+                            }
+                            
+                            match repl.evaluar(entrada) {
+                                Ok(resultado) => {
+                                    if !resultado.is_empty() {
+                                        println!("{}", resultado);
+                                    }
+                                }
+                                Err(e) => {
+                                    // Reportar error con formato mejorado
+                                    errores::reporte::reportar_error(&e, Some(entrada));
+                                }
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("Error al inicializar REPL: {}", e);
+                std::process::exit(1);
+            }
         }
     }
-
-    let argumentos: Vec<String> = env::args().collect();
-
-    // Si no hay argumentos o se pide ayuda
-    if argumentos.len() <= 1 {
-        mostrar_ayuda(&argumentos[0]);
-        return;
-    }
-
-    match argumentos[1].as_str() {
-        "--ayuda" | "-h" => mostrar_ayuda(&argumentos[0]),
-        "--version" | "-v" => mostrar_version(),
-        archivo => ejecutar_archivo(archivo),
-    }
 }
 
-/// Muestra la versión del intérprete
-fn mostrar_version() {
-    println!("{}", format!("Quetzal v{}", VERSION).green().bold());
-    println!("Un lenguaje de programación en español");
-}
-
-/// Muestra la ayuda del intérprete
-fn mostrar_ayuda(_programa: &str) {
-    println!("{}", "USO:".cyan().bold());
-    println!("    quetzal <archivo.qz>");
-    println!("    quetzal --version");
-    println!("    quetzal --ayuda");
-    println!();
-    println!("{}", "OPCIONES:".cyan().bold());
-    println!("    --version       Muestra la versión del intérprete");
-    println!("    --ayuda         Muestra esta información de ayuda");
-    println!();
-    println!("{}", "EJEMPLOS:".cyan().bold());
-    println!("    quetzal programa.qz");
-    println!("    quetzal directorio/ejemplo.qz");
-}
-
-/// Ejecuta un archivo .qz
-fn ejecutar_archivo(ruta_archivo: &str) {
-    // Verificar que el archivo tenga extensión .qz
-    if !ruta_archivo.ends_with(".qz") {
-        eprintln!(
-            "{}[E0001]: el archivo debe tener extensión .qz",
-            "error".red().bold()
-        );
-        eprintln!(" {} {}", "-->".blue().bold(), ruta_archivo);
-        eprintln!(
-            "  {} archivos de Quetzal deben terminar en `.qz`",
-            "=".blue().bold()
-        );
-        return;
-    }
-
-    // Verificar que el archivo existe y convertir a ruta absoluta
-    let ruta_path = Path::new(ruta_archivo);
-    if !ruta_path.exists() {
-        eprintln!(
-            "{}[E0001]: no se pudo encontrar el archivo `{}`",
-            "error".red().bold(),
-            ruta_archivo
-        );
-        eprintln!(" {} {}", "-->".blue().bold(), ruta_archivo);
-        eprintln!("  {} verifica que la ruta sea correcta", "=".blue().bold());
-        return;
-    }
-
-    // Convertir a ruta absoluta para el sistema de módulos
-    let ruta_absoluta = match ruta_path.canonicalize() {
-        Ok(ruta) => ruta,
-        Err(error) => {
-            eprintln!(
-                "{}[E0001]: error al resolver la ruta del archivo `{}`",
-                "error".red().bold(),
-                ruta_archivo
+/// Ejecuta un archivo con reporte de errores mejorado
+fn ejecutar_archivo_con_reporte(ruta: &str) -> crate::errores::Resultado<()> {
+    // Leer contenido primero para poder mostrarlo en errores
+    let contenido = match fs::read_to_string(ruta) {
+        Ok(c) => c,
+        Err(e) => {
+            let error = crate::errores::Error::sistema(
+                crate::errores::CodigoError::ErrorLecturaArchivo,
+                format!("no se pudo leer el archivo '{}': {}", ruta, e),
+                None,
             );
-            eprintln!(" {} {}", "-->".blue().bold(), ruta_archivo);
-            eprintln!("  {} {}", "=".blue().bold(), error);
-            return;
+            errores::reporte::reportar_error_simple(&error);
+            return Err(error);
         }
     };
-
-    let ruta_absoluta_str = ruta_absoluta.to_string_lossy();
-
-    // Leer el contenido del archivo para poder pasarlo a los errores
-    let codigo_fuente = match std::fs::read_to_string(&ruta_absoluta) {
-        Ok(contenido) => contenido,
-        Err(error) => {
-            eprintln!(
-                "{}[E0001]: error al leer el archivo `{}`",
-                "error".red().bold(),
-                ruta_archivo
-            );
-            eprintln!(" {} {}", "-->".blue().bold(), ruta_archivo);
-            eprintln!("  {} {}", "=".blue().bold(), error);
-            return;
-        }
-    };
-
-    // Interpretar el archivo con soporte completo de módulos usando la ruta absoluta
-    match interprete::interpretar_archivo_con_modulos(&ruta_absoluta_str) {
-        Ok(_) => {
-            // Ejecución exitosa
-        }
-        Err(error) => {
-            // Mostrar error con formato estilo Rust y código fuente
-            error.mostrar_error_con_codigo(Some(&codigo_fuente), Some(ruta_archivo));
+    
+    // Ejecutar y reportar cualquier error con el codigo fuente
+    match ejecutar_archivo_interno(ruta, &contenido) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            errores::reporte::reportar_error(&e, Some(&contenido));
+            Err(e)
         }
     }
+}
+
+/// Ejecuta un archivo (implementacion interna)
+fn ejecutar_archivo_interno(ruta: &str, contenido: &str) -> crate::errores::Resultado<()> {
+    use std::path::Path;
+    
+    // Buscar y cargar quetzal.json si existe
+    let permisos = cargar_configuracion_permisos(ruta);
+    
+    // Análisis sintáctico
+    let ast = nucleo::sintactico::Parser::parsear(contenido)?;
+    
+    // Verificación semántica
+    let mut verificador = nucleo::semantico::Verificador::nuevo();
+    verificador.verificar_programa(&ast)?;
+    
+    // Ejecución
+    let ruta_path = Path::new(ruta);
+    let mut entorno = if let Some(archivo_abs) = ruta_path.canonicalize().ok() {
+        interprete::entorno::Entorno::con_archivo(archivo_abs.to_string_lossy().to_string())
+    } else {
+        interprete::entorno::Entorno::nuevo()
+    };
+    
+    // Establecer permisos en el entorno si se cargaron
+    if let Some(sistema_permisos) = permisos {
+        entorno.establecer_permisos(sistema_permisos);
+    }
+    
+    nativos::registro::registrar_modulos_nativos(&mut entorno)?;
+    
+    for nodo in &ast {
+        interprete::declaraciones::evaluar_declaracion(nodo, &mut entorno)?;
+    }
+    
+    Ok(())
+}
+
+/// Busca y carga la configuración de permisos desde quetzal.json
+fn cargar_configuracion_permisos(ruta_archivo: &str) -> Option<configuracion::permisos::SistemaPermisos> {
+    use std::path::Path;
+    
+    let archivo_path = Path::new(ruta_archivo);
+    
+    // Buscar quetzal.json en el directorio del archivo
+    if let Some(dir) = archivo_path.parent() {
+        let config_path = dir.join("quetzal.json");
+        
+        if config_path.exists() {
+            if let Ok(contenido) = fs::read_to_string(&config_path) {
+                if let Ok(config) = serde_json::from_str::<configuracion::permisos::ConfiguracionPermisos>(&contenido) {
+                    return Some(configuracion::permisos::SistemaPermisos::cargar_desde_config(&config));
+                }
+            }
+        }
+    }
+    
+    None
 }

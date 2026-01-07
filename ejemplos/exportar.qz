@@ -28,7 +28,6 @@ Usuario instancia_usuario = nuevo Usuario("Juan", 30)
 
 // Declaración variable
 texto saludo = "Hola, Quetzal!"
-
 exportar {
     // Exportar función
     sumar_entero,

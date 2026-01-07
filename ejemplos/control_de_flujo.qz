@@ -19,3 +19,12 @@ para (entero var i = 0; i < 10; i++) {
     }
     consola.mostrar(i)
 }
+
+// Palabra reservada 'romper', se sale o rompe el búcle
+para (entero var i = 0; i < 10; i++) {
+    si (i == 5) {
+        // Romper o salirse del búcle
+        romper
+    }
+    consola.mostrar(i)
+} 

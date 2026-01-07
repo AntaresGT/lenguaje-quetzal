@@ -141,10 +141,10 @@ texto base64 = mi_texto.a_base64() // "SG9sYSBNdW5kbw == "
 texto decodificado = "SG9sYSBNdW5kbw == ".decodificar_base64() // "Hola Mundo"
 
 // Codificar a URL
-texto url_codificada = "Hola Mundo!".a_url() // "Hola%20Mundo!"
+texto url_codificada = "Hola Mundo!".a_enlace() // "Hola%20Mundo!"
 
 // Decodificar de URL
-texto url_decodificada = "Hola%20Mundo!".decodificar_url() // "Hola Mundo!"
+texto url_decodificada = "Hola%20Mundo!".decodificar_enlace() // "Hola Mundo!"
 
 // Comparación insensible a mayúsculas
 log comparacion = "hola mundo".igual_sin_caso("Hola Mundo") // verdadero
@@ -185,7 +185,6 @@ consola.mostrar(t"Mi lista: {numeros}")
 // Interpolacion con objetos JSON
 jsn datos_persona = {"nombre": "Juan", "edad": 30}
 consola.mostrar(t"Datos: {datos_persona}")
-
 // Interpolacion multilinea usando secuencias de escape
 texto planeta = "Mundo"
 consola.mostrar(t"Hola, 

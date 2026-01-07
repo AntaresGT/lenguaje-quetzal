@@ -1,147 +1,148 @@
-use crate::nucleo::interprete;
+// Pruebas unitarias para operadores del lenguaje Quetzal
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+use super::auxiliares::*;
 
-    #[test]
-    fn test_operadores_aritmeticos_basicos() {
-        let codigo = r#"
-entero a = 10
-entero b = 5
-entero suma = a + b
-entero resta = a - b
-entero multiplicacion = a * b
-entero division = a / b
-entero modulo = a % b
-        "#;
+#[test]
+fn prueba_operadores_aritmeticos() {
+    let codigo = r#"
+        entero suma(entero a, entero b) {
+            retornar a + b
+        }
+        
+        entero resta(entero a, entero b) {
+            retornar a - b
+        }
+        
+        entero resultado_suma = suma(5, 10)
+        entero resultado_resta = resta(10, 5)
+    "#;
+    
+    let entorno = ejecutar_codigo(codigo).expect("El código debería ejecutarse correctamente");
+    assert!(verificar_variable_entero(&entorno, "resultado_suma", 15));
+    assert!(verificar_variable_entero(&entorno, "resultado_resta", 5));
+}
 
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
+#[test]
+fn prueba_operadores_logicos() {
+    let codigo = r#"
+        log es_verdadero(log valor) {
+            retornar valor
+        }
+        
+        log es_falso(log valor) {
+            retornar !valor
+        }
+        
+        log resultado_es_verdadero = es_verdadero(verdadero)
+        log resultado_es_falso = es_falso(falso)
+    "#;
+    
+    let entorno = ejecutar_codigo(codigo).expect("El código debería ejecutarse correctamente");
+    assert!(verificar_variable_logico(&entorno, "resultado_es_verdadero", true));
+    assert!(verificar_variable_logico(&entorno, "resultado_es_falso", true));
+}
 
-    #[test]
-    fn test_operadores_con_numeros_decimales() {
-        let codigo = r#"
-número a = 10.5
-número b = 2.5
-número suma = a + b
-número resta = a - b
-número multiplicacion = a * b
-número division = a / b
-        "#;
+#[test]
+fn prueba_operadores_comparacion() {
+    let codigo = r#"
+        log es_igual(entero a, entero b) {
+            retornar a == b
+        }
+        
+        log es_diferente(entero a, entero b) {
+            retornar a != b
+        }
+        
+        log es_mayor(entero a, entero b) {
+            retornar a > b
+        }
+        
+        log es_menor(entero a, entero b) {
+            retornar a < b
+        }
+        
+        log resultado_es_igual = es_igual(5, 5)
+        log resultado_es_diferente = es_diferente(5, 10)
+        log resultado_es_mayor = es_mayor(10, 5)
+        log resultado_es_menor = es_menor(5, 10)
+    "#;
+    
+    let entorno = ejecutar_codigo(codigo).expect("El código debería ejecutarse correctamente");
+    assert!(verificar_variable_logico(&entorno, "resultado_es_igual", true));
+    assert!(verificar_variable_logico(&entorno, "resultado_es_diferente", true));
+    assert!(verificar_variable_logico(&entorno, "resultado_es_mayor", true));
+    assert!(verificar_variable_logico(&entorno, "resultado_es_menor", true));
+}
 
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
+#[test]
+fn prueba_operadores_incremento_decremento() {
+    let codigo = r#"
+        entero incremento(entero var valor) {
+            valor++
+            retornar valor
+        }
+        
+        entero decremento(entero var valor) {
+            valor--
+            retornar valor
+        }
+        
+        entero resultado_incremento = incremento(5)
+        entero resultado_decremento = decremento(5)
+    "#;
+    
+    let entorno = ejecutar_codigo(codigo).expect("El código debería ejecutarse correctamente");
+    assert!(verificar_variable_entero(&entorno, "resultado_incremento", 6));
+    assert!(verificar_variable_entero(&entorno, "resultado_decremento", 4));
+}
 
-    #[test]
-    fn test_operadores_mixtos_entero_numero() {
-        let codigo = r#"
-entero entero_val = 10
-número decimal_val = 3.5
-número resultado = entero_val + decimal_val
-        "#;
+#[test]
+fn prueba_operadores_compuestos() {
+    let codigo = r#"
+        entero suma_compuesta(entero var valor, entero incremento) {
+            valor += incremento
+            retornar valor
+        }
+        
+        entero resta_compuesta(entero var valor, entero decremento) {
+            valor -= decremento
+            retornar valor
+        }
+        
+        entero multiplicacion_compuesta(entero var valor, entero factor) {
+            valor *= factor
+            retornar valor
+        }
+        
+        entero division_compuesta(entero var valor, entero divisor) {
+            valor /= divisor
+            retornar valor
+        }
+        
+        entero resultado_suma_compuesta = suma_compuesta(5, 10)
+        entero resultado_resta_compuesta = resta_compuesta(10, 5)
+        entero resultado_multiplicacion_compuesta = multiplicacion_compuesta(5, 10)
+        entero resultado_division_compuesta = division_compuesta(10, 5)
+    "#;
+    
+    let entorno = ejecutar_codigo(codigo).expect("El código debería ejecutarse correctamente");
+    assert!(verificar_variable_entero(&entorno, "resultado_suma_compuesta", 15));
+    assert!(verificar_variable_entero(&entorno, "resultado_resta_compuesta", 5));
+    assert!(verificar_variable_entero(&entorno, "resultado_multiplicacion_compuesta", 50));
+    assert!(verificar_variable_entero(&entorno, "resultado_division_compuesta", 2));
+}
 
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_operadores_comparacion() {
-        let codigo = r#"
-entero a = 10
-entero b = 5
-log mayor = a > b
-log menor = a < b
-log mayor_igual = a >= b
-log menor_igual = a <= b
-log igual = a == b
-log diferente = a != b
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_operadores_logicos() {
-        let codigo = r#"
-log verdad = verdadero
-log mentira = falso
-log y_logico = verdad && mentira
-log o_logico = verdad || mentira
-log y_espanol = verdad y mentira
-log o_espanol = verdad o mentira
-log negacion = !verdad
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_asignacion_compuesta() {
-        let codigo = r#"
-entero numero = 10
-numero += 5
-numero -= 3
-numero *= 2
-numero /= 4
-numero %= 3
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_asignacion_compuesta_decimales() {
-        let codigo = r#"
-número decimal = 10.5
-decimal += 2.5
-decimal -= 1.0
-decimal *= 3.0
-decimal /= 2.0
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_asignacion_compuesta_cadenas() {
-        let codigo = r#"
-texto var mi_texto = "Hola"
-mi_texto += " mundo"
-mi_texto += "!"
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_operador_ternario() {
-        let codigo = r#"
-entero a = 10
-entero b = 5
-texto resultado = a > b ? "a es mayor" : "b es mayor"
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_precedencia_operadores() {
-        let codigo = r#"
-entero resultado1 = 2 + 3 * 4
-entero resultado2 = (2 + 3) * 4
-número resultado3 = 10.0 / 2.0 + 3.0
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_error_division_por_cero() {
-        let codigo = r#"
-entero numero = 10
-numero /= 0
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_err());
-    }
+#[test]
+fn prueba_operadores_concatenacion() {
+    let codigo = r#"
+        texto concatenacion(texto var palabra) {
+            palabra += " concatenado"
+            retornar palabra
+        }
+        
+        texto resultado_concatenacion = concatenacion("Hola")
+    "#;
+    
+    let entorno = ejecutar_codigo(codigo).expect("El código debería ejecutarse correctamente");
+    assert!(verificar_variable_texto(&entorno, "resultado_concatenacion", "Hola concatenado"));
 }

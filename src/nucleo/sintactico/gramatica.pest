@@ -1,0 +1,58 @@
+// Gramática PEG para Lenguaje Quetzal
+
+// Regla principal
+archivo = { SOI ~ (declaracion | importacion)* ~ EOI }
+
+// Importaciones
+importacion = { "importar" ~ "{" ~ identificador ~ ("," ~ identificador)* ~ "}" ~ "desde" ~ cadena }
+
+// Declaraciones
+declaracion = { declaracion_variable | declaracion_funcion | declaracion_objeto | expresion }
+
+// Variables
+declaracion_variable = { tipo ~ ("var")? ~ identificador ~ "=" ~ expresion }
+tipo = { "vacio" | "vacío" | "entero" | "número" | "numero" | "texto" | "log" | "lóg" | "lista" ~ ("<" ~ tipo ~ ">")? | "jsn" }
+
+// Funciones
+declaracion_funcion = { tipo ~ identificador ~ "(" ~ (parametro ~ ("," ~ parametro)*)? ~ ")" ~ bloque }
+parametro = { tipo ~ ("var")? ~ identificador }
+
+// Objetos
+declaracion_objeto = { "objeto" ~ identificador ~ "{" ~ (miembro_objeto)* ~ "}" }
+miembro_objeto = { modificador_acceso? ~ ("libre")? ~ (declaracion_variable | declaracion_funcion) }
+modificador_acceso = { "publico" | "público" | "privado" }
+
+// Expresiones
+expresion = { expresion_ternario }
+expresion_ternario = { expresion_logica_or ~ ("?" ~ expresion ~ ":" ~ expresion)? }
+expresion_logica_or = { expresion_logica_and ~ (("o" | "ó" | "||") ~ expresion_logica_and)* }
+expresion_logica_and = { expresion_comparacion ~ (("y" | "&&") ~ expresion_comparacion)* }
+expresion_comparacion = { expresion_aditiva ~ (("==" | "!=" | "<" | ">" | "<=" | ">=") ~ expresion_aditiva)? }
+expresion_aditiva = { expresion_multiplicativa ~ (("+" | "-") ~ expresion_multiplicativa)* }
+expresion_multiplicativa = { expresion_unaria ~ (("*" | "/" | "%") ~ expresion_unaria)* }
+expresion_unaria = { ("!" | "-" | "+") ~ expresion_unaria | expresion_postfija }
+expresion_postfija = { expresion_primaria ~ (("++" | "--" | ("[" ~ expresion ~ "]") | ("." ~ identificador) | ("(" ~ (expresion ~ ("," ~ expresion)*)? ~ ")"))* }
+expresion_primaria = { literal | identificador | "(" ~ expresion ~ ")" | "[" ~ (expresion ~ ("," ~ expresion)*)? ~ "]" | "{" ~ (par_clave_valor ~ ("," ~ par_clave_valor)*)? ~ "}" | "nuevo" ~ identificador ~ "(" ~ (expresion ~ ("," ~ expresion)*)? ~ ")" }
+
+// Literales
+literal = { literal_entero | literal_numero | literal_texto | literal_interpolacion | literal_logico | "nulo" }
+literal_entero = { "-"? ~ ASCII_DIGIT+ }
+literal_numero = { "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+literal_texto = { "\"" ~ (!"\"" ~ ("\\" ~ ANY | ANY))* ~ "\"" }
+literal_interpolacion = { "t\"" ~ (!"\"" ~ ("\\" ~ ANY | ANY))* ~ "\"" }
+literal_logico = { "verdadero" | "falso" }
+
+// Estructuras de datos
+par_clave_valor = { (identificador | cadena) ~ ":" ~ expresion }
+
+// Bloques y control de flujo
+bloque = { "{" ~ (declaracion | estructura_control)* ~ "}" }
+estructura_control = { "si" ~ "(" ~ expresion ~ ")" ~ bloque ~ ("sino" ~ bloque)? | "mientras" ~ "(" ~ expresion ~ ")" ~ bloque | "para" ~ "(" ~ declaracion_variable ~ ";" ~ expresion ~ ";" ~ expresion ~ ")" ~ bloque | "para" ~ "(" ~ tipo ~ ("var")? ~ identificador ~ ("en" | "cada") ~ expresion ~ ")" ~ bloque | "hacer" ~ bloque ~ "mientras" ~ "(" ~ expresion ~ ")" | "romper" | "continuar" | "retornar" ~ expresion? | "intentar" ~ bloque ~ ("capturar" ~ "(" ~ identificador ~ ")" ~ bloque)? ~ ("finalmente" ~ bloque)? | "lanzar" ~ expresion }
+
+// Identificadores y cadenas
+identificador = { (ASCII_ALPHA | "_" | "á" | "é" | "í" | "ó" | "ú" | "ñ" | "ü" | "Á" | "É" | "Í" | "Ó" | "Ú" | "Ñ" | "Ü") ~ (ASCII_ALPHANUMERIC | "_" | "á" | "é" | "í" | "ó" | "ú" | "ñ" | "ü" | "Á" | "É" | "Í" | "Ó" | "Ú" | "Ñ" | "Ü")* }
+cadena = { "\"" ~ (!"\"" ~ ("\\" ~ ANY | ANY))* ~ "\"" }
+
+// Caracteres especiales
+WHITESPACE = _{ " " | "\t" | "\n" | "\r" }
+COMMENT = _{ "//" ~ (!"\n" ~ ANY)* | "/*" ~ (!"*/" ~ ANY)* ~ "*/" }

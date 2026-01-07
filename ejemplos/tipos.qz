@@ -22,7 +22,12 @@ jsn valor_json = {
     valor_otro_json: {
         clave: "valor",
         otro: [1, 2, 3]
-    }
+    },
+    "valor con espacio": "Esto es válido",
+    "valor-con-guion": 100
+    "123valor_numerico": 456,
+    "valorEspecial!@#": "Símbolos especiales",
+    "valor con ñ": "Caracteres Unicode ñ á é í ó ú"
 }
 
 // Tipos mutables

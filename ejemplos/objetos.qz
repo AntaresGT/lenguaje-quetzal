@@ -4,8 +4,8 @@
 objeto Usuario {
     privado:
         // Atributos privados del objeto
-        texto nombre
-        entero edad
+        texto var nombre
+        entero var edad
 
         // Funciones privadas del objeto
         // Estas funciones solo pueden ser llamadas desde dentro del objeto
@@ -36,8 +36,8 @@ Usuario usuario1 = nuevo Usuario("Juan", 30)
 
 // Los objetos que no se especifican las etiquetas de acceso son públicos por defecto
 objeto DefinicionUsuario {
-    texto nombre
-    entero edad
+    texto var nombre
+    entero var edad
 
     DefinicionUsuario(texto nombre, entero edad) {
         ambiente.nombre = nombre
@@ -98,3 +98,8 @@ entero valor_absoluto = UsuarioLibre.absoluto(-10)
 
 // Operar con el objeto libre
 UsuarioLibre2.concatenar_apellido("Pérez")
+// Nota: Todos los atributos libres o no libres sino llevan var se consideran constantes
+// Adicionalmente, si un objeto no se instancia con var se considera una constante y no puede modificarse después de su creación
+// Ejemplo: Usuario usuario_constante = nuevo Usuario("Ana", 25) // No se puede modificar después de su creación
+// usuario_constante.edad = 30 // Esto no genera un error porque edad se declaró como variable y no como constante
+// usuario_constante = nuevo Usuario("Luis", 40) // Esto genera un error

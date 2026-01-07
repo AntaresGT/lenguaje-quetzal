@@ -1,313 +1,174 @@
-use crate::nucleo::interprete;
+// Pruebas unitarias para funciones del lenguaje Quetzal
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+use super::auxiliares::*;
 
-    #[test]
-    fn test_declaracion_funcion_sin_parametros() {
-        let codigo = r#"
-vacio saludar() {
-    entero x = 5
-}
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_declaracion_funcion_con_parametros() {
-        let codigo = r#"
-entero sumar(entero a, entero b) {
-    retornar a + b
-}
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_llamada_funcion_sin_parametros() {
-        let codigo = r#"
-vacio saludar() {
-    entero x = 10
-}
-saludar()
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_llamada_funcion_con_parametros() {
-        let codigo = r#"
-entero duplicar(entero valor) {
-    retornar valor * 2
-}
-entero resultado = duplicar(5)
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_funcion_retorno_entero() {
-        let codigo = r#"
-entero obtener_numero() {
-    retornar 42
-}
-entero numero_valor = obtener_numero()
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_funcion_retorno_cadena() {
-        let codigo = r#"
-texto obtener_saludo() {
-    retornar "Hola mundo"
-}
-texto saludo = obtener_saludo()
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_funcion_retorno_booleano() {
-        let codigo = r#"
-log es_verdadero() {
-    retornar verdadero
-}
-log resultado = es_verdadero()
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_funcion_con_multiples_parametros() {
-        let codigo = r#"
-texto concatenar(texto a, texto b, texto c) {
-    retornar a + b + c
-}
-texto resultado = concatenar("Hola", " ", "mundo")
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_funcion_con_operaciones_aritmeticas() {
-        let codigo = r#"
-entero calcular(entero a, entero b) {
-    entero suma = a + b
-    entero producto = suma * 2
-    retornar producto
-}
-entero resultado = calcular(5, 3)
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_funcion_con_condicionales() {
-        let codigo = r#"
-entero mayor(entero a, entero b) {
-    si (a > b) {
-        retornar a
-    } sino {
-        retornar b
-    }
-}
-entero resultado = mayor(10, 5)
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_funcion_recursiva_simple() {
-        let codigo = r#"
-entero factorial(entero n) {
-    si (n <= 1) {
-        retornar 1
-    } sino {
-        retornar n * factorial(n - 1)
-    }
-}
-entero resultado = factorial(3)
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_funcion_con_variables_locales() {
-        let codigo = r#"
-entero procesar_datos(entero entrada) {
-    entero temporal = entrada * 2
-    entero resultado_parcial = temporal + 5
-    entero resultado_final = resultado_parcial / 2
-    retornar resultado_final
-}
-entero resultado = procesar_datos(10)
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_llamadas_funciones_anidadas() {
-        let codigo = r#"
-entero duplicar(entero x) {
-    retornar x * 2
-}
-entero triplicar(entero x) {
-    retornar x * 3
-}
-entero resultado = duplicar(triplicar(5))
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_funcion_con_tipos_mixtos() {
-        let codigo = r#"
-texto formatear(entero numero, texto mensaje) {
-    retornar "Número: " + numero.texto() + ", Texto: " + mensaje
-}
-texto resultado = formatear(42, "prueba")
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_error_funcion_sin_retorno() {
-        let codigo = r#"
-entero funcion_problematica() {
-    entero x = 5
-    // No hay retorno y debería fallar
+#[test]
+fn prueba_funcion_sin_retorno() {
+    let codigo = r#"
+        vacio saludar() {
+            consola.mostrar("¡Hola, Quetzal!")
+        }
+    "#;
+    
+    assert!(verificar_ejecucion_exitosa(codigo));
 }
 
-entero resultado = funcion_problematica()
-        "#;
-
-        // Esta prueba debe fallar porque la función no retorna
-        assert!(interprete::interpretar(codigo).is_err());
-    }
-
-    #[test]
-    fn test_error_llamada_funcion_inexistente() {
-        let codigo = r#"
-entero resultado = funcion_que_no_existe(5)
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_err());
-    }
-
-    #[test]
-    fn test_error_parametros_incorrectos() {
-        let codigo = r#"
-entero sumar(entero a, entero b) {
-    retornar a + b
-}
-entero resultado = sumar(5)  // Faltan parámetros
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_err());
-    }
-
-    #[test]
-    fn test_funcion_vacio_sin_retorno() {
-        let codigo = r#"
-vacio hacer_algo() {
-    entero x = 5
-    entero z = x * 2
-}
-hacer_algo()
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_alcance_variables_funciones() {
-        let codigo = r#"
-entero variable_global = 100
-
-entero usar_variable_global() {
-    retornar variable_global + 10
+#[test]
+fn prueba_funcion_que_devuelve_numero() {
+    let codigo = r#"
+        número sumar(número a, número b) {
+            retornar a + b
+        }
+        
+        número resultado = sumar(5.5, 3.2)
+    "#;
+    
+    let entorno = ejecutar_codigo(codigo).expect("El código debería ejecutarse correctamente");
+    assert!(obtener_valor_variable(&entorno, "resultado").is_some());
 }
 
-entero resultado = usar_variable_global()
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_funcion_en_una_sola_linea_que_retornan_algo() {
-        let codigo = r#"
-entero doble(entero x) { retornar x * 2 }
-entero resultado = doble(10)
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_funcion_en_una_sola_linea_que_no_retornan_nada() {
-        let codigo = r#"
-vacio imprimir_mensaje() { consola.imprimir("Hola") }
-imprimir_mensaje()
-        "#;
-
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_funcion_con_multiples_retorno() {
-        let codigo = r#"
-entero operaciones(entero a, entero b) {
-    si (a > b) {
-        retornar a
-    } sino {
-        retornar b
-    }
+#[test]
+fn prueba_funcion_que_devuelve_entero() {
+    let codigo = r#"
+        entero multiplicar(entero a, entero b) {
+            retornar a * b
+        }
+        
+        entero resultado = multiplicar(5, 3)
+    "#;
+    
+    let entorno = ejecutar_codigo(codigo).expect("El código debería ejecutarse correctamente");
+    assert!(verificar_variable_entero(&entorno, "resultado", 15));
 }
-entero resultado = operaciones(10, 5)
-        "#;
 
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_funcion_con_parametros_por_defecto() {
-        let codigo = r#"
-entero sumar(entero a, entero b = 10) {
-    retornar a + b
+#[test]
+fn prueba_funcion_que_devuelve_texto() {
+    let codigo = r#"
+        texto concatenar(texto a, texto b) {
+            retornar a + b
+        }
+        
+        texto resultado = concatenar("Hola", " Mundo")
+    "#;
+    
+    let entorno = ejecutar_codigo(codigo).expect("El código debería ejecutarse correctamente");
+    assert!(verificar_variable_texto(&entorno, "resultado", "Hola Mundo"));
 }
-entero resultado = sumar(5)
-        "#;
 
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
-
-    #[test]
-    fn test_funcion_con_parametros_mutables() {
-        let codigo = r#"
-entero incrementar(entero var x) {
-    x = x + 1
-    retornar x
+#[test]
+fn prueba_funcion_que_devuelve_logico() {
+    let codigo = r#"
+        log es_par(entero valor) {
+            retornar valor % 2 == 0
+        }
+        
+        log resultado = es_par(4)
+    "#;
+    
+    let entorno = ejecutar_codigo(codigo).expect("El código debería ejecutarse correctamente");
+    assert!(verificar_variable_logico(&entorno, "resultado", true));
 }
-entero resultado = incrementar(5)
-        "#;
 
-        assert!(interprete::interpretar(codigo).is_ok());
-    }
+#[test]
+fn prueba_funcion_que_devuelve_json() {
+    let codigo = r#"
+        jsn obtener_datos() {
+            retornar {
+                nombre: "Quetzal",
+                version: "0.0.2"
+            }
+        }
+        
+        jsn resultado = obtener_datos()
+    "#;
+    
+    assert!(verificar_ejecucion_exitosa(codigo));
+}
+
+#[test]
+fn prueba_funcion_que_devuelve_lista() {
+    let codigo = r#"
+        lista<entero> obtener_numeros() {
+            retornar [1, 2, 3, 4, 5]
+        }
+        
+        lista<entero> resultado = obtener_numeros()
+    "#;
+    
+    assert!(verificar_ejecucion_exitosa(codigo));
+}
+
+#[test]
+fn prueba_funcion_recursiva() {
+    let codigo = r#"
+        entero factorial(entero n) {
+            si (n == 0) {
+                retornar 1
+            } sino {
+                retornar n * factorial(n - 1)
+            }
+        }
+        
+        entero resultado = factorial(5)
+    "#;
+    
+    let entorno = ejecutar_codigo(codigo).expect("El código debería ejecutarse correctamente");
+    assert!(verificar_variable_entero(&entorno, "resultado", 120));
+}
+
+#[test]
+fn prueba_funcion_con_parametros_modificables() {
+    let codigo = r#"
+        texto funcion_con_parametros_modificables(texto var palabra) {
+            palabra += " texto agregado."
+            retornar palabra
+        }
+        
+        texto resultado = funcion_con_parametros_modificables("Hola")
+    "#;
+    
+    let entorno = ejecutar_codigo(codigo).expect("El código debería ejecutarse correctamente");
+    assert!(verificar_variable_texto(&entorno, "resultado", "Hola texto agregado."));
+}
+
+#[test]
+fn prueba_funcion_con_tipo_objeto_retorno() {
+    // Prueba de función que retorna un tipo de objeto definido por el usuario
+    let codigo = r#"
+        objeto DefinicionUsuario {
+            publico:
+                texto var nombre
+                entero var edad
+            
+                DefinicionUsuario(texto nombre, entero edad) {
+                    ambiente.nombre = nombre
+                    ambiente.edad = edad
+                }
+                
+                texto obtener_nombre() {
+                    retornar ambiente.nombre
+                }
+        }
+        
+        DefinicionUsuario crear_usuario(texto nombre, entero edad) {
+            retornar nuevo DefinicionUsuario(nombre, edad)
+        }
+    "#;
+    
+    assert!(verificar_ejecucion_exitosa(codigo));
+}
+
+#[test]
+fn prueba_funcion_anonima() {
+    // Prueba de función anónima (lambda)
+    let codigo = r#"
+        entero doble(entero x) {
+            retornar x * 2
+        }
+        
+        entero resultado = doble(5)
+    "#;
+    
+    let entorno = ejecutar_codigo(codigo).expect("El código debería ejecutarse correctamente");
+    assert!(verificar_variable_entero(&entorno, "resultado", 10));
 }

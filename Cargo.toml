@@ -3,21 +3,29 @@ name = "lenguaje-quetzal"
 version = "0.0.2"
 edition = "2021"
 
-[dependencies]
-serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-anyhow = "1.0"
-thiserror = "1.0"
-colored = "2.0"
-regex = "1.0"
-base64 = "0.21"
-urlencoding = "2.1"
-rpassword = "7.0"
-inquire = "0.7.5"
-stacker = "0.1"
-bumpalo = { version = "3.16", features = ["collections"] }
-sys-info = "0.9"
-
 [[bin]]
 name = "quetzal"
 path = "src/principal.rs"
+
+
+[dependencies]
+anyhow = "1.0.100"
+cap-std = "4.0.0"
+clap = "4.5.54"
+codespan-reporting = "0.13.1"
+colored = "3.0.0"
+dialoguer = "0.12.0"
+logos = "0.16.0"
+miette = "7.6.0"
+moka = { version = "0.12.12", features = ["sync"] }
+pest = "2.8.5"
+pest_derive = "2.8.5"
+rpassword = "7.4.0"
+rust_decimal = "1.39.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+thiserror = "2.0.17"
+tokio = { version = "1.49.0", features = ["rt", "rt-multi-thread", "macros", "time"] }
+unicode-ident = "1.0.22"
+base64 = "0.22.0"
+urlencoding = "2.1.3"

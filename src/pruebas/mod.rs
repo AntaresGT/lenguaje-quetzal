@@ -1,57 +1,21 @@
-// Módulo de pruebas unitarias para el intérprete Quetzal
+// Modulo de pruebas unitarias para el lenguaje Quetzal
+// Verifica que los ejemplos del lenguaje funcionen correctamente
 
-pub mod asignacion_indices;
-pub mod bucles;
-pub mod cadenas;
-pub mod condicionales;
-pub mod conversiones;
-pub mod entrada_salida;
-pub mod funciones;
-pub mod funciones_cadena_avanzadas;
-pub mod funciones_encadenadas;
-pub mod integracion;
-pub mod listas_y_json;
-pub mod manejo_errores;
-pub mod metodos_listas;
-pub mod metodos_mutantes;
-pub mod operadores;
-pub mod redondeo_decimales;
-pub mod sintaxis_y_comentarios;
-pub mod variables_y_tipos;
-
-// Nuevos módulos para funcionalidades avanzadas
-pub mod algoritmos_recursivos;
-pub mod matrices_multidimensionales;
-pub mod procesamiento_cadenas_avanzado;
-pub mod recursion_universal; // Prueba universal que funciona con cualquier nombre
-
-// Módulos para tests de correcciones específicas
-pub mod ambito_variables;
-
-// Módulo para tests de objetos
-pub mod objetos;
-pub mod objetos_simples;
-
-// Módulo para tests del tipo nulo
-pub mod tipo_nulo;
-
-// Módulo para tests de validación de tipos en listas tipadas
-pub mod validacion_tipos_lista;
-
-// Módulo para tests del método esta_vacia() para tipos texto
-pub mod metodo_esta_vacia_texto;
-
-// Módulo para tests del método mayusculas() para tipos texto
-pub mod metodo_mayusculas_texto;
-
-// Módulo para tests del método minusculas() para tipos texto
-pub mod metodo_minusculas_texto;
-
-// Módulo para tests del método recortar_inicio() para tipos texto
-pub mod metodo_recortar_inicio_texto;
-
-// Módulo para tests del método recortar_final() para tipos texto
-pub mod metodo_recortar_final_texto;
-
-// Módulo para tests de interpolación de texto
-pub mod interpolacion_texto;
+mod auxiliares;
+mod tipos;
+mod funciones;
+mod objetos;
+mod operadores;
+mod control_flujo;
+mod bucles;
+mod metodos_texto;
+mod metodos_listas;
+mod metodos_json;
+mod manejo_excepciones;
+mod conversion_tipos;
+mod matematica;
+mod semantico;
+mod modulos;
+mod permisos;
+mod errores;
+mod asincrono;

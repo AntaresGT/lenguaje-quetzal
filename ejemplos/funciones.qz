@@ -86,3 +86,55 @@ entero factorial(entero n) {
         retornar n * factorial(n - 1)
     }
 }
+
+
+// Funciones asincronas
+asincróno entero función_asincrona(entero valor1) {
+    retornar valor1 * 2
+}
+
+// Ejecutar función asincrona dentro de una tarea asincrona
+asincrono vacio tarea_asincrona() {
+    consola.mostrar("Tarea asincrona iniciada")
+    número resultado = esperar función_asincrona(10)
+    consola.mostrar("Resultado de la función asincrona: " + resultado)
+    consola.mostrar("Tarea asincrona finalizada")
+}
+
+// Llamar a la tarea asincrona fuera de un contexto asincrono también es posible
+// pero se debe usar la palabra reservada 'esperar' para obtener el resultado
+número resultado = esperar función_asincrona(3)
+
+// Funciones asincronas en objetos
+objeto DefinicionAsincrona {
+    publico:
+        asincróno número función_asincrona_objeto(número valor) {
+            retornar valor + 5
+        }
+
+        libre asincrono número función_asincrona_libre(número valor) {
+            retornar valor - 2
+        }
+}
+
+// Llamar a la función asincrona dentro de una tarea asincrona
+asincrono vacio tarea_asincrona_objeto() {
+    DefinicionAsincrona obj = nuevo DefinicionAsincrona()
+    número resultado = esperar obj.función_asincrona_objeto(15)
+    consola.mostrar("Resultado de la función asincrona en objeto: " + resultado)
+}
+
+// Llamar a la tarea asincrona fuera de un contexto asincrono también es posible
+// pero se debe usar la palabra reservada 'esperar' para obtener el resultado
+DefinicionAsincrona obj = nuevo DefinicionAsincrona()
+número resultado_objeto = esperar obj.función_asincrona_objeto(20)
+
+// Llamar a la función asincrona libre dentro de una tarea asincrona
+// No necesita instanciar el objeto DefinicionAsincrona
+asincrono vacio tarea_asincrona_libre() {
+    número resultado = esperar DefinicionAsincrona.función_asincrona_libre(10)
+    consola.mostrar("Resultado de la función asincrona libre en objeto: " + resultado)
+}
+// Llamar a la tarea asincrona libre fuera de un contexto asincrono también es posible
+// pero se debe usar la palabra reservada 'esperar' para obtener el resultado
+número resultado_libre = esperar DefinicionAsincrona.función_asincrona_libre(30)

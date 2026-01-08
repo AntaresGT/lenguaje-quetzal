@@ -2,11 +2,21 @@
 name = "lenguaje-quetzal"
 version = "0.0.2"
 edition = "2021"
+authors = ["Allam López <alan@antaresgt.com>", "Antares <antaresgt.com>"]
+build = "src/compilar.rs"
+repository = "https://github.com/AntaresGT/lenguaje-quetzal"
 
 [[bin]]
 name = "quetzal"
 path = "src/principal.rs"
 
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
+
+[package.metadata.winres]
+OriginalFilename = "quetzal.exe"
+LegalCopyright = "Derechos Reservados © 2026 - Antares"
+ProductVersion = "0.0.2"
 
 [dependencies]
 anyhow = "1.0.100"

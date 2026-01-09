@@ -3,6 +3,20 @@
 use super::auxiliares::*;
 
 #[test]
+fn prueba_operaciones_con_tipos_diferentes() {
+    let codigo = r#"
+        entero resultado_suma = 5 + 10.5
+        número resultado_resta = 10.5 - 5
+        texto resultado_concatenacion = "Hola" + " Mundo"
+        log resultado_logico = verdadero y falso
+        log resultado_logico2 = verdadero o falso
+        log resultado_logico3 = !verdadero
+        log resultado_logico4 = !falso
+    "#;
+    assert!(verificar_ejecucion_exitosa(codigo));
+}
+
+#[test]
 fn prueba_operadores_aritmeticos() {
     let codigo = r#"
         entero suma(entero a, entero b) {

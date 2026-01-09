@@ -20,9 +20,9 @@ pub enum Tipo {
 impl Tipo {
     pub fn puede_asignarse_a(&self, destino: &Tipo) -> bool {
         match (self, destino) {
-            (a, b) if a == b => true,
-            (Tipo::Entero, Tipo::Numero) => true,
-            (Tipo::Numero, Tipo::Entero) => false,
+            (Tipo::Entero, Tipo::Numero) | (Tipo::Numero, Tipo::Entero) => true,
+            (Tipo::Texto, Tipo::Entero) => false,
+            (Tipo::Texto, Tipo::Numero) => false,
             (Tipo::Vacio, _) | (_, Tipo::Vacio) => true,
             (Tipo::Lista(t1), Tipo::Lista(t2)) => {
                 if **t1 == Tipo::Vacio || **t2 == Tipo::Vacio {
@@ -31,6 +31,7 @@ impl Tipo {
                     t1.puede_asignarse_a(t2)
                 }
             },
+            (a, b) if a == b => true,
             _ => false,
         }
     }

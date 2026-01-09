@@ -3,6 +3,24 @@
 use super::auxiliares::*;
 
 #[test]
+fn prueba_funcion_conversion_implicita_numero_a_entero() {
+    let codigo = r#"
+        texto convercion_implicita_entero_a_numero(número valor) {
+            retornar valor.texto()
+        }
+
+        texto convercion_implicita_numero_a_entero(entero valor) {
+            retornar valor.texto()
+        }
+
+        texto resultado = convercion_implicita_entero_a_numero(1234)
+        texto resultado2 = convercion_implicita_numero_a_entero(1234.56)
+    "#;
+    
+    assert!(verificar_ejecucion_exitosa(codigo));
+}
+
+#[test]
 fn prueba_funcion_sin_retorno() {
     let codigo = r#"
         vacio saludar() {

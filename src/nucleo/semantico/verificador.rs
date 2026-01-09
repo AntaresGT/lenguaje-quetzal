@@ -440,10 +440,44 @@ impl Verificador {
                     }
                 } else if tipo_objeto == Tipo::Json {
                     // JSON permite acceso a cualquier propiedad
-                    Ok(Tipo::Vacio)
+                    Ok(Tipo::Texto)
                 } else {
                     // Para otros tipos, permitir acceso a métodos nativos
-                    Ok(Tipo::Vacio)
+                    match miembro.as_str() {
+                        "texto" => {
+                            Ok(Tipo::Funcion {
+                                parametros: vec![],
+                                retorno: Box::new(Tipo::Texto),
+                            })
+                        },
+                        "entero" => {
+                            Ok(Tipo::Funcion {
+                                parametros: vec![],
+                                retorno: Box::new(Tipo::Entero),
+                            })
+                        },
+                        "numero" | "número" => {
+                            Ok(Tipo::Funcion {
+                                parametros: vec![],
+                                retorno: Box::new(Tipo::Numero),
+                            })
+                        },
+                        "log" | "lóg" => {
+                            Ok(Tipo::Funcion {
+                                parametros: vec![],
+                                retorno: Box::new(Tipo::Logico),
+                            })
+                        },
+                        "jsn" => {
+                            Ok(Tipo::Funcion {
+                                parametros: vec![],
+                                retorno: Box::new(Tipo::Json),
+                            })
+                        },
+                        _ => {
+                            Ok(Tipo::Vacio)
+                        }
+                    }
                 }
             }
             
@@ -790,7 +824,7 @@ impl Verificador {
                 if let Some(cap) = capturar {
                     self.tabla_simbolos.entrar_ambito();
                     // Registrar variable de excepción
-                    self.tabla_simbolos.declarar_variable(cap.variable.clone(), Tipo::Texto, false)
+                    self.tabla_simbolos.declarar_variable(cap.variable.clone(), Tipo::Json, false)
                         .map_err(|e| Error::semantico(
                             CodigoError::VariableRedeclarada,
                             e,

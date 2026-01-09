@@ -3,6 +3,19 @@
 use super::auxiliares::*;
 
 #[test]
+fn prueba_excepcion_recuperando_mensaje() {
+    let codigo = r#"
+        intentar {
+            lanzar "Error de prueba"
+        } capturar (excepcion e) {
+            texto mensaje = e.mensaje
+        }
+    "#;
+    
+    assert!(verificar_ejecucion_exitosa(codigo));
+}
+
+#[test]
 fn prueba_funcion_que_lanza_excepcion() {
     let codigo = r#"
         número dividir(número numerador, número denominador) {

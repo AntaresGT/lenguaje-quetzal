@@ -3,6 +3,8 @@ use crate::nucleo::sintactico::ast::*;
 use crate::nucleo::semantico::tabla_simbolos::{TablaSimbolos, ParametroFuncion, MiembroObjeto};
 use crate::nucleo::semantico::tipos::Tipo;
 use std::collections::HashMap;
+use crate::nativos::interfaz::ModuloNativo;
+use std::sync::Arc;
 
 /// Verificador semántico
 pub struct Verificador {
@@ -10,6 +12,7 @@ pub struct Verificador {
     tipo_retorno_actual: Option<Tipo>,
     dentro_de_bucle: bool,
     dentro_de_funcion_asincrona: bool,
+    objetos_nativos: HashMap<String, Arc<dyn ModuloNativo>>,
 }
 
 impl Verificador {
@@ -20,7 +23,13 @@ impl Verificador {
             tipo_retorno_actual: None,
             dentro_de_bucle: false,
             dentro_de_funcion_asincrona: false,
+            objetos_nativos: HashMap::new(),
         }
+    }
+
+    /// Registra un módulo nativo en el verificador para consulta de tipos
+    pub fn registrar_objeto_nativo(&mut self, nombre: String, modulo: Arc<dyn ModuloNativo>) {
+        self.objetos_nativos.insert(nombre, modulo);
     }
     
     /// Verifica un programa completo (lista de nodos)
@@ -417,8 +426,8 @@ impl Verificador {
             NodoAst::ExpresionAcceso { objeto, miembro, .. } => {
                 let tipo_objeto = self.verificar(objeto)?;
                 
-                if let Tipo::Objeto(nombre_objeto) = tipo_objeto {
-                    if let Some(obj) = self.tabla_simbolos.buscar_objeto(&nombre_objeto) {
+                if let Tipo::Objeto(nombre_objeto) = &tipo_objeto {
+                    if let Some(obj) = self.tabla_simbolos.buscar_objeto(nombre_objeto) {
                         if let Some(miembro_def) = obj.miembros.get(miembro) {
                             match miembro_def {
                                 MiembroObjeto::Variable { tipo, .. } => Ok(tipo.clone()),
@@ -437,6 +446,52 @@ impl Verificador {
                     } else {
                         // Objeto no registrado, permitir acceso dinámico
                         Ok(Tipo::Vacio)
+                    }
+                } else if tipo_objeto == Tipo::Vacio {
+                    // Si el objeto es Vacio (objeto nativo), verificar constantes conocidas
+                    if let NodoAst::ExpresionIdentificador { nombre: nombre_objeto, .. } = objeto.as_ref() {
+                        if let Some(modulo_nativo) = self.objetos_nativos.get(nombre_objeto) {
+                            // Consultar tipo de constante usando el módulo nativo
+                            if let Some(tipo_constante) = modulo_nativo.obtener_tipo_constante(miembro) {
+                                return Ok(tipo_constante);
+                            }
+                        }
+                    }
+                    // Si no es una constante conocida, continuar con métodos nativos
+                    match miembro.as_str() {
+                        "texto" => {
+                            Ok(Tipo::Funcion {
+                                parametros: vec![],
+                                retorno: Box::new(Tipo::Texto),
+                            })
+                        },
+                        "entero" => {
+                            Ok(Tipo::Funcion {
+                                parametros: vec![],
+                                retorno: Box::new(Tipo::Entero),
+                            })
+                        },
+                        "numero" | "número" => {
+                            Ok(Tipo::Funcion {
+                                parametros: vec![],
+                                retorno: Box::new(Tipo::Numero),
+                            })
+                        },
+                        "log" | "lóg" => {
+                            Ok(Tipo::Funcion {
+                                parametros: vec![],
+                                retorno: Box::new(Tipo::Logico),
+                            })
+                        },
+                        "jsn" => {
+                            Ok(Tipo::Funcion {
+                                parametros: vec![],
+                                retorno: Box::new(Tipo::Json),
+                            })
+                        },
+                        _ => {
+                            Ok(Tipo::Vacio)
+                        }
                     }
                 } else if tipo_objeto == Tipo::Json {
                     // JSON permite acceso a cualquier propiedad
@@ -848,10 +903,32 @@ impl Verificador {
                 Ok(Tipo::Vacio)
             }
             
-            NodoAst::Importacion { .. } => {
-                // Las importaciones se manejan en una fase separada
+            NodoAst::Importacion { elementos, ruta, .. } => {
+                // Si es un módulo nativo, registrarlo en el verificador
+                if crate::nativos::registro::es_modulo_nativo(ruta) {
+                    // Obtener el módulo nativo y registrarlo
+                    if let Some(modulo) = obtener_modulo_nativo_por_ruta(ruta) {
+                        for elemento in elementos {
+                            self.registrar_objeto_nativo(elemento.clone(), modulo.clone());
+                        }
+                    }
+                }
                 Ok(Tipo::Vacio)
             }
         }
+    }
+}
+
+
+/// Obtiene un módulo nativo por su ruta (para verificación semántica)
+fn obtener_modulo_nativo_por_ruta(ruta: &str) -> Option<Arc<dyn ModuloNativo>> {
+    use crate::nativos::matematica::Matematica;
+    use std::sync::Arc;
+    
+    match ruta {
+        "quetzal/matemática" | "quetzal/matematica" => {
+            Some(Arc::new(Matematica::nuevo()))
+        }
+        _ => None,
     }
 }

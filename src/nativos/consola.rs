@@ -27,6 +27,10 @@ impl ModuloNativo for Consola {
         // Esto se hace en registrar_modulos_nativos
         Ok(())
     }
+
+    fn obtener_tipo_constante(&self, _nombre: &str) -> Option<crate::nucleo::semantico::tipos::Tipo> {
+        None
+    }
     
     fn obtener_constante(&self, _nombre: &str) -> Option<Valor> {
         None

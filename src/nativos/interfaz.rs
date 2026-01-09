@@ -15,6 +15,9 @@ pub trait ModuloNativo {
     
     /// Obtiene una constante del módulo
     fn obtener_constante(&self, nombre: &str) -> Option<Valor>;
+
+    /// Obtiene el tipo de una constante del módulo (para verificación semántica)
+    fn obtener_tipo_constante(&self, nombre: &str) -> Option<crate::nucleo::semantico::tipos::Tipo>;
     
     /// Llama a una función del módulo
     fn llamar_funcion(

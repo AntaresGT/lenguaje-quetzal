@@ -22,6 +22,14 @@ impl ModuloNativo for Matematica {
     fn ruta(&self) -> &str {
         "quetzal/matemática"
     }
+
+    fn obtener_tipo_constante(&self, nombre: &str) -> Option<crate::nucleo::semantico::tipos::Tipo> {
+        use crate::nucleo::semantico::tipos::Tipo;
+        match nombre {
+            "PI" | "E" | "TAU" => Some(Tipo::Numero),
+            _ => None,
+        }
+    }
     
     fn registrar(&self, entorno: &mut Entorno) -> Resultado<()> {
         // Registrar constantes

@@ -391,7 +391,7 @@ impl Verificador {
                     // Verificar tipos de argumentos
                     for (i, (arg, param_tipo)) in argumentos.iter().zip(parametros.iter()).enumerate() {
                         let tipo_arg = self.verificar(arg)?;
-                        if !param_tipo.es_compatible_con(&tipo_arg) && tipo_arg != Tipo::Vacio {
+                        if !tipo_arg.puede_asignarse_a(&param_tipo) && tipo_arg != Tipo::Vacio {
                             return Err(Error::semantico(
                                 CodigoError::TipoArgumentoIncorrecto,
                                 format!("argumento {} de tipo {} no es compatible con parámetro de tipo {}", 

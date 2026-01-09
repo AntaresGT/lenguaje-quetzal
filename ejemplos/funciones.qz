@@ -121,7 +121,7 @@ objeto DefinicionAsincrona {
 asincrono vacio tarea_asincrona_objeto() {
     DefinicionAsincrona obj = nuevo DefinicionAsincrona()
     número resultado = esperar obj.función_asincrona_objeto(15)
-    consola.mostrar("Resultado de la función asincrona en objeto: " + resultado)
+    consola.mostrar("Resultado de la función asincrona en objeto: " + resultado.texto())
 }
 
 // Llamar a la tarea asincrona fuera de un contexto asincrono también es posible
@@ -133,8 +133,9 @@ número resultado_objeto = esperar obj.función_asincrona_objeto(20)
 // No necesita instanciar el objeto DefinicionAsincrona
 asincrono vacio tarea_asincrona_libre() {
     número resultado = esperar DefinicionAsincrona.función_asincrona_libre(10)
-    consola.mostrar("Resultado de la función asincrona libre en objeto: " + resultado)
+    consola.mostrar("Resultado de la función asincrona libre en objeto: " + resultado.texto())
 }
 // Llamar a la tarea asincrona libre fuera de un contexto asincrono también es posible
 // pero se debe usar la palabra reservada 'esperar' para obtener el resultado
 número resultado_libre = esperar DefinicionAsincrona.función_asincrona_libre(30)
+consola.mostrar("Resultado de la función asincrona libre fuera de un contexto asincrono: " + resultado_libre.texto())

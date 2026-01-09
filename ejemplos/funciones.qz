@@ -97,7 +97,7 @@ asincróno entero función_asincrona(entero valor1) {
 asincrono vacio tarea_asincrona() {
     consola.mostrar("Tarea asincrona iniciada")
     número resultado = esperar función_asincrona(10)
-    consola.mostrar("Resultado de la función asincrona: " + resultado)
+    consola.mostrar("Resultado de la función asincrona: " + resultado.texto())
     consola.mostrar("Tarea asincrona finalizada")
 }
 

@@ -121,7 +121,7 @@ impl Verificador {
                 let tipo_valor = self.verificar(valor)?;
                 
                 // Permitir asignar a variables de tipo Vacio (inferencia)
-                if tipo_semantico != Tipo::Vacio && !tipo_semantico.es_compatible_con(&tipo_valor) && tipo_valor != Tipo::Vacio {
+                if tipo_semantico != Tipo::Vacio && !tipo_valor.puede_asignarse_a(&tipo_semantico) && tipo_valor != Tipo::Vacio {
                     return Err(Error::semantico(
                         CodigoError::TiposIncompatibles,
                         format!("no se puede asignar {} a variable de tipo {}", tipo_valor.nombre(), tipo_semantico.nombre()),
@@ -618,7 +618,7 @@ impl Verificador {
             }
             
             NodoAst::ExpresionEsperar { expresion, .. } => {
-                if !self.dentro_de_funcion_asincrona {
+                if !self.dentro_de_funcion_asincrona && self.tipo_retorno_actual.is_some() {
                     return Err(Error::semantico(
                         CodigoError::EsperarFueraDeAsincrona,
                         "'esperar' solo puede usarse dentro de funciones asíncronas".to_string(),

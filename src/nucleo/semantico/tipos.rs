@@ -18,6 +18,23 @@ pub enum Tipo {
 }
 
 impl Tipo {
+    pub fn puede_asignarse_a(&self, destino: &Tipo) -> bool {
+        match (self, destino) {
+            (a, b) if a == b => true,
+            (Tipo::Entero, Tipo::Numero) => true,
+            (Tipo::Numero, Tipo::Entero) => false,
+            (Tipo::Vacio, _) | (_, Tipo::Vacio) => true,
+            (Tipo::Lista(t1), Tipo::Lista(t2)) => {
+                if **t1 == Tipo::Vacio || **t2 == Tipo::Vacio {
+                    true
+                } else {
+                    t1.puede_asignarse_a(t2)
+                }
+            },
+            _ => false,
+        }
+    }
+    
     /// Convierte un TipoAst a Tipo
     pub fn desde_ast(ast: &TipoAst) -> Self {
         match ast {

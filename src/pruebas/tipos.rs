@@ -3,6 +3,16 @@
 use super::auxiliares::*;
 
 #[test]
+fn prueba_conversion_implicita_numero_a_entero() {
+    let codigo = r#"
+        entero valor_entero = 1234.56
+        número valor_numero = 1234
+    "#;
+    
+    assert!(verificar_ejecucion_exitosa(codigo));
+}
+
+#[test]
 fn prueba_tipos_primitivos() {
     let codigo = r#"
         entero valor_entero = 3

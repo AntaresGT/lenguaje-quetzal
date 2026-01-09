@@ -13,7 +13,7 @@ número dividir(número numerador, número denominador){
 // Tratar la excepción al llamar a la función
 intentar {
     número resultado = dividir(10, 0)
-    consola.mostrar("Resultado: " + resultado)
+    consola.mostrar("Resultado: " + resultado.texto())
 } capturar (excepcion e){
     // Obtenemos el mensaje de la excepción y lo imprimimos en la consola
     consola.mostrar(e.mensaje)

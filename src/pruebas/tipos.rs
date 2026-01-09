@@ -21,7 +21,7 @@ fn prueba_tipos_primitivos() {
 #[test]
 fn prueba_listas_no_tipadas() {
     let codigo = r#"
-        lista valor_lista = [1, 2, "Texto", verdadero]
+        lista valor_lista = [1, 2, "Texto", verdadero, [1, 2, 3]]
     "#;
     
     assert!(verificar_ejecucion_exitosa(codigo));

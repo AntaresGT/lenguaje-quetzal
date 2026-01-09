@@ -40,7 +40,13 @@ impl Tipo {
             (Tipo::Numero, Tipo::Numero) => true,
             (Tipo::Texto, Tipo::Texto) => true,
             (Tipo::Logico, Tipo::Logico) => true,
-            (Tipo::Lista(t1), Tipo::Lista(t2)) => t1.es_compatible_con(t2),
+            (Tipo::Lista(t1), Tipo::Lista(t2)) => {
+                if **t1 == Tipo::Vacio || **t2 == Tipo::Vacio {
+                    true
+                } else {
+                    t1.es_compatible_con(t2)
+                }
+            },
             (Tipo::Json, Tipo::Json) => true,
             (Tipo::Objeto(n1), Tipo::Objeto(n2)) => n1 == n2,
             // Conversiones implícitas

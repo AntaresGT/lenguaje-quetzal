@@ -8,6 +8,14 @@ pub struct Entorno {
     objetos: HashMap<String, DefObjeto>,
     pub funciones: HashMap<String, DefFuncion>,
     pub padre: Option<Box<Entorno>>,
+    exportados: HashMap<String, ExportedItem>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ExportedItem {
+    Variable(Valor),
+    Funcion(DefFuncion),
+    Objeto(DefObjeto),
 }
 
 impl Entorno {
@@ -17,6 +25,7 @@ impl Entorno {
             objetos: HashMap::new(),
             funciones: HashMap::new(),
             padre: None,
+            exportados: HashMap::new(),
         }
     }
 
@@ -26,6 +35,7 @@ impl Entorno {
             objetos: HashMap::new(),
             funciones: HashMap::new(),
             padre: Some(Box::new(padre)),
+            exportados: HashMap::new(),
         }
     }
 
@@ -57,5 +67,47 @@ impl Entorno {
         self.funciones.get(nombre).or_else(|| {
             self.padre.as_ref().and_then(|p| p.obtener_funcion(nombre))
         })
+    }
+
+    pub fn exportar(&mut self, nombre: &str) -> Result<(), String> {
+        if let Some(valor) = self.variables.get(nombre) {
+            self.exportados.insert(nombre.to_string(), ExportedItem::Variable(valor.clone()));
+            Ok(())
+        } else if let Some(funcion) = self.funciones.get(nombre) {
+            self.exportados.insert(nombre.to_string(), ExportedItem::Funcion(funcion.clone()));
+            Ok(())
+        } else if let Some(objeto) = self.objetos.get(nombre) {
+            self.exportados.insert(nombre.to_string(), ExportedItem::Objeto(objeto.clone()));
+            Ok(())
+        } else {
+            Err(format!("'{}' no está definido y no puede ser exportado", nombre))
+        }
+    }
+
+    pub fn obtener_exportado(&self, nombre: &str) -> Option<&ExportedItem> {
+        self.exportados.get(nombre)
+    }
+
+    pub fn obtener_todos_exportados(&self) -> &HashMap<String, ExportedItem> {
+        &self.exportados
+    }
+
+    pub fn importar_desde(&mut self, nombre: &str, alias: &str, item: &ExportedItem) {
+        let nombre_final = if alias.is_empty() { nombre } else { alias };
+        match item {
+            ExportedItem::Variable(valor) => {
+                self.variables.insert(nombre_final.to_string(), valor.clone());
+            }
+            ExportedItem::Funcion(func) => {
+                let mut func_alias = func.clone();
+                func_alias.nombre = nombre_final.to_string();
+                self.funciones.insert(nombre_final.to_string(), func_alias);
+            }
+            ExportedItem::Objeto(obj) => {
+                let mut obj_alias = obj.clone();
+                obj_alias.nombre = nombre_final.to_string();
+                self.objetos.insert(nombre_final.to_string(), obj_alias);
+            }
+        }
     }
 }

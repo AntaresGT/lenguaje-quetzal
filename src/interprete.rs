@@ -2,6 +2,8 @@ use crate::entorno::Entorno;
 use crate::valores::{Valor, DefFuncion};
 use crate::objetos::{DefObjeto, TipoMetodo};
 use crate::consola;
+use std::fs;
+use std::path::PathBuf;
 
 pub fn interpretar(contenido: &str) -> Result<(), String> {
     let limpio = contenido.trim_start_matches('\u{feff}');
@@ -86,6 +88,16 @@ fn procesar_lineas(lineas: &[String], entorno: &mut Entorno, inicio: usize) -> R
             let (objeto, fin) = procesar_objeto(lineas, indice - 1)?;
             entorno.definir_objeto(objeto);
             indice = fin + 1;
+            continue;
+        }
+
+        if linea.starts_with("importar") {
+            procesar_importacion(linea, entorno, inicio + indice - 1)?;
+            continue;
+        }
+
+        if linea.starts_with("exportar") {
+            procesar_exportacion(linea, entorno, inicio + indice - 1)?;
             continue;
         }
 
@@ -2063,4 +2075,134 @@ fn procesar_llamada_funcion_sin_asignacion(linea: &str, entorno: &mut Entorno) -
     
     Err("Función no reconocida".to_string())
 }
+
+// Procesar declaración de importación
+// Sintaxis: importar nombre [como alias] desde archivo
+// Sintaxis: importar nombre1, nombre2 [como alias2] desde archivo
+fn procesar_importacion(linea: &str, entorno: &mut Entorno, linea_num: usize) -> Result<(), String> {
+    let linea_limpia = linea.trim();
+    
+    // Verificar que contiene "desde"
+    if !linea_limpia.contains(" desde ") {
+        return Err(formatear_error(linea_num, "Sintaxis de importación inválida. Use: importar nombre [como alias] desde archivo"));
+    }
+
+    // Dividir por "desde" para obtener los elementos y el archivo
+    let partes: Vec<&str> = linea_limpia.splitn(2, " desde ").collect();
+    if partes.len() != 2 {
+        return Err(formatear_error(linea_num, "Sintaxis de importación inválida"));
+    }
+
+    let parte_elementos = partes[0].trim().strip_prefix("importar").unwrap_or("").trim();
+    let archivo = partes[1].trim();
+
+    if archivo.is_empty() {
+        return Err(formatear_error(linea_num, "Nombre de archivo vacío en importación"));
+    }
+
+    // Cargar el módulo
+    let modulo_entorno = cargar_modulo(archivo)?;
+
+    // Parsear elementos a importar (puede ser una lista separada por comas)
+    let elementos: Vec<&str> = parte_elementos.split(',').map(|s| s.trim()).collect();
+    
+    for elemento in elementos {
+        if elemento.is_empty() {
+            continue;
+        }
+
+        // Verificar si tiene alias (palabra "como")
+        let (nombre_original, alias) = if elemento.contains(" como ") {
+            let partes_elem: Vec<&str> = elemento.splitn(2, " como ").collect();
+            if partes_elem.len() != 2 {
+                return Err(formatear_error(linea_num, &format!("Sintaxis de alias inválida en '{}'", elemento)));
+            }
+            let nombre = partes_elem[0].trim();
+            let alias = partes_elem[1].trim();
+            
+            // Validar que el alias no es una palabra reservada
+            if es_palabra_reservada(alias) {
+                return Err(formatear_error(linea_num, &format!("'{}' es una palabra reservada y no puede usarse como alias", alias)));
+            }
+            
+            (nombre, alias)
+        } else {
+            (elemento, "")
+        };
+
+        // Verificar que el elemento esté exportado en el módulo
+        if let Some(item_exportado) = modulo_entorno.obtener_exportado(nombre_original) {
+            entorno.importar_desde(nombre_original, alias, item_exportado);
+        } else {
+            return Err(formatear_error(linea_num, &format!("'{}' no está exportado en el módulo '{}'", nombre_original, archivo)));
+        }
+    }
+
+    Ok(())
+}
+
+// Procesar declaración de exportación
+// Sintaxis: exportar nombre
+// Sintaxis: exportar nombre1, nombre2, nombre3
+fn procesar_exportacion(linea: &str, entorno: &mut Entorno, linea_num: usize) -> Result<(), String> {
+    let linea_limpia = linea.trim().strip_prefix("exportar").unwrap_or("").trim();
+    
+    if linea_limpia.is_empty() {
+        return Err(formatear_error(linea_num, "Sintaxis de exportación inválida. Use: exportar nombre"));
+    }
+
+    // Parsear elementos a exportar (puede ser una lista separada por comas)
+    let elementos: Vec<&str> = linea_limpia.split(',').map(|s| s.trim()).collect();
+    
+    for elemento in elementos {
+        if elemento.is_empty() {
+            continue;
+        }
+        
+        entorno.exportar(elemento).map_err(|e| formatear_error(linea_num, &e))?;
+    }
+
+    Ok(())
+}
+
+// Cargar un módulo desde un archivo
+fn cargar_modulo(nombre_archivo: &str) -> Result<Entorno, String> {
+    // Resolver la ruta del archivo
+    let ruta = resolver_ruta_modulo(nombre_archivo)?;
+    
+    // Leer el contenido del archivo
+    let contenido = fs::read_to_string(&ruta)
+        .map_err(|e| format!("No se pudo leer el módulo '{}': {}", nombre_archivo, e))?;
+    
+    // Crear un nuevo entorno para el módulo
+    let mut entorno_modulo = Entorno::nuevo();
+    
+    // Procesar el contenido del módulo
+    let limpio = contenido.trim_start_matches('\u{feff}');
+    let lineas: Vec<String> = limpio.lines().map(|l| l.to_string()).collect();
+    
+    procesar_lineas(&lineas, &mut entorno_modulo, 0)
+        .map_err(|e| format!("Error al cargar módulo '{}': {}", nombre_archivo, e))?;
+    
+    Ok(entorno_modulo)
+}
+
+// Resolver la ruta de un módulo
+fn resolver_ruta_modulo(nombre: &str) -> Result<PathBuf, String> {
+    // Si ya tiene extensión .qz, usar tal cual
+    let ruta = if nombre.ends_with(".qz") {
+        PathBuf::from(nombre)
+    } else {
+        // Si no, agregar .qz
+        PathBuf::from(format!("{}.qz", nombre))
+    };
+    
+    // Verificar si el archivo existe
+    if ruta.exists() {
+        Ok(ruta)
+    } else {
+        Err(format!("No se encontró el módulo '{}'", nombre))
+    }
+}
+
 

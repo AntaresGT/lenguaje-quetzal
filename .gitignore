@@ -27,3 +27,7 @@ target/
 
 /pruebas
 /contextos
+
+# Test files for import/export functionality
+test_*.qz
+modulo_*.qz

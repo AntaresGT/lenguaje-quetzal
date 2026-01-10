@@ -465,8 +465,41 @@ pub fn evaluar_declaracion(nodo: &NodoAst, entorno: &mut Entorno) -> Resultado<V
                 } else {
                     // Importar elementos específicos
                     for elemento in elementos {
-                        if let Some(valor) = entorno_modulo.obtener_variable(elemento) {
-                            entorno.definir_variable(elemento.clone(), valor.clone(), false)
+                        // Buscar el elemento por su nombre original en el módulo
+                        let nombre_en_modulo = &elemento.nombre;
+                        
+                        // Buscar en variables (incluye funciones que se almacenan como Valor::Funcion)
+                        let valor_opt = if let Some(valor_ref) = entorno_modulo.obtener_variable(nombre_en_modulo) {
+                            Some(valor_ref.clone())
+                        } else if let Some(func) = entorno_modulo.obtener_funcion(nombre_en_modulo) {
+                            // Convertir función a Valor si no se encuentra en variables
+                            Some(Valor::Funcion {
+                                nombre: func.nombre.clone(),
+                                parametros: func.parametros.clone(),
+                                parametros_mutables: vec![false; func.parametros.len()],
+                                cuerpo: func.cuerpo.clone(),
+                                asincrono: false,
+                            })
+                        } else if entorno_modulo.obtener_definicion_objeto(nombre_en_modulo).is_some() {
+                            // Convertir definición de objeto a Valor si no se encuentra en variables
+                            // Buscar si hay una instancia del objeto en variables
+                            if let Some(instancia) = entorno_modulo.obtener_variable(nombre_en_modulo) {
+                                Some(instancia.clone())
+                            } else {
+                                // Si no hay instancia, crear el tipo del objeto
+                                Some(Valor::Objeto {
+                                    tipo: format!("tipo:{}", nombre_en_modulo),
+                                    propiedades: std::collections::HashMap::new(),
+                                })
+                            }
+                        } else {
+                            None
+                        };
+                        
+                        if let Some(valor) = valor_opt {
+                            // Usar el alias si existe, o el nombre original si no
+                            let nombre_importacion = elemento.alias.as_ref().unwrap_or(&elemento.nombre);
+                            entorno.definir_variable(nombre_importacion.clone(), valor, false)
                                 .map_err(|e| Error::ejecucion(
                                     CodigoError::VariableRedeclarada,
                                     e,
@@ -477,7 +510,7 @@ pub fn evaluar_declaracion(nodo: &NodoAst, entorno: &mut Entorno) -> Resultado<V
                         } else {
                             return Err(Error::modulo(
                                 CodigoError::ElementoImportadoNoEncontrado,
-                                format!("'{}' no está exportado en el módulo '{}'", elemento, ruta),
+                                format!("'{}' no está exportado en el módulo '{}'", nombre_en_modulo, ruta),
                                 Some(ruta.to_string()),
                             ));
                         }

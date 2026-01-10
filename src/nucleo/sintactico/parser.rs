@@ -43,6 +43,9 @@ impl Parser {
             
             if self.es_importacion() {
                 declaraciones.push(self.parsear_importacion()?);
+            } else if self.es_exportar() {
+                // Ignorar bloque exportar (el sistema exporta automáticamente todo)
+                self.parsear_exportar()?;
             } else {
                 declaraciones.push(self.parsear_declaracion()?);
             }
@@ -91,6 +94,54 @@ impl Parser {
         matches!(self.token_actual(), Some(t) if matches!(t.token, crate::nucleo::lexico::token::Token::Importar))
     }
     
+    /// Verifica si el siguiente token es exportar
+    fn es_exportar(&self) -> bool {
+        matches!(self.token_actual(), Some(t) if matches!(t.token, crate::nucleo::lexico::token::Token::Exportar))
+    }
+    
+    /// Parsea un bloque exportar (lo ignora porque el sistema exporta automáticamente todo)
+    fn parsear_exportar(&mut self) -> Resultado<()> {
+        // exportar
+        self.avanzar();
+        
+        // {
+        self.expectar_token(crate::nucleo::lexico::token::Token::LlaveIzq)?;
+        self.avanzar();
+        
+        // Saltar todos los elementos hasta encontrar }
+        loop {
+            self.saltar_comentarios_y_espacios();
+            
+            if let Some(t) = self.token_actual() {
+                if matches!(t.token, crate::nucleo::lexico::token::Token::LlaveDer) {
+                    break;
+                }
+                
+                // Avanzar token por token hasta encontrar } o coma
+                if matches!(t.token, crate::nucleo::lexico::token::Token::Coma) {
+                    self.avanzar();
+                    continue;
+                }
+                
+                self.avanzar();
+            } else {
+                return Err(Error::analisis(
+                    CodigoError::SintaxisGeneral,
+                    "se esperaba '}' para cerrar el bloque exportar",
+                    None,
+                    None,
+                    None,
+                ));
+            }
+        }
+        
+        // }
+        self.expectar_token(crate::nucleo::lexico::token::Token::LlaveDer)?;
+        self.avanzar();
+        
+        Ok(())
+    }
+    
     /// Parsea una importación
     fn parsear_importacion(&mut self) -> Resultado<NodoAst> {
         let posicion = self.token_actual().unwrap().posicion;
@@ -105,17 +156,101 @@ impl Parser {
         // elementos
         let mut elementos = Vec::new();
         loop {
+            // Saltar comentarios y espacios antes de cada elemento
+            self.saltar_comentarios_y_espacios();
+            
+            // Verificar si llegamos al cierre de la llave
             if let Some(t) = self.token_actual() {
-                if let crate::nucleo::lexico::token::Token::Identificador(ref nombre) = t.token {
-                    elementos.push(nombre.clone());
+                if matches!(t.token, crate::nucleo::lexico::token::Token::LlaveDer) {
+                    break;
+                }
+            }
+            
+            // Parsear identificador (nombre original)
+            let nombre = if let Some(t) = self.token_actual() {
+                if let crate::nucleo::lexico::token::Token::Identificador(ref nombre_orig) = t.token {
+                    let nombre_orig = nombre_orig.clone();
                     self.avanzar();
+                    nombre_orig
+                } else {
+                    return Err(Error::analisis(
+                        CodigoError::SintaxisGeneral,
+                        "se esperaba un identificador en la lista de importaciones",
+                        None,
+                        Some(t.posicion.linea),
+                        Some(t.posicion.columna),
+                    ));
+                }
+            } else {
+                return Err(Error::analisis(
+                    CodigoError::SintaxisGeneral,
+                    "se esperaba un identificador en la lista de importaciones",
+                    None,
+                    None,
+                    None,
+                ));
+            };
+            
+            // Verificar si hay alias (identificador como alias)
+            self.saltar_comentarios_y_espacios();
+            let alias = if let Some(t) = self.token_actual() {
+                if matches!(t.token, crate::nucleo::lexico::token::Token::Como) {
+                    self.avanzar();
+                    self.saltar_comentarios_y_espacios();
                     
+                    // Parsear el alias (otro identificador)
                     if let Some(t) = self.token_actual() {
-                        if matches!(t.token, crate::nucleo::lexico::token::Token::Coma) {
+                        if let crate::nucleo::lexico::token::Token::Identificador(ref nombre_alias) = t.token {
+                            let alias = nombre_alias.clone();
                             self.avanzar();
-                            continue;
+                            Some(alias)
+                        } else {
+                            return Err(Error::analisis(
+                                CodigoError::SintaxisGeneral,
+                                "se esperaba un identificador después de 'como'",
+                                None,
+                                Some(t.posicion.linea),
+                                Some(t.posicion.columna),
+                            ));
                         }
+                    } else {
+                        return Err(Error::analisis(
+                            CodigoError::SintaxisGeneral,
+                            "se esperaba un identificador después de 'como'",
+                            None,
+                            None,
+                            None,
+                        ));
                     }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            
+            // Agregar elemento a la lista
+            elementos.push(crate::nucleo::sintactico::ast::ElementoImportacion {
+                nombre,
+                alias,
+            });
+            
+            // Verificar si hay más elementos (coma)
+            self.saltar_comentarios_y_espacios();
+            if let Some(t) = self.token_actual() {
+                if matches!(t.token, crate::nucleo::lexico::token::Token::Coma) {
+                    self.avanzar();
+                    continue;
+                } else if matches!(t.token, crate::nucleo::lexico::token::Token::LlaveDer) {
+                    break;
+                } else {
+                    return Err(Error::analisis(
+                        CodigoError::SintaxisGeneral,
+                        format!("se esperaba ',' o '}}' después del elemento de importación (token: {:?})", t.token),
+                        None,
+                        Some(t.posicion.linea),
+                        Some(t.posicion.columna),
+                    ));
                 }
             }
             break;

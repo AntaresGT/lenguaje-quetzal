@@ -3,6 +3,7 @@ use crate::interprete::entorno::Entorno;
 use crate::nativos::consola::Consola;
 use crate::nativos::matematica::Matematica;
 use crate::nativos::interfaz::ModuloNativo;
+use crate::nucleo::sintactico::ast::ElementoImportacion;
 use std::sync::Arc;
 use std::collections::HashMap;
 
@@ -52,7 +53,7 @@ pub fn es_modulo_nativo(ruta: &str) -> bool {
 
 /// Procesa una importación y registra los elementos en el entorno
 pub fn procesar_importacion(
-    elementos: &[String],
+    elementos: &[ElementoImportacion],
     ruta: &str,
     entorno: &mut Entorno,
 ) -> Resultado<()> {
@@ -70,8 +71,10 @@ pub fn procesar_importacion(
         
         // Registrar cada elemento importado
         for elemento in elementos {
-            // Registrar el módulo con el nombre importado
-            entorno.registrar_objeto_nativo(elemento.clone(), modulo.clone());
+            // Usar el alias si existe, o el nombre original si no
+            let nombre_importacion = elemento.alias.as_ref().unwrap_or(&elemento.nombre);
+            // Registrar el módulo con el nombre importado (alias o nombre original)
+            entorno.registrar_objeto_nativo(nombre_importacion.clone(), modulo.clone());
         }
     }
     

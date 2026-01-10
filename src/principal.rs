@@ -173,10 +173,16 @@ fn ejecutar_archivo_interno(ruta: &str, contenido: &str) -> crate::errores::Resu
     
     // Verificación semántica
     let mut verificador = nucleo::semantico::Verificador::nuevo();
+    // Establecer archivo actual para resolver rutas relativas de módulos
+    let ruta_path = Path::new(ruta);
+    if let Ok(archivo_abs) = ruta_path.canonicalize() {
+        verificador.establecer_archivo_actual(archivo_abs.to_string_lossy().to_string());
+    } else {
+        verificador.establecer_archivo_actual(ruta.to_string());
+    }
     verificador.verificar_programa(&ast)?;
     
     // Ejecución
-    let ruta_path = Path::new(ruta);
     let mut entorno = if let Some(archivo_abs) = ruta_path.canonicalize().ok() {
         interprete::entorno::Entorno::con_archivo(archivo_abs.to_string_lossy().to_string())
     } else {

@@ -173,7 +173,7 @@ pub enum NodoAst {
     
     // Importaciones
     Importacion {
-        elementos: Vec<String>,
+        elementos: Vec<ElementoImportacion>,
         ruta: String,
         posicion: Posicion,
     },
@@ -284,6 +284,13 @@ pub struct CapturarAst {
     pub variable: String,
     pub bloque: Box<NodoAst>,
     pub posicion: Posicion,
+}
+
+/// Elemento importado de un módulo
+#[derive(Debug, Clone)]
+pub struct ElementoImportacion {
+    pub nombre: String,      // Nombre original en el módulo
+    pub alias: Option<String>, // Nombre alternativo (alias), si existe
 }
 
 impl NodoAst {

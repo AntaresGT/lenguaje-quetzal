@@ -4,7 +4,6 @@ use crate::objetos::{DefObjeto, TipoMetodo};
 use crate::consola;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::collections::HashMap;
 use std::cell::RefCell;
 
 thread_local! {

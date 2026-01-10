@@ -2197,7 +2197,13 @@ fn cargar_modulo(nombre_archivo: &str) -> Result<Entorno, String> {
     
     // Leer el contenido del archivo
     let contenido = fs::read_to_string(&ruta)
-        .map_err(|e| format!("No se pudo leer el módulo '{}': {}", nombre_archivo, e))?;
+        .map_err(|e| {
+            // Limpiar el stack en caso de error
+            MODULOS_CARGANDO.with(|modulos| {
+                modulos.borrow_mut().retain(|m| m != &ruta_str);
+            });
+            format!("No se pudo leer el módulo '{}': {}", nombre_archivo, e)
+        })?;
     
     // Crear un nuevo entorno para el módulo
     let mut entorno_modulo = Entorno::nuevo();
@@ -2209,9 +2215,9 @@ fn cargar_modulo(nombre_archivo: &str) -> Result<Entorno, String> {
     let resultado = procesar_lineas(&lineas, &mut entorno_modulo, 0)
         .map_err(|e| format!("Error al cargar módulo '{}': {}", nombre_archivo, e));
     
-    // Remover de la lista de módulos siendo cargados
+    // Remover de la lista de módulos siendo cargados (usar retain para mayor seguridad)
     MODULOS_CARGANDO.with(|modulos| {
-        modulos.borrow_mut().pop();
+        modulos.borrow_mut().retain(|m| m != &ruta_str);
     });
     
     resultado?;

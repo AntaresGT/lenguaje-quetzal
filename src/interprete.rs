@@ -3,7 +3,13 @@ use crate::valores::{Valor, DefFuncion};
 use crate::objetos::{DefObjeto, TipoMetodo};
 use crate::consola;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::collections::HashMap;
+use std::cell::RefCell;
+
+thread_local! {
+    static MODULOS_CARGANDO: RefCell<Vec<String>> = RefCell::new(Vec::new());
+}
 
 pub fn interpretar(contenido: &str) -> Result<(), String> {
     let limpio = contenido.trim_start_matches('\u{feff}');
@@ -2170,6 +2176,25 @@ fn cargar_modulo(nombre_archivo: &str) -> Result<Entorno, String> {
     // Resolver la ruta del archivo
     let ruta = resolver_ruta_modulo(nombre_archivo)?;
     
+    // Obtener la ruta canónica para detectar importaciones circulares
+    let ruta_canonicalizada = ruta.canonicalize()
+        .map_err(|e| format!("No se pudo resolver la ruta del módulo '{}': {}", nombre_archivo, e))?;
+    let ruta_str = ruta_canonicalizada.to_string_lossy().to_string();
+    
+    // Verificar importación circular usando thread-local
+    let es_circular = MODULOS_CARGANDO.with(|modulos| {
+        modulos.borrow().contains(&ruta_str)
+    });
+    
+    if es_circular {
+        return Err(format!("Importación circular detectada: módulo '{}' ya está siendo cargado", nombre_archivo));
+    }
+    
+    // Agregar a la lista de módulos siendo cargados
+    MODULOS_CARGANDO.with(|modulos| {
+        modulos.borrow_mut().push(ruta_str.clone());
+    });
+    
     // Leer el contenido del archivo
     let contenido = fs::read_to_string(&ruta)
         .map_err(|e| format!("No se pudo leer el módulo '{}': {}", nombre_archivo, e))?;
@@ -2181,14 +2206,30 @@ fn cargar_modulo(nombre_archivo: &str) -> Result<Entorno, String> {
     let limpio = contenido.trim_start_matches('\u{feff}');
     let lineas: Vec<String> = limpio.lines().map(|l| l.to_string()).collect();
     
-    procesar_lineas(&lineas, &mut entorno_modulo, 0)
-        .map_err(|e| format!("Error al cargar módulo '{}': {}", nombre_archivo, e))?;
+    let resultado = procesar_lineas(&lineas, &mut entorno_modulo, 0)
+        .map_err(|e| format!("Error al cargar módulo '{}': {}", nombre_archivo, e));
     
+    // Remover de la lista de módulos siendo cargados
+    MODULOS_CARGANDO.with(|modulos| {
+        modulos.borrow_mut().pop();
+    });
+    
+    resultado?;
     Ok(entorno_modulo)
 }
 
 // Resolver la ruta de un módulo
 fn resolver_ruta_modulo(nombre: &str) -> Result<PathBuf, String> {
+    // Validación de seguridad: rechazar rutas con componentes sospechosos
+    if nombre.contains("..") {
+        return Err(format!("Ruta de módulo inválida: '{}' contiene '..' (no se permite navegación hacia directorios superiores)", nombre));
+    }
+    
+    // Rechazar rutas absolutas para mayor seguridad
+    if Path::new(nombre).is_absolute() {
+        return Err(format!("Ruta de módulo inválida: '{}' es una ruta absoluta (solo se permiten rutas relativas)", nombre));
+    }
+    
     // Si ya tiene extensión .qz, usar tal cual
     let ruta = if nombre.ends_with(".qz") {
         PathBuf::from(nombre)

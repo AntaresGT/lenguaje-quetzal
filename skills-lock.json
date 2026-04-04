@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "ccc": {
+      "source": "cocoindex-io/cocoindex-code",
+      "sourceType": "github",
+      "computedHash": "6d384de1a4b3b90f2ab3115849a269aeea6641486257f9ad72afacbdcb1cbde2"
+    }
+  }
+}

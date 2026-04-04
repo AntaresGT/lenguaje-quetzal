@@ -38,6 +38,10 @@ pub enum CodigoError {
     DeclaracionIncompleta,
     ObjetoRedeclarado,
     AsignacionAInmutable,
+    PrototipoRedeclarado,
+    PrototipoNoEncontrado,
+    ImplementacionPrototipoIncompleta,
+    FirmaPrototipoIncompatible,
     
     // E0200-E0299: Errores de Tipos de Datos
     TiposIncompatibles,
@@ -147,6 +151,10 @@ impl CodigoError {
             CodigoError::DeclaracionIncompleta => "E0108",
             CodigoError::ObjetoRedeclarado => "E0109",
             CodigoError::AsignacionAInmutable => "E0110",
+            CodigoError::PrototipoRedeclarado => "E0111",
+            CodigoError::PrototipoNoEncontrado => "E0112",
+            CodigoError::ImplementacionPrototipoIncompleta => "E0113",
+            CodigoError::FirmaPrototipoIncompatible => "E0114",
             
             // E0200-E0299
             CodigoError::TiposIncompatibles => "E0200",
@@ -256,6 +264,10 @@ impl CodigoError {
             CodigoError::DeclaracionIncompleta => "declaración incompleta o malformada",
             CodigoError::ObjetoRedeclarado => "redeclaración de objeto",
             CodigoError::AsignacionAInmutable => "asignación a variable inmutable",
+            CodigoError::PrototipoRedeclarado => "redeclaración de prototipo",
+            CodigoError::PrototipoNoEncontrado => "prototipo no declarado o no encontrado",
+            CodigoError::ImplementacionPrototipoIncompleta => "implementación incompleta de prototipo",
+            CodigoError::FirmaPrototipoIncompatible => "firma incompatible con el prototipo",
             
             // E0200-E0299
             CodigoError::TiposIncompatibles => "tipos incompatibles en operación",

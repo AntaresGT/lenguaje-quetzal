@@ -119,6 +119,24 @@ fn prueba_obtener_exportaciones() {
 }
 
 #[test]
+fn prueba_exportaciones_incluyen_prototipos() {
+    let mut cargador = CargadorModulos::nuevo();
+
+    let contenido = r#"
+prototipo Contrato {
+    entero id
+}
+"#;
+    let ruta = crear_modulo_temporal("modulo_proto_exports", contenido);
+
+    let resultado = cargador.obtener_exportaciones(ruta.to_str().unwrap());
+    assert!(resultado.is_ok(), "Deberia obtener exportaciones del modulo con prototipo");
+
+    let exports = resultado.unwrap();
+    assert!(exports.contains_key("Contrato"), "Deberia exportar el prototipo 'Contrato'");
+}
+
+#[test]
 fn prueba_obtener_elementos_especificos() {
     let mut cargador = CargadorModulos::nuevo();
     

@@ -1,6 +1,6 @@
 use crate::errores::{Error, CodigoError, Resultado};
 use crate::nucleo::sintactico::ast::*;
-use crate::nucleo::semantico::tabla_simbolos::{TablaSimbolos, ParametroFuncion, MiembroObjeto};
+use crate::nucleo::semantico::tabla_simbolos::{TablaSimbolos, ParametroFuncion, MiembroObjeto, MiembroPrototipo};
 use crate::nucleo::semantico::tipos::Tipo;
 use std::collections::HashMap;
 use crate::nativos::interfaz::ModuloNativo;
@@ -53,6 +53,305 @@ impl Verificador {
         
         Ok(())
     }
+
+    fn construir_miembros_objeto(&self, miembros: &[MiembroObjetoAst]) -> HashMap<String, MiembroObjeto> {
+        let mut miembros_mapa: HashMap<String, MiembroObjeto> = HashMap::new();
+
+        for miembro in miembros {
+            let es_publico = miembro.modificador_acceso == ModificadorAcceso::Publico;
+            let es_libre = miembro.libre;
+
+            match miembro.declaracion.as_ref() {
+                NodoAst::DeclaracionVariable { tipo, mutable, nombre: nombre_var, .. } => {
+                    miembros_mapa.insert(nombre_var.clone(), MiembroObjeto::Variable {
+                        tipo: Tipo::desde_ast(tipo),
+                        mutable: *mutable,
+                        publico: es_publico,
+                        libre: es_libre,
+                    });
+                }
+                NodoAst::DeclaracionFuncion { nombre: nombre_fun, tipo_retorno, parametros, .. } => {
+                    let params: Vec<ParametroFuncion> = parametros.iter().map(|p| {
+                        ParametroFuncion {
+                            nombre: p.nombre.clone(),
+                            tipo: Tipo::desde_ast(&p.tipo),
+                            mutable: p.mutable,
+                        }
+                    }).collect();
+
+                    miembros_mapa.insert(nombre_fun.clone(), MiembroObjeto::Funcion {
+                        tipo_retorno: Tipo::desde_ast(tipo_retorno),
+                        parametros: params,
+                        publico: es_publico,
+                        libre: es_libre,
+                    });
+                }
+                _ => {}
+            }
+        }
+
+        miembros_mapa
+    }
+
+    fn construir_miembros_prototipo(&self, miembros: &[MiembroPrototipoAst]) -> HashMap<String, MiembroPrototipo> {
+        let mut miembros_mapa: HashMap<String, MiembroPrototipo> = HashMap::new();
+
+        for miembro in miembros {
+            let es_publico = miembro.modificador_acceso == ModificadorAcceso::Publico;
+            let es_opcional = miembro.opcional;
+
+            match &miembro.declaracion {
+                DeclaracionMiembroPrototipoAst::Variable { tipo, mutable, nombre } => {
+                    miembros_mapa.insert(nombre.clone(), MiembroPrototipo::Variable {
+                        tipo: Tipo::desde_ast(tipo),
+                        mutable: *mutable,
+                        publico: es_publico,
+                        opcional: es_opcional,
+                    });
+                }
+                DeclaracionMiembroPrototipoAst::Funcion { tipo_retorno, nombre, parametros } => {
+                    let params: Vec<ParametroFuncion> = parametros.iter().map(|p| {
+                        ParametroFuncion {
+                            nombre: p.nombre.clone(),
+                            tipo: Tipo::desde_ast(&p.tipo),
+                            mutable: p.mutable,
+                        }
+                    }).collect();
+
+                    miembros_mapa.insert(nombre.clone(), MiembroPrototipo::Funcion {
+                        tipo_retorno: Tipo::desde_ast(tipo_retorno),
+                        parametros: params,
+                        publico: es_publico,
+                        opcional: es_opcional,
+                    });
+                }
+            }
+        }
+
+        miembros_mapa
+    }
+
+    fn validar_implementaciones_prototipo(
+        &self,
+        nombre_objeto: &str,
+        prototipos: &[String],
+        miembros_objeto: &HashMap<String, MiembroObjeto>,
+        nodo: &NodoAst,
+    ) -> Resultado<()> {
+        for nombre_prototipo in prototipos {
+            let prototipo = self.tabla_simbolos.buscar_prototipo(nombre_prototipo).ok_or_else(|| {
+                Error::semantico(
+                    CodigoError::PrototipoNoEncontrado,
+                    format!(
+                        "el objeto '{}' implementa '{}', pero ese prototipo no está declarado",
+                        nombre_objeto, nombre_prototipo
+                    ),
+                    None,
+                    Some(nodo.posicion().linea),
+                    Some(nodo.posicion().columna),
+                )
+            })?;
+
+            for (nombre_miembro, miembro_prototipo) in &prototipo.miembros {
+                let miembro_objeto = miembros_objeto.get(nombre_miembro).and_then(|miembro| match miembro {
+                    MiembroObjeto::Variable { libre, .. } if !*libre => Some(miembro),
+                    MiembroObjeto::Funcion { libre, .. } if !*libre => Some(miembro),
+                    _ => None,
+                });
+
+                match miembro_prototipo {
+                    MiembroPrototipo::Variable { tipo, mutable, publico, opcional } => {
+                        if let Some(miembro_objeto) = miembro_objeto {
+                            match miembro_objeto {
+                                MiembroObjeto::Variable { tipo: tipo_obj, mutable: mutable_obj, publico: publico_obj, .. } => {
+                                    if tipo_obj != tipo {
+                                        return Err(Error::semantico(
+                                            CodigoError::FirmaPrototipoIncompatible,
+                                            format!(
+                                                "miembro '{}.{}' tiene tipo '{}', pero '{}' exige '{}'",
+                                                nombre_objeto,
+                                                nombre_miembro,
+                                                tipo_obj.nombre(),
+                                                nombre_prototipo,
+                                                tipo.nombre()
+                                            ),
+                                            None,
+                                            Some(nodo.posicion().linea),
+                                            Some(nodo.posicion().columna),
+                                        ));
+                                    }
+
+                                    if mutable_obj != mutable {
+                                        return Err(Error::semantico(
+                                            CodigoError::FirmaPrototipoIncompatible,
+                                            format!(
+                                                "miembro '{}.{}' tiene mutabilidad incompatible con el prototipo '{}'",
+                                                nombre_objeto, nombre_miembro, nombre_prototipo
+                                            ),
+                                            None,
+                                            Some(nodo.posicion().linea),
+                                            Some(nodo.posicion().columna),
+                                        ));
+                                    }
+
+                                    if publico_obj != publico {
+                                        return Err(Error::semantico(
+                                            CodigoError::FirmaPrototipoIncompatible,
+                                            format!(
+                                                "miembro '{}.{}' tiene modificador de acceso incompatible con el prototipo '{}'",
+                                                nombre_objeto, nombre_miembro, nombre_prototipo
+                                            ),
+                                            None,
+                                            Some(nodo.posicion().linea),
+                                            Some(nodo.posicion().columna),
+                                        ));
+                                    }
+                                }
+                                MiembroObjeto::Funcion { .. } => {
+                                    return Err(Error::semantico(
+                                        CodigoError::FirmaPrototipoIncompatible,
+                                        format!(
+                                            "miembro '{}.{}' debe ser atributo según el prototipo '{}'",
+                                            nombre_objeto, nombre_miembro, nombre_prototipo
+                                        ),
+                                        None,
+                                        Some(nodo.posicion().linea),
+                                        Some(nodo.posicion().columna),
+                                    ));
+                                }
+                            }
+                        } else if !opcional {
+                            return Err(Error::semantico(
+                                CodigoError::ImplementacionPrototipoIncompleta,
+                                format!(
+                                    "el objeto '{}' no implementa el atributo requerido '{}' del prototipo '{}'",
+                                    nombre_objeto, nombre_miembro, nombre_prototipo
+                                ),
+                                None,
+                                Some(nodo.posicion().linea),
+                                Some(nodo.posicion().columna),
+                            ));
+                        }
+                    }
+                    MiembroPrototipo::Funcion { tipo_retorno, parametros, publico, opcional } => {
+                        if let Some(miembro_objeto) = miembro_objeto {
+                            match miembro_objeto {
+                                MiembroObjeto::Funcion { tipo_retorno: tipo_obj, parametros: params_obj, publico: publico_obj, .. } => {
+                                    if tipo_obj != tipo_retorno {
+                                        return Err(Error::semantico(
+                                            CodigoError::FirmaPrototipoIncompatible,
+                                            format!(
+                                                "función '{}.{}' retorna '{}', pero '{}' exige '{}'",
+                                                nombre_objeto,
+                                                nombre_miembro,
+                                                tipo_obj.nombre(),
+                                                nombre_prototipo,
+                                                tipo_retorno.nombre()
+                                            ),
+                                            None,
+                                            Some(nodo.posicion().linea),
+                                            Some(nodo.posicion().columna),
+                                        ));
+                                    }
+
+                                    if publico_obj != publico {
+                                        return Err(Error::semantico(
+                                            CodigoError::FirmaPrototipoIncompatible,
+                                            format!(
+                                                "función '{}.{}' tiene modificador de acceso incompatible con el prototipo '{}'",
+                                                nombre_objeto, nombre_miembro, nombre_prototipo
+                                            ),
+                                            None,
+                                            Some(nodo.posicion().linea),
+                                            Some(nodo.posicion().columna),
+                                        ));
+                                    }
+
+                                    if params_obj.len() != parametros.len() {
+                                        return Err(Error::semantico(
+                                            CodigoError::FirmaPrototipoIncompatible,
+                                            format!(
+                                                "función '{}.{}' tiene {} parámetros, pero '{}' exige {}",
+                                                nombre_objeto,
+                                                nombre_miembro,
+                                                params_obj.len(),
+                                                nombre_prototipo,
+                                                parametros.len()
+                                            ),
+                                            None,
+                                            Some(nodo.posicion().linea),
+                                            Some(nodo.posicion().columna),
+                                        ));
+                                    }
+
+                                    for (idx, (param_obj, param_proto)) in params_obj.iter().zip(parametros.iter()).enumerate() {
+                                        if param_obj.tipo != param_proto.tipo {
+                                            return Err(Error::semantico(
+                                                CodigoError::FirmaPrototipoIncompatible,
+                                                format!(
+                                                    "parámetro {} de '{}.{}' tiene tipo '{}', pero '{}' exige '{}'",
+                                                    idx + 1,
+                                                    nombre_objeto,
+                                                    nombre_miembro,
+                                                    param_obj.tipo.nombre(),
+                                                    nombre_prototipo,
+                                                    param_proto.tipo.nombre()
+                                                ),
+                                                None,
+                                                Some(nodo.posicion().linea),
+                                                Some(nodo.posicion().columna),
+                                            ));
+                                        }
+
+                                        if param_obj.mutable != param_proto.mutable {
+                                            return Err(Error::semantico(
+                                                CodigoError::FirmaPrototipoIncompatible,
+                                                format!(
+                                                    "parámetro {} de '{}.{}' tiene mutabilidad incompatible con el prototipo '{}'",
+                                                    idx + 1,
+                                                    nombre_objeto,
+                                                    nombre_miembro,
+                                                    nombre_prototipo
+                                                ),
+                                                None,
+                                                Some(nodo.posicion().linea),
+                                                Some(nodo.posicion().columna),
+                                            ));
+                                        }
+                                    }
+                                }
+                                MiembroObjeto::Variable { .. } => {
+                                    return Err(Error::semantico(
+                                        CodigoError::FirmaPrototipoIncompatible,
+                                        format!(
+                                            "miembro '{}.{}' debe ser función según el prototipo '{}'",
+                                            nombre_objeto, nombre_miembro, nombre_prototipo
+                                        ),
+                                        None,
+                                        Some(nodo.posicion().linea),
+                                        Some(nodo.posicion().columna),
+                                    ));
+                                }
+                            }
+                        } else if !opcional {
+                            return Err(Error::semantico(
+                                CodigoError::ImplementacionPrototipoIncompleta,
+                                format!(
+                                    "el objeto '{}' no implementa la función requerida '{}' del prototipo '{}'",
+                                    nombre_objeto, nombre_miembro, nombre_prototipo
+                                ),
+                                None,
+                                Some(nodo.posicion().linea),
+                                Some(nodo.posicion().columna),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
     
     /// Registra declaraciones de funciones y objetos (primera pasada)
     fn registrar_declaraciones(&mut self, nodo: &NodoAst) -> Resultado<()> {
@@ -78,44 +377,24 @@ impl Verificador {
             }
             
             NodoAst::DeclaracionObjeto { nombre, miembros, .. } => {
-                let mut miembros_mapa: HashMap<String, MiembroObjeto> = HashMap::new();
-                
-                for miembro in miembros {
-                    let es_publico = miembro.modificador_acceso == ModificadorAcceso::Publico;
-                    let es_libre = miembro.libre;
-                    
-                    match miembro.declaracion.as_ref() {
-                        NodoAst::DeclaracionVariable { tipo, mutable, nombre: nombre_var, .. } => {
-                            miembros_mapa.insert(nombre_var.clone(), MiembroObjeto::Variable {
-                                tipo: Tipo::desde_ast(tipo),
-                                mutable: *mutable,
-                                publico: es_publico,
-                                libre: es_libre,
-                            });
-                        }
-                        NodoAst::DeclaracionFuncion { nombre: nombre_fun, tipo_retorno, parametros, .. } => {
-                            let params: Vec<ParametroFuncion> = parametros.iter().map(|p| {
-                                ParametroFuncion {
-                                    nombre: p.nombre.clone(),
-                                    tipo: Tipo::desde_ast(&p.tipo),
-                                    mutable: p.mutable,
-                                }
-                            }).collect();
-                            
-                            miembros_mapa.insert(nombre_fun.clone(), MiembroObjeto::Funcion {
-                                tipo_retorno: Tipo::desde_ast(tipo_retorno),
-                                parametros: params,
-                                publico: es_publico,
-                                libre: es_libre,
-                            });
-                        }
-                        _ => {}
-                    }
-                }
-                
+                let miembros_mapa = self.construir_miembros_objeto(miembros);
+
                 self.tabla_simbolos.declarar_objeto(nombre.clone(), miembros_mapa)
                     .map_err(|e| Error::semantico(
                         CodigoError::ObjetoRedeclarado,
+                        e,
+                        None,
+                        Some(nodo.posicion().linea),
+                        Some(nodo.posicion().columna),
+                    ))?;
+            }
+
+            NodoAst::DeclaracionPrototipo { nombre, miembros, .. } => {
+                let miembros_mapa = self.construir_miembros_prototipo(miembros);
+
+                self.tabla_simbolos.declarar_prototipo(nombre.clone(), miembros_mapa)
+                    .map_err(|e| Error::semantico(
+                        CodigoError::PrototipoRedeclarado,
                         e,
                         None,
                         Some(nodo.posicion().linea),
@@ -145,7 +424,7 @@ impl Verificador {
                     }
                     
                     if let Ok(ast_modulo) = cargador.cargar_modulo(ruta) {
-                        // Registrar todas las funciones, variables y objetos exportados del módulo
+                        // Registrar todas las funciones, variables, objetos y prototipos exportados del módulo
                         for nodo_modulo in &ast_modulo {
                             if let NodoAst::DeclaracionFuncion { nombre, tipo_retorno, parametros, .. } = nodo_modulo {
                                 // Verificar si esta función está en la lista de elementos importados
@@ -200,41 +479,30 @@ impl Verificador {
                                 if elementos.iter().any(|e| &e.nombre == nombre) {
                                     let elemento_importado = elementos.iter().find(|e| &e.nombre == nombre).unwrap();
                                     let nombre_importacion = elemento_importado.alias.as_ref().unwrap_or(nombre);
-                                    
-                                    let mut miembros_mapa = HashMap::new();
-                                    for miembro_ast in miembros {
-                                        match miembro_ast.declaracion.as_ref() {
-                                            NodoAst::DeclaracionFuncion { nombre: nombre_fn, tipo_retorno, parametros, .. } => {
-                                                let params: Vec<ParametroFuncion> = parametros.iter()
-                                                    .map(|p| ParametroFuncion {
-                                                        nombre: p.nombre.clone(),
-                                                        tipo: Tipo::desde_ast(&p.tipo),
-                                                        mutable: p.mutable,
-                                                    })
-                                                    .collect();
-                                                
-                                                miembros_mapa.insert(nombre_fn.clone(), MiembroObjeto::Funcion {
-                                                    tipo_retorno: Tipo::desde_ast(tipo_retorno),
-                                                    parametros: params,
-                                                    publico: matches!(miembro_ast.modificador_acceso, crate::nucleo::sintactico::ast::ModificadorAcceso::Publico),
-                                                    libre: miembro_ast.libre,
-                                                });
-                                            }
-                                            NodoAst::DeclaracionVariable { nombre: nombre_var, tipo, mutable, .. } => {
-                                                miembros_mapa.insert(nombre_var.clone(), MiembroObjeto::Variable {
-                                                    tipo: Tipo::desde_ast(tipo),
-                                                    mutable: *mutable,
-                                                    publico: matches!(miembro_ast.modificador_acceso, crate::nucleo::sintactico::ast::ModificadorAcceso::Publico),
-                                                    libre: miembro_ast.libre,
-                                                });
-                                            }
-                                            _ => {}
-                                        }
-                                    }
-                                    
+
+                                    let miembros_mapa = self.construir_miembros_objeto(miembros);
+
                                     if let Err(e) = self.tabla_simbolos.declarar_objeto(nombre_importacion.clone(), miembros_mapa) {
                                         return Err(Error::semantico(
                                             CodigoError::ObjetoRedeclarado,
+                                            e,
+                                            None,
+                                            Some(nodo_modulo.posicion().linea),
+                                            Some(nodo_modulo.posicion().columna),
+                                        ));
+                                    }
+                                }
+                            } else if let NodoAst::DeclaracionPrototipo { nombre, miembros, .. } = nodo_modulo {
+                                // Verificar si este prototipo está en la lista de elementos importados
+                                if elementos.iter().any(|e| &e.nombre == nombre) {
+                                    let elemento_importado = elementos.iter().find(|e| &e.nombre == nombre).unwrap();
+                                    let nombre_importacion = elemento_importado.alias.as_ref().unwrap_or(nombre);
+
+                                    let miembros_mapa = self.construir_miembros_prototipo(miembros);
+
+                                    if let Err(e) = self.tabla_simbolos.declarar_prototipo(nombre_importacion.clone(), miembros_mapa) {
+                                        return Err(Error::semantico(
+                                            CodigoError::PrototipoRedeclarado,
                                             e,
                                             None,
                                             Some(nodo_modulo.posicion().linea),
@@ -325,15 +593,22 @@ impl Verificador {
                 Ok(Tipo::Vacio)
             }
             
-            NodoAst::DeclaracionObjeto { miembros, .. } => {
+            NodoAst::DeclaracionObjeto { nombre, prototipos, miembros, .. } => {
                 // Verificar los cuerpos de los métodos
                 for miembro in miembros {
                     if let NodoAst::DeclaracionFuncion { .. } = miembro.declaracion.as_ref() {
                         self.verificar(&miembro.declaracion)?;
                     }
                 }
+
+                // Validar que el objeto cumpla sus prototipos (solo con miembros propios)
+                let miembros_objeto = self.construir_miembros_objeto(miembros);
+                self.validar_implementaciones_prototipo(nombre, prototipos, &miembros_objeto, nodo)?;
+
                 Ok(Tipo::Vacio)
             }
+
+            NodoAst::DeclaracionPrototipo { .. } => Ok(Tipo::Vacio),
             
             NodoAst::ExpresionLiteral { valor, .. } => {
                 Ok(match valor {

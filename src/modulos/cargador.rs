@@ -154,6 +154,10 @@ impl CargadorModulos {
                 // Por defecto, los objetos de nivel superior son exportados
                 exports.insert(nombre.clone(), nodo.clone());
             }
+            NodoAst::DeclaracionPrototipo { nombre, .. } => {
+                // Por defecto, los prototipos de nivel superior son exportados
+                exports.insert(nombre.clone(), nodo.clone());
+            }
             _ => {}
         }
     }

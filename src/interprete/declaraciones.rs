@@ -253,6 +253,9 @@ pub fn evaluar_declaracion(nodo: &NodoAst, entorno: &mut Entorno) -> Resultado<V
             
             Ok(Valor::Vacio)
         }
+
+        // Declaración de prototipo: no-op en runtime (solo se valida en compilación)
+        NodoAst::DeclaracionPrototipo { .. } => Ok(Valor::Vacio),
         
         NodoAst::Intentar { bloque, capturar, finalmente, .. } => {
             // Ejecutar el bloque intentar
@@ -425,6 +428,17 @@ pub fn evaluar_declaracion(nodo: &NodoAst, entorno: &mut Entorno) -> Resultado<V
                         Some(ruta.to_string()),
                     )
                 })?;
+
+                let prototipos_exportados: std::collections::HashSet<String> = ast_modulo
+                    .iter()
+                    .filter_map(|nodo| {
+                        if let NodoAst::DeclaracionPrototipo { nombre, .. } = nodo {
+                            Some(nombre.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 
                 // Crear entorno temporal para ejecutar el módulo
                 let mut entorno_modulo = Entorno::nuevo();
@@ -467,6 +481,11 @@ pub fn evaluar_declaracion(nodo: &NodoAst, entorno: &mut Entorno) -> Resultado<V
                     for elemento in elementos {
                         // Buscar el elemento por su nombre original en el módulo
                         let nombre_en_modulo = &elemento.nombre;
+
+                        // Los prototipos son contratos de compilación y no generan valores de runtime
+                        if prototipos_exportados.contains(nombre_en_modulo) {
+                            continue;
+                        }
                         
                         // Buscar en variables (incluye funciones que se almacenan como Valor::Funcion)
                         let valor_opt = if let Some(valor_ref) = entorno_modulo.obtener_variable(nombre_en_modulo) {

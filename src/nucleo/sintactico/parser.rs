@@ -390,6 +390,9 @@ impl Parser {
                 crate::nucleo::lexico::token::Token::Objeto => {
                     return self.parsear_declaracion_objeto();
                 }
+                crate::nucleo::lexico::token::Token::Prototipo => {
+                    return self.parsear_declaracion_prototipo();
+                }
                 crate::nucleo::lexico::token::Token::Mientras => {
                     return self.parsear_mientras();
                 }
@@ -687,8 +690,355 @@ impl Parser {
             posicion: posicion_inicial,
         })
     }
+
+    /// Parsea una firma de parámetros: (tipo [var] nombre, ...)
+    fn parsear_parametros_firma(&mut self) -> Resultado<Vec<ParametroAst>> {
+        self.expectar_token(crate::nucleo::lexico::token::Token::ParentesisIzq)?;
+        self.avanzar();
+
+        let mut parametros = Vec::new();
+
+        if let Some(t) = self.token_actual() {
+            if !matches!(t.token, crate::nucleo::lexico::token::Token::ParentesisDer) {
+                loop {
+                    let tipo_param = self.parsear_tipo()?;
+
+                    let mutable_param = if let Some(t) = self.token_actual() {
+                        if matches!(t.token, crate::nucleo::lexico::token::Token::Var) {
+                            self.avanzar();
+                            true
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    };
+
+                    let (nombre_param, posicion_param) = if let Some(t) = self.token_actual() {
+                        if let crate::nucleo::lexico::token::Token::Identificador(ref nombre) = t.token {
+                            let nombre = nombre.clone();
+                            let posicion = t.posicion;
+                            self.avanzar();
+                            (nombre, posicion)
+                        } else {
+                            return Err(Error::analisis(
+                                CodigoError::SintaxisGeneral,
+                                "se esperaba un identificador para el parámetro",
+                                None,
+                                Some(t.posicion.linea),
+                                Some(t.posicion.columna),
+                            ));
+                        }
+                    } else {
+                        return Err(Error::analisis(
+                            CodigoError::SintaxisGeneral,
+                            "se esperaba un identificador para el parámetro",
+                            None,
+                            None,
+                            None,
+                        ));
+                    };
+
+                    parametros.push(ParametroAst {
+                        tipo: tipo_param,
+                        mutable: mutable_param,
+                        nombre: nombre_param,
+                        posicion: posicion_param,
+                    });
+
+                    if let Some(t) = self.token_actual() {
+                        if matches!(t.token, crate::nucleo::lexico::token::Token::Coma) {
+                            self.avanzar();
+                            continue;
+                        } else if matches!(t.token, crate::nucleo::lexico::token::Token::ParentesisDer) {
+                            break;
+                        } else {
+                            return Err(Error::analisis(
+                                CodigoError::SintaxisGeneral,
+                                "se esperaba ',' o ')' después de un parámetro",
+                                None,
+                                Some(t.posicion.linea),
+                                Some(t.posicion.columna),
+                            ));
+                        }
+                    } else {
+                        return Err(Error::analisis(
+                            CodigoError::SintaxisGeneral,
+                            "se esperaba ')' después de los parámetros",
+                            None,
+                            None,
+                            None,
+                        ));
+                    }
+                }
+            }
+        }
+
+        self.expectar_token(crate::nucleo::lexico::token::Token::ParentesisDer)?;
+        self.avanzar();
+        Ok(parametros)
+    }
+
+    /// Parsea una lista de identificadores separados por coma
+    fn parsear_lista_identificadores(&mut self, mensaje_error: &str) -> Resultado<Vec<String>> {
+        let mut nombres = Vec::new();
+
+        loop {
+            if let Some(t) = self.token_actual() {
+                if let crate::nucleo::lexico::token::Token::Identificador(ref nombre) = t.token {
+                    nombres.push(nombre.clone());
+                    self.avanzar();
+                } else {
+                    return Err(Error::analisis(
+                        CodigoError::SintaxisGeneral,
+                        mensaje_error.to_string(),
+                        None,
+                        Some(t.posicion.linea),
+                        Some(t.posicion.columna),
+                    ));
+                }
+            } else {
+                return Err(Error::analisis(
+                    CodigoError::SintaxisGeneral,
+                    mensaje_error.to_string(),
+                    None,
+                    None,
+                    None,
+                ));
+            }
+
+            if let Some(t) = self.token_actual() {
+                if matches!(t.token, crate::nucleo::lexico::token::Token::Coma) {
+                    self.avanzar();
+                    continue;
+                }
+            }
+
+            break;
+        }
+
+        Ok(nombres)
+    }
+
+    /// Parsea una declaración de prototipo
+    fn parsear_declaracion_prototipo(&mut self) -> Resultado<NodoAst> {
+        let posicion_inicial = self.token_actual()
+            .map(|t| t.posicion)
+            .unwrap_or_else(|| crate::nucleo::lexico::token::Posicion::inicial());
+
+        self.expectar_token(crate::nucleo::lexico::token::Token::Prototipo)?;
+        self.avanzar();
+
+        let nombre = if let Some(t) = self.token_actual() {
+            if let crate::nucleo::lexico::token::Token::Identificador(ref nombre) = t.token {
+                let nombre = nombre.clone();
+                self.avanzar();
+                nombre
+            } else {
+                return Err(Error::analisis(
+                    CodigoError::SintaxisGeneral,
+                    "se esperaba un identificador para el nombre del prototipo",
+                    None,
+                    Some(t.posicion.linea),
+                    Some(t.posicion.columna),
+                ));
+            }
+        } else {
+            return Err(Error::analisis(
+                CodigoError::SintaxisGeneral,
+                "se esperaba un identificador para el nombre del prototipo",
+                None,
+                None,
+                None,
+            ));
+        };
+
+        self.expectar_token(crate::nucleo::lexico::token::Token::LlaveIzq)?;
+        self.avanzar();
+
+        let mut miembros = Vec::new();
+        let mut modificador_actual = ModificadorAcceso::Publico;
+        let mut seccion_privado = false;
+        let mut seccion_publico = false;
+
+        while let Some(t) = self.token_actual() {
+            if matches!(t.token, crate::nucleo::lexico::token::Token::LlaveDer) {
+                break;
+            }
+
+            self.saltar_comentarios_y_espacios();
+
+            if let Some(t) = self.token_actual() {
+                if matches!(t.token, crate::nucleo::lexico::token::Token::LlaveDer) {
+                    break;
+                }
+
+                match t.token {
+                    crate::nucleo::lexico::token::Token::Publico | crate::nucleo::lexico::token::Token::PublicoAcento => {
+                        self.avanzar();
+                        self.expectar_token(crate::nucleo::lexico::token::Token::DosPuntos)?;
+                        self.avanzar();
+                        modificador_actual = ModificadorAcceso::Publico;
+                        seccion_publico = true;
+                        continue;
+                    }
+                    crate::nucleo::lexico::token::Token::Privado => {
+                        self.avanzar();
+                        self.expectar_token(crate::nucleo::lexico::token::Token::DosPuntos)?;
+                        self.avanzar();
+                        modificador_actual = ModificadorAcceso::Privado;
+                        seccion_privado = true;
+                        continue;
+                    }
+                    crate::nucleo::lexico::token::Token::Libre => {
+                        return Err(Error::analisis(
+                            CodigoError::SintaxisGeneral,
+                            "el modificador 'libre' no está permitido dentro de prototipos",
+                            None,
+                            Some(t.posicion.linea),
+                            Some(t.posicion.columna),
+                        ));
+                    }
+                    _ => {}
+                }
+
+                let posicion_miembro = t.posicion;
+                let tipo = self.parsear_tipo()?;
+
+                let opcional = if let Some(t) = self.token_actual() {
+                    if matches!(t.token, crate::nucleo::lexico::token::Token::Opcional) {
+                        self.avanzar();
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+
+                let mutable = if let Some(t) = self.token_actual() {
+                    if matches!(t.token, crate::nucleo::lexico::token::Token::Var) {
+                        self.avanzar();
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+
+                let nombre_miembro = if let Some(t) = self.token_actual() {
+                    if let crate::nucleo::lexico::token::Token::Identificador(ref nombre) = t.token {
+                        let nombre = nombre.clone();
+                        self.avanzar();
+                        nombre
+                    } else {
+                        return Err(Error::analisis(
+                            CodigoError::SintaxisGeneral,
+                            "se esperaba un identificador para el miembro del prototipo",
+                            None,
+                            Some(t.posicion.linea),
+                            Some(t.posicion.columna),
+                        ));
+                    }
+                } else {
+                    return Err(Error::analisis(
+                        CodigoError::SintaxisGeneral,
+                        "se esperaba un identificador para el miembro del prototipo",
+                        None,
+                        None,
+                        None,
+                    ));
+                };
+
+                let declaracion = if let Some(t) = self.token_actual() {
+                    if matches!(t.token, crate::nucleo::lexico::token::Token::ParentesisIzq) {
+                        if mutable {
+                            return Err(Error::analisis(
+                                CodigoError::SintaxisGeneral,
+                                "el modificador 'var' no aplica a funciones de prototipo",
+                                None,
+                                Some(t.posicion.linea),
+                                Some(t.posicion.columna),
+                            ));
+                        }
+
+                        let parametros = self.parsear_parametros_firma()?;
+
+                        if let Some(t) = self.token_actual() {
+                            if matches!(t.token, crate::nucleo::lexico::token::Token::LlaveIzq) {
+                                return Err(Error::analisis(
+                                    CodigoError::SintaxisGeneral,
+                                    "las funciones en un prototipo no deben tener cuerpo",
+                                    None,
+                                    Some(t.posicion.linea),
+                                    Some(t.posicion.columna),
+                                ));
+                            }
+                        }
+
+                        DeclaracionMiembroPrototipoAst::Funcion {
+                            tipo_retorno: tipo,
+                            nombre: nombre_miembro,
+                            parametros,
+                        }
+                    } else {
+                        if matches!(t.token, crate::nucleo::lexico::token::Token::Asignar) {
+                            return Err(Error::analisis(
+                                CodigoError::SintaxisGeneral,
+                                "los atributos en un prototipo no deben tener valor inicial",
+                                None,
+                                Some(t.posicion.linea),
+                                Some(t.posicion.columna),
+                            ));
+                        }
+
+                        DeclaracionMiembroPrototipoAst::Variable {
+                            tipo,
+                            mutable,
+                            nombre: nombre_miembro,
+                        }
+                    }
+                } else {
+                    DeclaracionMiembroPrototipoAst::Variable {
+                        tipo,
+                        mutable,
+                        nombre: nombre_miembro,
+                    }
+                };
+
+                miembros.push(MiembroPrototipoAst {
+                    modificador_acceso: modificador_actual,
+                    opcional,
+                    declaracion,
+                    posicion: posicion_miembro,
+                });
+
+                self.saltar_comentarios_y_espacios();
+            }
+        }
+
+        if seccion_privado && !seccion_publico {
+            return Err(Error::analisis(
+                CodigoError::SintaxisGeneral,
+                "si un prototipo define sección 'privado:', también debe definir sección 'publico:'",
+                None,
+                Some(posicion_inicial.linea),
+                Some(posicion_inicial.columna),
+            ));
+        }
+
+        self.expectar_token(crate::nucleo::lexico::token::Token::LlaveDer)?;
+        self.avanzar();
+
+        Ok(NodoAst::DeclaracionPrototipo {
+            nombre,
+            miembros,
+            posicion: posicion_inicial,
+        })
+    }
     
-    /// Parsea una declaración de objeto: objeto nombre [como Padre1, Padre2] { miembros }
+    /// Parsea una declaración de objeto: objeto nombre [como Padre1, Padre2] [implementa Proto1, Proto2] { miembros }
     fn parsear_declaracion_objeto(&mut self) -> Resultado<NodoAst> {
         let posicion_inicial = self.token_actual()
             .map(|t| t.posicion)
@@ -725,41 +1075,36 @@ impl Parser {
         
         // Parsear herencia opcional: como Padre1, Padre2
         let mut padres = Vec::new();
+        let mut prototipos = Vec::new();
         if let Some(t) = self.token_actual() {
             if matches!(t.token, crate::nucleo::lexico::token::Token::Como) {
                 self.avanzar();
-                
-                // Parsear lista de padres separados por coma
-                loop {
-                    if let Some(t) = self.token_actual() {
-                        if let crate::nucleo::lexico::token::Token::Identificador(ref nombre_padre) = t.token {
-                            padres.push(nombre_padre.clone());
-                            self.avanzar();
-                            
-                            // Verificar si hay más padres
-                            if let Some(t) = self.token_actual() {
-                                if matches!(t.token, crate::nucleo::lexico::token::Token::Coma) {
-                                    self.avanzar();
-                                    continue;
-                                }
-                            }
-                            break;
-                        } else {
-                            return Err(Error::analisis(
-                                CodigoError::SintaxisGeneral,
-                                "se esperaba un identificador para el nombre del padre",
-                                None,
-                                Some(t.posicion.linea),
-                                Some(t.posicion.columna),
-                            ));
-                        }
-                    } else {
+                padres = self.parsear_lista_identificadores(
+                    "se esperaba un identificador para el nombre del padre",
+                )?;
+
+                if let Some(t) = self.token_actual() {
+                    if matches!(t.token, crate::nucleo::lexico::token::Token::Implementa) {
+                        self.avanzar();
+                        prototipos = self.parsear_lista_identificadores(
+                            "se esperaba un identificador para el nombre del prototipo",
+                        )?;
+                    }
+                }
+            } else if matches!(t.token, crate::nucleo::lexico::token::Token::Implementa) {
+                self.avanzar();
+                prototipos = self.parsear_lista_identificadores(
+                    "se esperaba un identificador para el nombre del prototipo",
+                )?;
+
+                if let Some(t) = self.token_actual() {
+                    if matches!(t.token, crate::nucleo::lexico::token::Token::Como) {
                         return Err(Error::analisis(
                             CodigoError::SintaxisGeneral,
-                            "se esperaba un identificador para el nombre del padre",
+                            "el orden correcto es 'como ... implementa ...'",
                             None,
-                            None,
-                            None,
+                            Some(t.posicion.linea),
+                            Some(t.posicion.columna),
                         ));
                     }
                 }
@@ -771,7 +1116,7 @@ impl Parser {
         self.avanzar();
         
         let mut miembros = Vec::new();
-        let mut modificador_actual = ModificadorAcceso::Privado; // Por defecto privado
+        let mut modificador_actual = ModificadorAcceso::Publico; // Por defecto público
         
         // Parsear miembros hasta encontrar '}'
         while let Some(t) = self.token_actual() {
@@ -1006,6 +1351,7 @@ impl Parser {
         Ok(NodoAst::DeclaracionObjeto {
             nombre,
             padres,
+            prototipos,
             miembros,
             posicion: posicion_inicial,
         })

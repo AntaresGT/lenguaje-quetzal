@@ -33,6 +33,13 @@ pub struct Objeto {
     pub miembros: HashMap<String, MiembroObjeto>,
 }
 
+/// Información sobre un prototipo
+#[derive(Debug, Clone)]
+pub struct Prototipo {
+    pub nombre: String,
+    pub miembros: HashMap<String, MiembroPrototipo>,
+}
+
 /// Miembro de un objeto
 #[derive(Debug, Clone)]
 pub enum MiembroObjeto {
@@ -50,11 +57,29 @@ pub enum MiembroObjeto {
     },
 }
 
+/// Miembro de un prototipo
+#[derive(Debug, Clone)]
+pub enum MiembroPrototipo {
+    Variable {
+        tipo: Tipo,
+        mutable: bool,
+        publico: bool,
+        opcional: bool,
+    },
+    Funcion {
+        tipo_retorno: Tipo,
+        parametros: Vec<ParametroFuncion>,
+        publico: bool,
+        opcional: bool,
+    },
+}
+
 /// Tabla de símbolos con soporte para ámbitos anidados
 pub struct TablaSimbolos {
     variables: Vec<HashMap<String, Variable>>,
     funciones: Vec<HashMap<String, Funcion>>,
     objetos: Vec<HashMap<String, Objeto>>,
+    prototipos: Vec<HashMap<String, Prototipo>>,
 }
 
 impl TablaSimbolos {
@@ -64,6 +89,7 @@ impl TablaSimbolos {
             variables: vec![HashMap::new()],
             funciones: vec![HashMap::new()],
             objetos: vec![HashMap::new()],
+            prototipos: vec![HashMap::new()],
         }
     }
     
@@ -72,6 +98,7 @@ impl TablaSimbolos {
         self.variables.push(HashMap::new());
         self.funciones.push(HashMap::new());
         self.objetos.push(HashMap::new());
+        self.prototipos.push(HashMap::new());
     }
     
     /// Sale del ámbito actual
@@ -84,6 +111,9 @@ impl TablaSimbolos {
         }
         if self.objetos.len() > 1 {
             self.objetos.pop();
+        }
+        if self.prototipos.len() > 1 {
+            self.prototipos.pop();
         }
     }
     
@@ -163,6 +193,32 @@ impl TablaSimbolos {
         for ambito in self.objetos.iter().rev() {
             if let Some(objeto) = ambito.get(nombre) {
                 return Some(objeto);
+            }
+        }
+        None
+    }
+
+    /// Declara un prototipo
+    pub fn declarar_prototipo(&mut self, nombre: String, miembros: HashMap<String, MiembroPrototipo>) -> Result<(), String> {
+        let ambito_actual = self.prototipos.last_mut().unwrap();
+
+        if ambito_actual.contains_key(&nombre) {
+            return Err(format!("prototipo '{}' ya está declarado", nombre));
+        }
+
+        ambito_actual.insert(nombre.clone(), Prototipo {
+            nombre,
+            miembros,
+        });
+
+        Ok(())
+    }
+
+    /// Busca un prototipo
+    pub fn buscar_prototipo(&self, nombre: &str) -> Option<&Prototipo> {
+        for ambito in self.prototipos.iter().rev() {
+            if let Some(prototipo) = ambito.get(nombre) {
+                return Some(prototipo);
             }
         }
         None

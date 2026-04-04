@@ -21,6 +21,7 @@ pub enum Token {
     
     // Modificadores
     Var,
+    Opcional,
     Publico,
     PublicoAcento, // público
     Privado,
@@ -29,6 +30,8 @@ pub enum Token {
     // Funciones y objetos
     Retornar,
     Objeto,
+    Prototipo,
+    Implementa,
     Nuevo,
     Ambiente,
     Padre,
@@ -140,12 +143,15 @@ impl Token {
                 | Token::Falso
                 | Token::Nulo
                 | Token::Var
+                | Token::Opcional
                 | Token::Publico
                 | Token::PublicoAcento
                 | Token::Privado
                 | Token::Libre
                 | Token::Retornar
                 | Token::Objeto
+                | Token::Prototipo
+                | Token::Implementa
                 | Token::Nuevo
                 | Token::Ambiente
                 | Token::Padre
@@ -189,11 +195,14 @@ impl Token {
             Token::Falso => "falso",
             Token::Nulo => "nulo",
             Token::Var => "var",
+            Token::Opcional => "opcional",
             Token::Publico | Token::PublicoAcento => "publico",
             Token::Privado => "privado",
             Token::Libre => "libre",
             Token::Retornar => "retornar",
             Token::Objeto => "objeto",
+            Token::Prototipo => "prototipo",
+            Token::Implementa => "implementa",
             Token::Nuevo => "nuevo",
             Token::Ambiente => "ambiente",
             Token::Padre => "padre",

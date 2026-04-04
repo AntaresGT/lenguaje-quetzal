@@ -46,6 +46,9 @@ pub enum TokenLogos {
     // Modificadores
     #[token("var")]
     Var,
+
+    #[token("opcional")]
+    Opcional,
     
     #[token("publico")]
     #[token("público")]
@@ -63,6 +66,12 @@ pub enum TokenLogos {
     
     #[token("objeto")]
     Objeto,
+
+    #[token("prototipo")]
+    Prototipo,
+
+    #[token("implementa")]
+    Implementa,
     
     #[token("nuevo")]
     Nuevo,
@@ -449,11 +458,14 @@ impl Lexer {
             TokenLogos::Falso => Token::Falso,
             TokenLogos::Nulo => Token::Nulo,
             TokenLogos::Var => Token::Var,
+            TokenLogos::Opcional => Token::Opcional,
             TokenLogos::Publico => Token::Publico,
             TokenLogos::Privado => Token::Privado,
             TokenLogos::Libre => Token::Libre,
             TokenLogos::Retornar => Token::Retornar,
             TokenLogos::Objeto => Token::Objeto,
+            TokenLogos::Prototipo => Token::Prototipo,
+            TokenLogos::Implementa => Token::Implementa,
             TokenLogos::Nuevo => Token::Nuevo,
             TokenLogos::Ambiente => Token::Ambiente,
             TokenLogos::Padre => Token::Padre,

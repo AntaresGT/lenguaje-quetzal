@@ -19,3 +19,4 @@ mod modulos;
 mod permisos;
 mod errores;
 mod asincrono;
+mod prototipos;

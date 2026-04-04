@@ -24,7 +24,14 @@ pub enum NodoAst {
     DeclaracionObjeto {
         nombre: String,
         padres: Vec<String>,
+        prototipos: Vec<String>,
         miembros: Vec<MiembroObjetoAst>,
+        posicion: Posicion,
+    },
+
+    DeclaracionPrototipo {
+        nombre: String,
+        miembros: Vec<MiembroPrototipoAst>,
         posicion: Posicion,
     },
     
@@ -263,6 +270,30 @@ pub struct MiembroObjetoAst {
     pub posicion: Posicion,
 }
 
+/// Miembro de prototipo
+#[derive(Debug, Clone)]
+pub struct MiembroPrototipoAst {
+    pub modificador_acceso: ModificadorAcceso,
+    pub opcional: bool,
+    pub declaracion: DeclaracionMiembroPrototipoAst,
+    pub posicion: Posicion,
+}
+
+/// Declaración de miembro de prototipo
+#[derive(Debug, Clone)]
+pub enum DeclaracionMiembroPrototipoAst {
+    Variable {
+        tipo: TipoAst,
+        mutable: bool,
+        nombre: String,
+    },
+    Funcion {
+        tipo_retorno: TipoAst,
+        nombre: String,
+        parametros: Vec<ParametroAst>,
+    },
+}
+
 /// Modificador de acceso
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ModificadorAcceso {
@@ -299,6 +330,7 @@ impl NodoAst {
             NodoAst::DeclaracionVariable { posicion, .. }
             | NodoAst::DeclaracionFuncion { posicion, .. }
             | NodoAst::DeclaracionObjeto { posicion, .. }
+            | NodoAst::DeclaracionPrototipo { posicion, .. }
             | NodoAst::ExpresionLiteral { posicion, .. }
             | NodoAst::ExpresionIdentificador { posicion, .. }
             | NodoAst::ExpresionBinaria { posicion, .. }

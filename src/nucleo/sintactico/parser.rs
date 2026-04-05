@@ -44,8 +44,7 @@ impl Parser {
             if self.es_importacion() {
                 declaraciones.push(self.parsear_importacion()?);
             } else if self.es_exportar() {
-                // Ignorar bloque exportar (el sistema exporta automáticamente todo)
-                self.parsear_exportar()?;
+                declaraciones.push(self.parsear_exportar()?);
             } else {
                 declaraciones.push(self.parsear_declaracion()?);
             }
@@ -99,8 +98,10 @@ impl Parser {
         matches!(self.token_actual(), Some(t) if matches!(t.token, crate::nucleo::lexico::token::Token::Exportar))
     }
     
-    /// Parsea un bloque exportar (lo ignora porque el sistema exporta automáticamente todo)
-    fn parsear_exportar(&mut self) -> Resultado<()> {
+    /// Parsea un bloque exportar
+    fn parsear_exportar(&mut self) -> Resultado<NodoAst> {
+        let posicion = self.token_actual().unwrap().posicion;
+
         // exportar
         self.avanzar();
         
@@ -108,7 +109,9 @@ impl Parser {
         self.expectar_token(crate::nucleo::lexico::token::Token::LlaveIzq)?;
         self.avanzar();
         
-        // Saltar todos los elementos hasta encontrar }
+        let mut elementos = Vec::new();
+
+        // Parsear todos los elementos hasta encontrar }
         loop {
             self.saltar_comentarios_y_espacios();
             
@@ -117,13 +120,46 @@ impl Parser {
                     break;
                 }
                 
-                // Avanzar token por token hasta encontrar } o coma
-                if matches!(t.token, crate::nucleo::lexico::token::Token::Coma) {
+                if let crate::nucleo::lexico::token::Token::Identificador(ref nombre) = t.token {
+                    elementos.push(ElementoExportacion {
+                        nombre: nombre.clone(),
+                    });
                     self.avanzar();
-                    continue;
+                    self.saltar_comentarios_y_espacios();
+                } else {
+                    return Err(Error::analisis(
+                        CodigoError::SintaxisGeneral,
+                        "se esperaba un identificador en la lista de exportaciones",
+                        None,
+                        Some(t.posicion.linea),
+                        Some(t.posicion.columna),
+                    ));
                 }
-                
-                self.avanzar();
+
+                if let Some(t) = self.token_actual() {
+                    if matches!(t.token, crate::nucleo::lexico::token::Token::LlaveDer) {
+                        break;
+                    }
+                }
+
+                if let Some(t) = self.token_actual() {
+                    if matches!(t.token, crate::nucleo::lexico::token::Token::Coma) {
+                        self.avanzar();
+                        continue;
+                    }
+                }
+
+                if let Some(t) = self.token_actual() {
+                    if !matches!(t.token, crate::nucleo::lexico::token::Token::LlaveDer) {
+                        return Err(Error::analisis(
+                            CodigoError::SintaxisGeneral,
+                            "se esperaba ',' o '}' después del elemento exportado",
+                            None,
+                            Some(t.posicion.linea),
+                            Some(t.posicion.columna),
+                        ));
+                    }
+                }
             } else {
                 return Err(Error::analisis(
                     CodigoError::SintaxisGeneral,
@@ -139,7 +175,10 @@ impl Parser {
         self.expectar_token(crate::nucleo::lexico::token::Token::LlaveDer)?;
         self.avanzar();
         
-        Ok(())
+        Ok(NodoAst::Exportacion {
+            elementos,
+            posicion,
+        })
     }
     
     /// Parsea una importación

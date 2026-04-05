@@ -13,8 +13,16 @@ pub struct ConfiguracionPermisos {
 pub struct Permiso {
     pub tipo: String,
     pub habilitado: bool,
-    pub alcance: Option<String>,
+    pub alcance: Option<AlcancePermiso>,
     pub directorios: Option<Vec<String>>,
+}
+
+/// Alcance configurado para un permiso.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum AlcancePermiso {
+    Texto(String),
+    Operaciones(Vec<String>),
 }
 
 /// Sistema de permisos

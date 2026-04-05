@@ -1,9 +1,11 @@
 use crate::errores::{Error, CodigoError, Resultado};
-use crate::nucleo::sintactico::ast::*;
+use crate::modulos::CargadorModulos;
+use crate::nativos::interfaz::ModuloNativo;
+use crate::nucleo::hir::ProgramaHir;
 use crate::nucleo::semantico::tabla_simbolos::{TablaSimbolos, ParametroFuncion, MiembroObjeto, MiembroPrototipo};
 use crate::nucleo::semantico::tipos::Tipo;
+use crate::nucleo::sintactico::ast::*;
 use std::collections::HashMap;
-use crate::nativos::interfaz::ModuloNativo;
 use std::sync::Arc;
 
 /// Verificador semántico
@@ -14,6 +16,7 @@ pub struct Verificador {
     dentro_de_funcion_asincrona: bool,
     objetos_nativos: HashMap<String, Arc<dyn ModuloNativo>>,
     archivo_actual: Option<String>,
+    cargador_modulos: CargadorModulos,
 }
 
 impl Verificador {
@@ -26,12 +29,25 @@ impl Verificador {
             dentro_de_funcion_asincrona: false,
             objetos_nativos: HashMap::new(),
             archivo_actual: None,
+            cargador_modulos: CargadorModulos::nuevo(),
         }
     }
     
     /// Establece el archivo actual para resolver rutas relativas de módulos
     pub fn establecer_archivo_actual(&mut self, ruta: String) {
+        if let Some(dir) = std::path::Path::new(&ruta).parent() {
+            self.cargador_modulos.establecer_directorio_base(dir.to_path_buf());
+        }
         self.archivo_actual = Some(ruta);
+    }
+
+    pub fn establecer_cargador_modulos(&mut self, mut cargador: CargadorModulos) {
+        if let Some(ref archivo_actual) = self.archivo_actual {
+            if let Some(dir) = std::path::Path::new(archivo_actual).parent() {
+                cargador.establecer_directorio_base(dir.to_path_buf());
+            }
+        }
+        self.cargador_modulos = cargador;
     }
 
     /// Registra un módulo nativo en el verificador para consulta de tipos
@@ -51,6 +67,118 @@ impl Verificador {
             self.verificar(nodo)?;
         }
         
+        Ok(())
+    }
+
+    pub fn verificar_programa_hir(&mut self, programa: &ProgramaHir) -> Resultado<()> {
+        for item in &programa.items {
+            if let Some(nodo) = item.como_nodo_ast() {
+                self.registrar_declaraciones(nodo)?;
+            }
+        }
+
+        for item in &programa.items {
+            if let Some(nodo) = item.como_nodo_ast() {
+                self.verificar(nodo)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn registrar_elemento_importado(&mut self, nombre_importacion: &str, nodo: &NodoAst) -> Resultado<()> {
+        match nodo {
+            NodoAst::DeclaracionFuncion { tipo_retorno, parametros, .. } => {
+                let params: Vec<ParametroFuncion> = parametros
+                    .iter()
+                    .map(|p| ParametroFuncion {
+                        nombre: p.nombre.clone(),
+                        tipo: Tipo::desde_ast(&p.tipo),
+                        mutable: p.mutable,
+                    })
+                    .collect();
+
+                self.tabla_simbolos
+                    .declarar_funcion(nombre_importacion.to_string(), Tipo::desde_ast(tipo_retorno), params)
+                    .map_err(|e| {
+                        Error::semantico(
+                            CodigoError::FuncionRedeclarada,
+                            e,
+                            None,
+                            Some(nodo.posicion().linea),
+                            Some(nodo.posicion().columna),
+                        )
+                    })?;
+            }
+            NodoAst::DeclaracionVariable { tipo, mutable, .. } => {
+                self.tabla_simbolos
+                    .declarar_variable(nombre_importacion.to_string(), Tipo::desde_ast(tipo), *mutable)
+                    .map_err(|e| {
+                        Error::semantico(
+                            CodigoError::VariableRedeclarada,
+                            e,
+                            None,
+                            Some(nodo.posicion().linea),
+                            Some(nodo.posicion().columna),
+                        )
+                    })?;
+            }
+            NodoAst::DeclaracionObjeto { miembros, .. } => {
+                let miembros_mapa = self.construir_miembros_objeto(miembros);
+                self.tabla_simbolos
+                    .declarar_objeto(nombre_importacion.to_string(), miembros_mapa)
+                    .map_err(|e| {
+                        Error::semantico(
+                            CodigoError::ObjetoRedeclarado,
+                            e,
+                            None,
+                            Some(nodo.posicion().linea),
+                            Some(nodo.posicion().columna),
+                        )
+                    })?;
+            }
+            NodoAst::DeclaracionPrototipo { miembros, .. } => {
+                let miembros_mapa = self.construir_miembros_prototipo(miembros);
+                self.tabla_simbolos
+                    .declarar_prototipo(nombre_importacion.to_string(), miembros_mapa)
+                    .map_err(|e| {
+                        Error::semantico(
+                            CodigoError::PrototipoRedeclarado,
+                            e,
+                            None,
+                            Some(nodo.posicion().linea),
+                            Some(nodo.posicion().columna),
+                        )
+                    })?;
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    fn registrar_importacion_externa(&mut self, elementos: &[ElementoImportacion], ruta: &str) -> Resultado<()> {
+        let nombres: Vec<String> = elementos.iter().map(|elemento| elemento.nombre.clone()).collect();
+        let exportaciones = self.cargador_modulos.obtener_elementos(ruta, &nombres).map_err(|e| {
+            Error::modulo(
+                CodigoError::ErrorCargarModulo,
+                e.to_string(),
+                Some(ruta.to_string()),
+            )
+        })?;
+
+        for elemento in elementos {
+            let nombre_importacion = elemento.alias.as_deref().unwrap_or(&elemento.nombre);
+            let nodo = exportaciones.get(&elemento.nombre).ok_or_else(|| {
+                Error::modulo(
+                    CodigoError::ElementoImportadoNoEncontrado,
+                    format!("'{}' no está exportado en el módulo '{}'", elemento.nombre, ruta),
+                    Some(ruta.to_string()),
+                )
+            })?;
+            self.registrar_elemento_importado(nombre_importacion, nodo)?;
+        }
+
         Ok(())
     }
 
@@ -405,116 +533,40 @@ impl Verificador {
             NodoAst::Importacion { elementos, ruta, .. } => {
                 // Procesar importaciones en la primera pasada para que estén disponibles al verificar
                 if crate::nativos::registro::es_modulo_nativo(ruta) {
-                    // Para módulos nativos, solo registrar el objeto nativo
-                    if let Some(modulo) = obtener_modulo_nativo_por_ruta(ruta) {
+                    // Para módulos nativos, registrar objetos exportados y constantes tipadas
+                    if let Some(modulo) = crate::nativos::registro::obtener_modulo_nativo_por_ruta(ruta) {
+                        let descriptor = modulo.descriptor();
                         for elemento in elementos {
                             let nombre_importacion = elemento.alias.as_ref().unwrap_or(&elemento.nombre);
-                            self.registrar_objeto_nativo(nombre_importacion.clone(), modulo.clone());
-                        }
-                    }
-                } else {
-                    // Procesar módulo externo: cargar y registrar sus exportaciones
-                    let mut cargador = crate::modulos::CargadorModulos::nuevo();
-                    
-                    // Establecer directorio base si tenemos el archivo actual
-                    if let Some(ref archivo_actual) = self.archivo_actual {
-                        if let Some(dir) = std::path::Path::new(archivo_actual).parent() {
-                            cargador.establecer_directorio_base(dir.to_path_buf());
-                        }
-                    }
-                    
-                    if let Ok(ast_modulo) = cargador.cargar_modulo(ruta) {
-                        // Registrar todas las funciones, variables, objetos y prototipos exportados del módulo
-                        for nodo_modulo in &ast_modulo {
-                            if let NodoAst::DeclaracionFuncion { nombre, tipo_retorno, parametros, .. } = nodo_modulo {
-                                // Verificar si esta función está en la lista de elementos importados
-                                if elementos.iter().any(|e| &e.nombre == nombre) {
-                                    let elemento_importado = elementos.iter().find(|e| &e.nombre == nombre).unwrap();
-                                    let nombre_importacion = elemento_importado.alias.as_ref().unwrap_or(nombre);
-                                    
-                                    let params: Vec<ParametroFuncion> = parametros.iter()
-                                        .map(|p| ParametroFuncion {
-                                            nombre: p.nombre.clone(),
-                                            tipo: Tipo::desde_ast(&p.tipo),
-                                            mutable: p.mutable,
-                                        })
-                                        .collect();
-                                    
-                                    if let Err(e) = self.tabla_simbolos.declarar_funcion(
-                                        nombre_importacion.clone(),
-                                        Tipo::desde_ast(tipo_retorno),
-                                        params,
-                                    ) {
-                                        return Err(Error::semantico(
-                                            CodigoError::FuncionRedeclarada,
-                                            e,
-                                            None,
-                                            Some(nodo_modulo.posicion().linea),
-                                            Some(nodo_modulo.posicion().columna),
-                                        ));
-                                    }
-                                }
-                            } else if let NodoAst::DeclaracionVariable { nombre, tipo, mutable, .. } = nodo_modulo {
-                                // Verificar si esta variable está en la lista de elementos importados
-                                if elementos.iter().any(|e| &e.nombre == nombre) {
-                                    let elemento_importado = elementos.iter().find(|e| &e.nombre == nombre).unwrap();
-                                    let nombre_importacion = elemento_importado.alias.as_ref().unwrap_or(nombre);
-                                    
-                                    if let Err(e) = self.tabla_simbolos.declarar_variable(
-                                        nombre_importacion.clone(),
-                                        Tipo::desde_ast(tipo),
-                                        *mutable,
-                                    ) {
-                                        return Err(Error::semantico(
+                            if descriptor
+                                .exportaciones
+                                .iter()
+                                .any(|exportado| exportado == &elemento.nombre)
+                            {
+                                self.registrar_objeto_nativo(nombre_importacion.clone(), modulo.clone());
+                            } else if let Some(tipo_constante) =
+                                modulo.obtener_tipo_constante(&elemento.nombre)
+                            {
+                                self.tabla_simbolos
+                                    .declarar_variable(nombre_importacion.clone(), tipo_constante, false)
+                                    .map_err(|e| {
+                                        Error::semantico(
                                             CodigoError::VariableRedeclarada,
                                             e,
                                             None,
-                                            Some(nodo_modulo.posicion().linea),
-                                            Some(nodo_modulo.posicion().columna),
-                                        ));
-                                    }
-                                }
-                            } else if let NodoAst::DeclaracionObjeto { nombre, miembros, .. } = nodo_modulo {
-                                // Verificar si este objeto está en la lista de elementos importados
-                                if elementos.iter().any(|e| &e.nombre == nombre) {
-                                    let elemento_importado = elementos.iter().find(|e| &e.nombre == nombre).unwrap();
-                                    let nombre_importacion = elemento_importado.alias.as_ref().unwrap_or(nombre);
-
-                                    let miembros_mapa = self.construir_miembros_objeto(miembros);
-
-                                    if let Err(e) = self.tabla_simbolos.declarar_objeto(nombre_importacion.clone(), miembros_mapa) {
-                                        return Err(Error::semantico(
-                                            CodigoError::ObjetoRedeclarado,
-                                            e,
-                                            None,
-                                            Some(nodo_modulo.posicion().linea),
-                                            Some(nodo_modulo.posicion().columna),
-                                        ));
-                                    }
-                                }
-                            } else if let NodoAst::DeclaracionPrototipo { nombre, miembros, .. } = nodo_modulo {
-                                // Verificar si este prototipo está en la lista de elementos importados
-                                if elementos.iter().any(|e| &e.nombre == nombre) {
-                                    let elemento_importado = elementos.iter().find(|e| &e.nombre == nombre).unwrap();
-                                    let nombre_importacion = elemento_importado.alias.as_ref().unwrap_or(nombre);
-
-                                    let miembros_mapa = self.construir_miembros_prototipo(miembros);
-
-                                    if let Err(e) = self.tabla_simbolos.declarar_prototipo(nombre_importacion.clone(), miembros_mapa) {
-                                        return Err(Error::semantico(
-                                            CodigoError::PrototipoRedeclarado,
-                                            e,
-                                            None,
-                                            Some(nodo_modulo.posicion().linea),
-                                            Some(nodo_modulo.posicion().columna),
-                                        ));
-                                    }
-                                }
+                                            Some(nodo.posicion().linea),
+                                            Some(nodo.posicion().columna),
+                                        )
+                                    })?;
                             }
                         }
                     }
+                } else {
+                    self.registrar_importacion_externa(elementos, ruta)?;
                 }
             }
+
+            NodoAst::Exportacion { .. } => {}
             
             _ => {}
         }
@@ -1315,20 +1367,8 @@ impl Verificador {
                 // Aquí solo verificamos que la sintaxis sea correcta
                 Ok(Tipo::Vacio)
             }
-        }
-    }
-}
 
-
-/// Obtiene un módulo nativo por su ruta (para verificación semántica)
-fn obtener_modulo_nativo_por_ruta(ruta: &str) -> Option<Arc<dyn ModuloNativo>> {
-    use crate::nativos::matematica::Matematica;
-    use std::sync::Arc;
-    
-    match ruta {
-        "quetzal/matemática" | "quetzal/matematica" => {
-            Some(Arc::new(Matematica::nuevo()))
+            NodoAst::Exportacion { .. } => Ok(Tipo::Vacio),
         }
-        _ => None,
     }
 }

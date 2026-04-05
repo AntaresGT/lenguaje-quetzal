@@ -1,6 +1,6 @@
 // Pruebas unitarias para el sistema de modulos del lenguaje Quetzal
 
-use crate::modulos::CargadorModulos;
+use crate::modulos::{CargadorModulos, ManifiestoPaquete};
 use crate::errores::CodigoError;
 use std::fs;
 use std::path::PathBuf;
@@ -53,7 +53,7 @@ fn prueba_resolver_ruta_sin_extension() {
 
 #[test]
 fn prueba_cargar_modulo_simple() {
-    let mut cargador = CargadorModulos::nuevo();
+    let cargador = CargadorModulos::nuevo();
     
     // Crear archivo temporal
     let contenido = "entero valor = 42";
@@ -69,7 +69,7 @@ fn prueba_cargar_modulo_simple() {
 
 #[test]
 fn prueba_cache_modulos() {
-    let mut cargador = CargadorModulos::nuevo();
+    let cargador = CargadorModulos::nuevo();
     
     // Crear archivo temporal
     let contenido = "entero x = 1";
@@ -103,7 +103,7 @@ fn prueba_error_modulo_no_encontrado() {
 
 #[test]
 fn prueba_obtener_exportaciones() {
-    let mut cargador = CargadorModulos::nuevo();
+    let cargador = CargadorModulos::nuevo();
     
     // Crear modulo con funcion y variable
     let contenido = "entero sumar(entero a, entero b) {\n    retornar a + b\n}\n\nentero valor_constante = 100";
@@ -120,7 +120,7 @@ fn prueba_obtener_exportaciones() {
 
 #[test]
 fn prueba_exportaciones_incluyen_prototipos() {
-    let mut cargador = CargadorModulos::nuevo();
+    let cargador = CargadorModulos::nuevo();
 
     let contenido = r#"
 prototipo Contrato {
@@ -138,7 +138,7 @@ prototipo Contrato {
 
 #[test]
 fn prueba_obtener_elementos_especificos() {
-    let mut cargador = CargadorModulos::nuevo();
+    let cargador = CargadorModulos::nuevo();
     
     // Crear modulo con multiples elementos
     let contenido = "entero a = 1\nentero b = 2\nentero c = 3";
@@ -159,7 +159,7 @@ fn prueba_obtener_elementos_especificos() {
 
 #[test]
 fn prueba_error_elemento_no_exportado() {
-    let mut cargador = CargadorModulos::nuevo();
+    let cargador = CargadorModulos::nuevo();
     
     // Crear modulo simple
     let contenido = "entero x = 1";
@@ -188,13 +188,163 @@ fn prueba_directorio_base() {
     fs::write(&ruta, "entero x = 1").expect("No se pudo escribir");
     
     // Crear cargador con directorio base
-    let mut cargador = CargadorModulos::con_directorio_base(dir_temp.clone());
+    let cargador = CargadorModulos::con_directorio_base(dir_temp.clone());
     
     // Cargar solo con nombre
     let resultado = cargador.cargar_modulo("modulo_base");
     assert!(resultado.is_ok(), "Deberia resolver desde directorio base");
     
     let _ = fs::remove_dir_all(&dir_temp);
+}
+
+#[test]
+fn prueba_resolver_dependencia_local_desde_manifiesto() {
+    let id = CONTADOR.fetch_add(1, Ordering::SeqCst);
+    let dir_temp = std::env::temp_dir().join(format!("quetzal_test_pkg_{}", id));
+    let dir_app = dir_temp.join("app");
+    let dir_libreria = dir_temp.join("deps").join("utiles");
+
+    fs::create_dir_all(dir_app.join("src")).expect("No se pudo crear app");
+    fs::create_dir_all(dir_libreria.join("src")).expect("No se pudo crear librería");
+
+    fs::write(
+        dir_app.join("quetzal.json"),
+        r#"{
+  "version": "0.1.0",
+  "nombre": "app-prueba",
+  "dependencias": {
+    "utiles": "../deps/utiles"
+  }
+}"#,
+    )
+    .expect("No se pudo escribir manifiesto principal");
+
+    fs::write(
+        dir_libreria.join("quetzal.json"),
+        r#"{
+  "version": "0.1.0",
+  "nombre": "utiles",
+  "tipo": "libreria",
+  "biblioteca": "src/lib.qz"
+}"#,
+    )
+    .expect("No se pudo escribir manifiesto de librería");
+
+    fs::write(
+        dir_libreria.join("src").join("lib.qz"),
+        r#"
+entero visible = 7
+
+exportar {
+    visible,
+}
+"#,
+    )
+    .expect("No se pudo escribir librería");
+
+    let cargador = CargadorModulos::con_directorio_base(dir_app.join("src"));
+    let resultado = cargador.obtener_exportaciones("utiles");
+    assert!(resultado.is_ok(), "Debe resolver librería local por manifiesto");
+
+    let exportaciones = resultado.unwrap();
+    assert!(exportaciones.contains_key("visible"), "Debe exponer el símbolo exportado");
+
+    let _ = fs::remove_dir_all(&dir_temp);
+}
+
+#[test]
+fn prueba_manifiesto_invalido_falla_por_esquema() {
+    let id = CONTADOR.fetch_add(1, Ordering::SeqCst);
+    let dir_temp = std::env::temp_dir().join(format!("quetzal_test_schema_{}", id));
+    let _ = fs::create_dir_all(&dir_temp);
+    let ruta = dir_temp.join("quetzal.json");
+
+    fs::write(
+        &ruta,
+        r#"{
+  "nombre": "sin-version",
+  "dependencias": {},
+  "propiedad_extra": true
+}"#,
+    )
+    .expect("No se pudo escribir manifiesto inválido");
+
+    let resultado = ManifiestoPaquete::cargar_desde_archivo(&ruta);
+    assert!(resultado.is_err(), "El manifiesto inválido debe ser rechazado por el esquema");
+
+    let _ = fs::remove_dir_all(&dir_temp);
+}
+
+#[test]
+fn prueba_manifiesto_legado_valido_pasa_esquema() {
+    let id = CONTADOR.fetch_add(1, Ordering::SeqCst);
+    let dir_temp = std::env::temp_dir().join(format!("quetzal_test_schema_ok_{}", id));
+    let _ = fs::create_dir_all(&dir_temp);
+    let ruta = dir_temp.join("quetzal.json");
+
+    fs::write(
+        &ruta,
+        r#"{
+  "versión": "0.2.0",
+  "aplicación": "mi-proyecto-quetzal",
+  "dependencias": {
+    "libreria_ejemplo": "1.0.0"
+  }
+}"#,
+    )
+    .expect("No se pudo escribir manifiesto válido");
+
+    let resultado = ManifiestoPaquete::cargar_desde_archivo(&ruta);
+    assert!(resultado.is_ok(), "El formato legado debe seguir siendo válido");
+
+    let _ = fs::remove_dir_all(&dir_temp);
+}
+
+#[test]
+fn prueba_exportacion_explicita_restringe_api_publica() {
+    let cargador = CargadorModulos::nuevo();
+
+    let contenido = r#"
+entero interno = 1
+entero visible = 2
+
+exportar {
+    visible,
+}
+"#;
+    let ruta = crear_modulo_temporal("modulo_exportacion_explicita", contenido);
+
+    let resultado = cargador.obtener_exportaciones(ruta.to_str().unwrap());
+    assert!(resultado.is_ok(), "Debería obtener exportaciones explícitas");
+
+    let exportaciones = resultado.unwrap();
+    assert!(exportaciones.contains_key("visible"), "Debe exportar 'visible'");
+    assert!(!exportaciones.contains_key("interno"), "No debe exportar 'interno'");
+}
+
+#[test]
+fn prueba_importar_elemento_privado_falla_con_exportacion_explicita() {
+    let cargador = CargadorModulos::nuevo();
+
+    let contenido = r#"
+entero interno = 1
+entero visible = 2
+
+exportar {
+    visible,
+}
+"#;
+    let ruta = crear_modulo_temporal("modulo_exportacion_privada", contenido);
+
+    let resultado = cargador.obtener_elementos(
+        ruta.to_str().unwrap(),
+        &["interno".to_string()],
+    );
+    assert!(resultado.is_err(), "Importar un símbolo privado debe fallar");
+
+    if let Err(e) = resultado {
+        assert_eq!(e.codigo(), CodigoError::ElementoImportadoNoEncontrado.codigo());
+    }
 }
 
 // ============================================

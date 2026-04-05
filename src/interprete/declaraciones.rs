@@ -1,15 +1,63 @@
 use crate::errores::{Error, CodigoError, Resultado};
 use crate::interprete::entorno::Entorno;
 use crate::interprete::expresiones::evaluar_expresion;
+use crate::interprete::hir::ejecutar_programa_hir;
 use crate::interprete::valores::Valor;
 use crate::interprete::excepciones::Excepcion;
+use crate::modulos::ModuloCompilado;
 use crate::nucleo::sintactico::ast::*;
+use std::collections::HashMap;
 
 /// Tipo de control de flujo para romper y continuar
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ControlFlujo {
     Romper,
     Continuar,
+}
+
+fn convertir_funcion_a_valor(funcion: &crate::interprete::entorno::Funcion) -> Valor {
+    Valor::Funcion {
+        nombre: funcion.nombre.clone(),
+        parametros: funcion.parametros.clone(),
+        parametros_mutables: vec![false; funcion.parametros.len()],
+        cuerpo: funcion.cuerpo.clone(),
+        asincrono: false,
+    }
+}
+
+fn buscar_valor_exportado(entorno: &Entorno, nombre: &str) -> Option<Valor> {
+    if let Some(valor) = entorno.obtener_variable(nombre) {
+        return Some(valor.clone());
+    }
+
+    if let Some(funcion) = entorno.obtener_funcion(nombre) {
+        return Some(convertir_funcion_a_valor(funcion));
+    }
+
+    if entorno.obtener_definicion_objeto(nombre).is_some() {
+        return Some(Valor::Objeto {
+            tipo: format!("tipo:{}", nombre),
+            propiedades: HashMap::new(),
+        });
+    }
+
+    None
+}
+
+fn construir_exportaciones_runtime(modulo: &ModuloCompilado, entorno: &Entorno) -> HashMap<String, Valor> {
+    let mut exportaciones = HashMap::new();
+
+    for (nombre, nodo) in &modulo.exportaciones {
+        if matches!(nodo, NodoAst::DeclaracionPrototipo { .. }) {
+            continue;
+        }
+
+        if let Some(valor) = buscar_valor_exportado(entorno, nombre) {
+            exportaciones.insert(nombre.clone(), valor);
+        }
+    }
+
+    exportaciones
 }
 
 /// Evalúa una declaración con manejo de control de flujo (romper/continuar)
@@ -256,6 +304,9 @@ pub fn evaluar_declaracion(nodo: &NodoAst, entorno: &mut Entorno) -> Resultado<V
 
         // Declaración de prototipo: no-op en runtime (solo se valida en compilación)
         NodoAst::DeclaracionPrototipo { .. } => Ok(Valor::Vacio),
+
+        // Exportar: no-op en runtime; ya fue resuelto en HIR/cargador de módulos
+        NodoAst::Exportacion { .. } => Ok(Valor::Vacio),
         
         NodoAst::Intentar { bloque, capturar, finalmente, .. } => {
             // Ejecutar el bloque intentar
@@ -410,62 +461,60 @@ pub fn evaluar_declaracion(nodo: &NodoAst, entorno: &mut Entorno) -> Resultado<V
             if crate::nativos::registro::es_modulo_nativo(ruta) {
                 crate::nativos::registro::procesar_importacion(elementos, ruta, entorno)?;
             } else {
-                // Cargar módulo externo desde archivo .qz
-                let mut cargador = crate::modulos::CargadorModulos::nuevo();
-                
-                // Establecer directorio base si es posible
-                if let Some(ref archivo_actual) = entorno.archivo_actual() {
-                    if let Some(dir) = std::path::Path::new(archivo_actual).parent() {
-                        cargador.establecer_directorio_base(dir.to_path_buf());
-                    }
-                }
-                
-                // Cargar el módulo
-                let ast_modulo = cargador.cargar_modulo(ruta).map_err(|e| {
+                let cargador = entorno.cargador_modulos();
+                let modulo = cargador.obtener_modulo_compilado(ruta).map_err(|e| {
                     Error::modulo(
                         CodigoError::ErrorCargarModulo,
                         e.to_string(),
                         Some(ruta.to_string()),
                     )
                 })?;
+                let exportaciones = if let Some(cache) =
+                    cargador.obtener_exportaciones_ejecutadas(&modulo.ruta_absoluta)
+                {
+                    cache
+                } else {
+                    let mut entorno_modulo = Entorno::con_archivo(
+                        modulo.ruta_absoluta.to_string_lossy().to_string(),
+                    );
+                    entorno_modulo.establecer_cargador_modulos(cargador.clone());
 
-                let prototipos_exportados: std::collections::HashSet<String> = ast_modulo
-                    .iter()
-                    .filter_map(|nodo| {
-                        if let NodoAst::DeclaracionPrototipo { nombre, .. } = nodo {
-                            Some(nombre.clone())
-                        } else {
-                            None
+                    if let Some(manifiesto) = &modulo.manifiesto {
+                        if let Some(permisos) = manifiesto.construir_permisos() {
+                            entorno_modulo.establecer_permisos(permisos);
                         }
-                    })
-                    .collect();
-                
-                // Crear entorno temporal para ejecutar el módulo
-                let mut entorno_modulo = Entorno::nuevo();
-                crate::nativos::registro::registrar_modulos_nativos(&mut entorno_modulo)?;
-                
-                // Ejecutar el módulo para obtener sus exportaciones
-                for nodo_modulo in &ast_modulo {
-                    evaluar_declaracion(nodo_modulo, &mut entorno_modulo)?;
-                }
+                    }
+
+                    crate::nativos::registro::registrar_modulos_nativos(&mut entorno_modulo)?;
+                    ejecutar_programa_hir(&modulo.hir, &mut entorno_modulo)?;
+
+                    let exportaciones = construir_exportaciones_runtime(&modulo, &entorno_modulo);
+                    cargador.guardar_exportaciones_ejecutadas(
+                        modulo.ruta_absoluta.clone(),
+                        exportaciones.clone(),
+                    );
+                    exportaciones
+                };
                 
                 // Importar los elementos solicitados
                 if elementos.is_empty() {
                     // Importar todo el módulo con su nombre
-                    let nombre_modulo = std::path::Path::new(ruta)
-                        .file_stem()
-                        .and_then(|s| s.to_str())
+                    let nombre_modulo = modulo
+                        .manifiesto
+                        .as_ref()
+                        .map(|manifiesto| manifiesto.nombre.as_str())
+                        .or_else(|| {
+                            modulo
+                                .ruta_absoluta
+                                .file_stem()
+                                .and_then(|segmento| segmento.to_str())
+                        })
+                        .or_else(|| std::path::Path::new(ruta).file_stem().and_then(|s| s.to_str()))
                         .unwrap_or(ruta);
-                    
-                    // Crear objeto con las exportaciones del módulo
-                    let mut propiedades = std::collections::HashMap::new();
-                    for (nombre, valor) in entorno_modulo.obtener_variables_globales() {
-                        propiedades.insert(nombre, valor);
-                    }
                     
                     let modulo = Valor::Objeto {
                         tipo: format!("modulo:{}", nombre_modulo),
-                        propiedades,
+                        propiedades: exportaciones.clone(),
                     };
                     
                     entorno.definir_variable(nombre_modulo.to_string(), modulo, false)
@@ -479,44 +528,7 @@ pub fn evaluar_declaracion(nodo: &NodoAst, entorno: &mut Entorno) -> Resultado<V
                 } else {
                     // Importar elementos específicos
                     for elemento in elementos {
-                        // Buscar el elemento por su nombre original en el módulo
-                        let nombre_en_modulo = &elemento.nombre;
-
-                        // Los prototipos son contratos de compilación y no generan valores de runtime
-                        if prototipos_exportados.contains(nombre_en_modulo) {
-                            continue;
-                        }
-                        
-                        // Buscar en variables (incluye funciones que se almacenan como Valor::Funcion)
-                        let valor_opt = if let Some(valor_ref) = entorno_modulo.obtener_variable(nombre_en_modulo) {
-                            Some(valor_ref.clone())
-                        } else if let Some(func) = entorno_modulo.obtener_funcion(nombre_en_modulo) {
-                            // Convertir función a Valor si no se encuentra en variables
-                            Some(Valor::Funcion {
-                                nombre: func.nombre.clone(),
-                                parametros: func.parametros.clone(),
-                                parametros_mutables: vec![false; func.parametros.len()],
-                                cuerpo: func.cuerpo.clone(),
-                                asincrono: false,
-                            })
-                        } else if entorno_modulo.obtener_definicion_objeto(nombre_en_modulo).is_some() {
-                            // Convertir definición de objeto a Valor si no se encuentra en variables
-                            // Buscar si hay una instancia del objeto en variables
-                            if let Some(instancia) = entorno_modulo.obtener_variable(nombre_en_modulo) {
-                                Some(instancia.clone())
-                            } else {
-                                // Si no hay instancia, crear el tipo del objeto
-                                Some(Valor::Objeto {
-                                    tipo: format!("tipo:{}", nombre_en_modulo),
-                                    propiedades: std::collections::HashMap::new(),
-                                })
-                            }
-                        } else {
-                            None
-                        };
-                        
-                        if let Some(valor) = valor_opt {
-                            // Usar el alias si existe, o el nombre original si no
+                        if let Some(valor) = exportaciones.get(&elemento.nombre).cloned() {
                             let nombre_importacion = elemento.alias.as_ref().unwrap_or(&elemento.nombre);
                             entorno.definir_variable(nombre_importacion.clone(), valor, false)
                                 .map_err(|e| Error::ejecucion(
@@ -526,13 +538,21 @@ pub fn evaluar_declaracion(nodo: &NodoAst, entorno: &mut Entorno) -> Resultado<V
                                     Some(posicion.linea),
                                     Some(posicion.columna),
                                 ))?;
-                        } else {
-                            return Err(Error::modulo(
-                                CodigoError::ElementoImportadoNoEncontrado,
-                                format!("'{}' no está exportado en el módulo '{}'", nombre_en_modulo, ruta),
-                                Some(ruta.to_string()),
-                            ));
+                            continue;
                         }
+
+                        if matches!(
+                            modulo.exportaciones.get(&elemento.nombre),
+                            Some(NodoAst::DeclaracionPrototipo { .. })
+                        ) {
+                            continue;
+                        }
+
+                        return Err(Error::modulo(
+                            CodigoError::ElementoImportadoNoEncontrado,
+                            format!("'{}' no está exportado en el módulo '{}'", elemento.nombre, ruta),
+                            Some(ruta.to_string()),
+                        ));
                     }
                 }
             }

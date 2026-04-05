@@ -1,7 +1,7 @@
 use crate::errores::{Error, CodigoError, Resultado};
 use crate::interprete::entorno::Entorno;
 use crate::interprete::valores::Valor;
-use crate::nativos::interfaz::ModuloNativo;
+use crate::nativos::interfaz::{DescriptorModuloNativo, ModuloNativo};
 use colored::*;
 
 /// Módulo nativo de consola
@@ -20,6 +20,17 @@ impl ModuloNativo for Consola {
     
     fn ruta(&self) -> &str {
         "quetzal/consola"
+    }
+
+    fn descriptor(&self) -> DescriptorModuloNativo {
+        DescriptorModuloNativo {
+            nombre: "consola".to_string(),
+            rutas: vec!["quetzal/consola".to_string()],
+            exportaciones: vec!["consola".to_string()],
+            constantes: Vec::new(),
+            permisos: Vec::new(),
+            global: true,
+        }
     }
     
     fn registrar(&self, _entorno: &mut Entorno) -> Resultado<()> {

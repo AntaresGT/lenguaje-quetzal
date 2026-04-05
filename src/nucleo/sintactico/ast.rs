@@ -184,6 +184,11 @@ pub enum NodoAst {
         ruta: String,
         posicion: Posicion,
     },
+
+    Exportacion {
+        elementos: Vec<ElementoExportacion>,
+        posicion: Posicion,
+    },
 }
 
 /// Tipo en el AST
@@ -324,6 +329,12 @@ pub struct ElementoImportacion {
     pub alias: Option<String>, // Nombre alternativo (alias), si existe
 }
 
+/// Elemento exportado por un módulo
+#[derive(Debug, Clone)]
+pub struct ElementoExportacion {
+    pub nombre: String,
+}
+
 impl NodoAst {
     pub fn posicion(&self) -> Posicion {
         match self {
@@ -355,7 +366,8 @@ impl NodoAst {
             | NodoAst::Continuar { posicion, .. }
             | NodoAst::Intentar { posicion, .. }
             | NodoAst::Lanzar { posicion, .. }
-            | NodoAst::Importacion { posicion, .. } => *posicion,
+            | NodoAst::Importacion { posicion, .. }
+            | NodoAst::Exportacion { posicion, .. } => *posicion,
         }
     }
 }

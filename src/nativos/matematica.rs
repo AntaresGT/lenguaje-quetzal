@@ -1,7 +1,7 @@
 use crate::errores::{Error, CodigoError, Resultado};
 use crate::interprete::entorno::Entorno;
 use crate::interprete::valores::Valor;
-use crate::nativos::interfaz::ModuloNativo;
+use crate::nativos::interfaz::{DescriptorModuloNativo, ModuloNativo};
 use rust_decimal::Decimal;
 use std::f64::consts::{PI, E};
 
@@ -21,6 +21,23 @@ impl ModuloNativo for Matematica {
     
     fn ruta(&self) -> &str {
         "quetzal/matemática"
+    }
+
+    fn descriptor(&self) -> DescriptorModuloNativo {
+        DescriptorModuloNativo {
+            nombre: "Matemática".to_string(),
+            rutas: vec![
+                "quetzal/matemática".to_string(),
+                "quetzal/matematica".to_string(),
+            ],
+            exportaciones: vec![
+                "Matemática".to_string(),
+                "Matematica".to_string(),
+            ],
+            constantes: vec!["PI".to_string(), "E".to_string(), "TAU".to_string()],
+            permisos: Vec::new(),
+            global: false,
+        }
     }
 
     fn obtener_tipo_constante(&self, nombre: &str) -> Option<crate::nucleo::semantico::tipos::Tipo> {

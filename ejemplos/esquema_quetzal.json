@@ -1,0 +1,126 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lenguaje-quetzal.antaresgt.com/esquemas/quetzal.json",
+  "title": "Configuración de Proyecto Quetzal",
+  "description": "Esquema para archivos de configuración quetzal.json de proyectos en el lenguaje Quetzal",
+  "type": "object",
+  "properties": {
+    "versión": {
+      "type": "string",
+      "description": "Versión del formato de configuración",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "examples": ["0.2.0", "1.0.0"]
+    },
+    "version": {
+      "type": "string",
+      "description": "Versión del formato o del paquete",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "examples": ["0.2.0", "1.0.0"]
+    },
+    "aplicación": {
+      "type": "string",
+      "description": "Nombre del proyecto o aplicación",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_-ñÑáéíóúÁÉÍÓÚ]+$",
+      "examples": ["mi-proyecto-quetzal"]
+    },
+    "nombre": {
+      "type": "string",
+      "description": "Nombre del paquete o librería",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_-ñÑáéíóúÁÉÍÓÚ]+$",
+      "examples": ["utiles-quetzal"]
+    },
+    "tipo": {
+      "type": "string",
+      "description": "Tipo de proyecto",
+      "enum": ["ejecutable", "aplicacion", "libreria", "biblioteca"],
+      "default": "ejecutable"
+    },
+    "entrada": {
+      "type": "string",
+      "description": "Archivo principal para una aplicación"
+    },
+    "biblioteca": {
+      "type": "string",
+      "description": "Archivo principal para una librería"
+    },
+    "dependencias": {
+      "type": "object",
+      "description": "Dependencias del proyecto con su versión o ruta local",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Versión semántica o ruta local de la dependencia"
+      }
+    },
+    "nativos": {
+      "type": "array",
+      "description": "Lista de módulos nativos requeridos por el paquete",
+      "items": {
+        "type": "string"
+      }
+    },
+    "permisos": {
+      "type": "array",
+      "description": "Lista de permisos requeridos por la aplicación",
+      "items": {
+        "type": "object",
+        "required": ["tipo", "habilitado"],
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "description": "Tipo de permiso",
+            "enum": ["red", "sistema-archivos"]
+          },
+          "habilitado": {
+            "type": "boolean",
+            "description": "Indica si el permiso está activo"
+          },
+          "alcance": {
+            "description": "Alcance del permiso",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["lectura", "escritura", "ejecucion"]
+                }
+              }
+            ]
+          },
+          "directorios": {
+            "type": "array",
+            "description": "Directorios permitidos para el sistema de archivos",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "tipo": { "const": "sistema-archivos" } }
+            },
+            "then": {
+              "required": ["alcance"]
+            }
+          }
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "anyOf": [
+    {
+      "required": ["versión", "aplicación"]
+    },
+    {
+      "required": ["version", "nombre"]
+    }
+  ],
+  "additionalProperties": false
+}

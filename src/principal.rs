@@ -162,65 +162,56 @@ fn ejecutar_archivo_con_reporte(ruta: &str) -> crate::errores::Resultado<()> {
 }
 
 /// Ejecuta un archivo (implementacion interna)
-fn ejecutar_archivo_interno(ruta: &str, contenido: &str) -> crate::errores::Resultado<()> {
+fn ejecutar_archivo_interno(ruta: &str, _contenido: &str) -> crate::errores::Resultado<()> {
     use std::path::Path;
     
-    // Buscar y cargar quetzal.json si existe
-    let permisos = cargar_configuracion_permisos(ruta);
-    
-    // Análisis sintáctico
-    let ast = nucleo::sintactico::Parser::parsear(contenido)?;
-    
-    // Verificación semántica
-    let mut verificador = nucleo::semantico::Verificador::nuevo();
-    // Establecer archivo actual para resolver rutas relativas de módulos
     let ruta_path = Path::new(ruta);
-    if let Ok(archivo_abs) = ruta_path.canonicalize() {
-        verificador.establecer_archivo_actual(archivo_abs.to_string_lossy().to_string());
-    } else {
-        verificador.establecer_archivo_actual(ruta.to_string());
-    }
-    verificador.verificar_programa(&ast)?;
-    
-    // Ejecución
-    let mut entorno = if let Some(archivo_abs) = ruta_path.canonicalize().ok() {
-        interprete::entorno::Entorno::con_archivo(archivo_abs.to_string_lossy().to_string())
-    } else {
-        interprete::entorno::Entorno::nuevo()
-    };
-    
-    // Establecer permisos en el entorno si se cargaron
-    if let Some(sistema_permisos) = permisos {
-        entorno.establecer_permisos(sistema_permisos);
-    }
+    let ruta_absoluta = ruta_path.canonicalize().unwrap_or_else(|_| ruta_path.to_path_buf());
+    let permisos = cargar_configuracion_permisos(ruta_absoluta.to_string_lossy().as_ref())?;
+
+    let mut cargador = modulos::CargadorModulos::desde_archivo_actual(&ruta_absoluta);
+    cargador.establecer_manifiesto_actual(
+        ruta_absoluta
+            .parent()
+            .map(modulos::ManifiestoPaquete::buscar_desde_directorio_resultado)
+            .transpose()?
+            .flatten(),
+    );
+
+    let modulo_principal = cargador.obtener_modulo_compilado(
+        ruta_absoluta.to_str().unwrap_or(ruta),
+    )?;
+
+    let mut verificador = nucleo::semantico::Verificador::nuevo();
+    verificador.establecer_archivo_actual(ruta_absoluta.to_string_lossy().to_string());
+    verificador.establecer_cargador_modulos(cargador.clone());
+    verificador.verificar_programa_hir(&modulo_principal.hir)?;
+
+    let mut entorno = interprete::entorno::Entorno::con_archivo(
+        ruta_absoluta.to_string_lossy().to_string(),
+    );
+    entorno.establecer_cargador_modulos(cargador.clone());
+    entorno.establecer_permisos(permisos);
     
     nativos::registro::registrar_modulos_nativos(&mut entorno)?;
-    
-    for nodo in &ast {
-        interprete::declaraciones::evaluar_declaracion(nodo, &mut entorno)?;
-    }
+    interprete::hir::ejecutar_programa_hir(&modulo_principal.hir, &mut entorno)?;
     
     Ok(())
 }
 
 /// Busca y carga la configuración de permisos desde quetzal.json
-fn cargar_configuracion_permisos(ruta_archivo: &str) -> Option<configuracion::permisos::SistemaPermisos> {
+fn cargar_configuracion_permisos(ruta_archivo: &str) -> crate::errores::Resultado<configuracion::permisos::SistemaPermisos> {
     use std::path::Path;
     
     let archivo_path = Path::new(ruta_archivo);
-    
-    // Buscar quetzal.json en el directorio del archivo
+
     if let Some(dir) = archivo_path.parent() {
-        let config_path = dir.join("quetzal.json");
-        
-        if config_path.exists() {
-            if let Ok(contenido) = fs::read_to_string(&config_path) {
-                if let Ok(config) = serde_json::from_str::<configuracion::permisos::ConfiguracionPermisos>(&contenido) {
-                    return Some(configuracion::permisos::SistemaPermisos::cargar_desde_config(&config));
-                }
+        if let Some(manifiesto) = modulos::ManifiestoPaquete::buscar_desde_directorio_resultado(dir)? {
+            if let Some(permisos) = manifiesto.construir_permisos() {
+                return Ok(permisos);
             }
         }
     }
-    
-    None
+
+    Ok(configuracion::permisos::SistemaPermisos::nuevo())
 }

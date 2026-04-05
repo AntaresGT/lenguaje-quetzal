@@ -1,4 +1,5 @@
 use crate::interprete::valores::Valor;
+use crate::modulos::CargadorModulos;
 use crate::nativos::interfaz::ModuloNativo;
 use crate::configuracion::permisos::SistemaPermisos;
 use std::collections::HashMap;
@@ -13,6 +14,7 @@ pub struct Entorno {
     definiciones_objetos: HashMap<String, DefinicionObjeto>,
     archivo_actual: Option<String>,
     permisos: Option<SistemaPermisos>,
+    cargador_modulos: CargadorModulos,
 }
 
 /// Variable en el entorno
@@ -56,12 +58,14 @@ impl Entorno {
             objetos_nativos: HashMap::new(),
             definiciones_objetos: HashMap::new(),
             archivo_actual: None,
-            permisos: None,
+            permisos: Some(SistemaPermisos::nuevo()),
+            cargador_modulos: CargadorModulos::nuevo(),
         }
     }
     
     /// Crea un nuevo entorno con archivo actual
     pub fn con_archivo(archivo: String) -> Self {
+        let cargador_modulos = CargadorModulos::desde_archivo_actual(std::path::Path::new(&archivo));
         Self {
             variables: vec![HashMap::new()],
             funciones: vec![HashMap::new()],
@@ -69,7 +73,8 @@ impl Entorno {
             objetos_nativos: HashMap::new(),
             definiciones_objetos: HashMap::new(),
             archivo_actual: Some(archivo),
-            permisos: None,
+            permisos: Some(SistemaPermisos::nuevo()),
+            cargador_modulos,
         }
     }
     
@@ -80,7 +85,16 @@ impl Entorno {
     
     /// Establece el archivo actual
     pub fn establecer_archivo(&mut self, archivo: String) {
+        self.cargador_modulos = CargadorModulos::desde_archivo_actual(std::path::Path::new(&archivo));
         self.archivo_actual = Some(archivo);
+    }
+
+    pub fn establecer_cargador_modulos(&mut self, cargador: CargadorModulos) {
+        self.cargador_modulos = cargador;
+    }
+
+    pub fn cargador_modulos(&self) -> CargadorModulos {
+        self.cargador_modulos.clone()
     }
     
     /// Establece el sistema de permisos
@@ -98,8 +112,7 @@ impl Entorno {
         if let Some(permisos) = &self.permisos {
             permisos.puede_acceder_archivo(ruta)
         } else {
-            // Sin sistema de permisos configurado, permitir todo por defecto
-            Ok(())
+            SistemaPermisos::nuevo().puede_acceder_archivo(ruta)
         }
     }
     
@@ -108,8 +121,7 @@ impl Entorno {
         if let Some(permisos) = &self.permisos {
             permisos.puede_acceder_red()
         } else {
-            // Sin sistema de permisos configurado, permitir todo por defecto
-            Ok(())
+            SistemaPermisos::nuevo().puede_acceder_red()
         }
     }
     

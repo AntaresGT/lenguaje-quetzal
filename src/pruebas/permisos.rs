@@ -1,6 +1,6 @@
 // Pruebas unitarias para el sistema de permisos del lenguaje Quetzal
 
-use crate::configuracion::permisos::{ConfiguracionPermisos, Permiso, SistemaPermisos};
+use crate::configuracion::permisos::{AlcancePermiso, ConfiguracionPermisos, Permiso, SistemaPermisos};
 use crate::errores::CodigoError;
 use std::path::PathBuf;
 
@@ -156,12 +156,12 @@ fn prueba_entorno_sin_permisos() {
     
     let entorno = Entorno::nuevo();
     
-    // Sin permisos configurados, deberia permitir todo por defecto
+    // Sin quetzal.json o permisos explícitos, debe negar acceso a recursos del sistema
     let resultado_archivo = entorno.verificar_permiso_archivo(&PathBuf::from("/test"));
-    assert!(resultado_archivo.is_ok(), "Sin permisos configurados, deberia permitir acceso");
+    assert!(resultado_archivo.is_err(), "Sin permisos configurados, debe negar acceso a archivos");
     
     let resultado_red = entorno.verificar_permiso_red();
-    assert!(resultado_red.is_ok(), "Sin permisos configurados, deberia permitir red");
+    assert!(resultado_red.is_err(), "Sin permisos configurados, debe negar acceso a red");
 }
 
 #[test]
@@ -206,4 +206,25 @@ fn prueba_deserializar_configuracion_permisos() {
     assert!(config.permisos[0].habilitado);
     assert_eq!(config.permisos[1].tipo, "red");
     assert!(!config.permisos[1].habilitado);
+}
+
+#[test]
+fn prueba_deserializar_alcance_como_lista() {
+    let json = r#"{
+        "permisos": [
+            {
+                "tipo": "sistema-archivos",
+                "habilitado": true,
+                "alcance": ["lectura", "escritura"]
+            }
+        ]
+    }"#;
+
+    let config: ConfiguracionPermisos = serde_json::from_str(json).expect("Debería deserializar");
+    match &config.permisos[0].alcance {
+        Some(AlcancePermiso::Operaciones(operaciones)) => {
+            assert_eq!(operaciones, &vec!["lectura".to_string(), "escritura".to_string()]);
+        }
+        _ => panic!("El alcance debería deserializarse como lista de operaciones"),
+    }
 }

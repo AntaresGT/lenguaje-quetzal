@@ -1,41 +1,112 @@
-[package]
-name = "lenguaje-quetzal"
+[workspace]
+resolver = "3"
+members = [
+    "crates/lnc",
+    "crates/nucleo",
+    "crates/diagnosticos",
+    "crates/lexico",
+    "crates/sintaxis",
+    "crates/ast",
+    "crates/semantica",
+    "crates/bytecode",
+    "crates/maquina_virtual",
+    "crates/runtime",
+    "crates/modulos_nativos",
+    "crates/paquetes",
+    "crates/repl",
+    "crates/motor",
+    "crates/lsp",
+    "pruebas/lexico",
+    "pruebas/sintaxis",
+    "pruebas/semantica",
+    "pruebas/bytecode",
+    "pruebas/runtime",
+    "pruebas/paquetes",
+]
+
+[workspace.package]
+edition = "2024"
 version = "0.0.2"
-edition = "2021"
 authors = ["Allam López <alan@antaresgt.com>", "Antares <antaresgt.com>"]
-build = "src/compilar.rs"
-repository = "https://github.com/AntaresGT/lenguaje-quetzal"
+repository = "https://github.com/alannn3030/lenguaje-quetzal"
+homepage = "https://lenguajequetzal.com"
+description = "Lenguaje de programación interpretado en español, escrito en Rust."
 
-[[bin]]
-name = "quetzal"
-path = "src/principal.rs"
+[workspace.dependencies]
+# Crates internos del workspace
+nucleo = { path = "crates/nucleo" }
+diagnosticos = { path = "crates/diagnosticos" }
+lexico = { path = "crates/lexico" }
+sintaxis = { path = "crates/sintaxis" }
+ast = { path = "crates/ast" }
+semantica = { path = "crates/semantica" }
+bytecode = { path = "crates/bytecode" }
+maquina_virtual = { path = "crates/maquina_virtual" }
+runtime = { path = "crates/runtime" }
+modulos_nativos = { path = "crates/modulos_nativos" }
+paquetes = { path = "crates/paquetes" }
+repl = { path = "crates/repl" }
+motor = { path = "crates/motor" }
 
-[target.'cfg(windows)'.build-dependencies]
-winres = "0.1"
+# CLI para comandos como ejecutar, revisar, repl, instalar y nuevo.
+clap = { version = "4", features = ["derive", "env", "unicode", "wrap_help"] }
 
-[package.metadata.winres]
-OriginalFilename = "quetzal.exe"
-LegalCopyright = "Derechos Reservados © 2026 - Antares"
-ProductVersion = "0.0.2"
+# Lexer para convertir código fuente en tokens.
+logos = "0.15"
 
-[dependencies]
-anyhow = "1.0.100"
-cap-std = "4.0.0"
-clap = "4.5.54"
-codespan-reporting = "0.13.1"
-colored = "3.0.0"
-dialoguer = "0.12.0"
-logos = "0.16.0"
-miette = "7.6.0"
-moka = { version = "0.12.12", features = ["sync"] }
-pest = "2.8.5"
-pest_derive = "2.8.5"
-rpassword = "7.4.0"
-rust_decimal = "1.39.0"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
-thiserror = "2.0.17"
-tokio = { version = "1.49.0", features = ["rt", "rt-multi-thread", "macros", "time"] }
-unicode-ident = "1.0.22"
-base64 = "0.22.0"
-urlencoding = "2.1.3"
+# Errores derivables para errores internos de cada crate.
+thiserror = "2"
+
+# Serialización de quetzal.json, quetzal.bloquear y cache de bytecode.
+serde = { version = "1", features = ["derive"] }
+# preserve_order: los jsn de Quetzal conservan el orden de inserción de claves.
+serde_json = { version = "1", features = ["preserve_order"] }
+
+# Versionado semántico para dependencias de paquetes.
+semver = { version = "1", features = ["serde"] }
+
+# Hashes para cache e integridad de paquetes.
+sha2 = "0.10"
+hex = "0.4"
+
+# Estructuras ordenadas para tablas de símbolos y exports.
+indexmap = { version = "2", features = ["serde"] }
+
+# REPL moderno con historial y autocompletado.
+reedline = "0.42"
+
+# Colores en terminal para diagnósticos y consola.
+owo-colors = "4"
+
+# Runtime asincrónico interno (tiempo, red, procesos).
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "process", "time", "sync"] }
+
+# Precisión decimal para el tipo número sin errores de acarreo (0.1 + 0.2 == 0.3).
+rust_decimal = { version = "1", features = ["serde", "maths"] }
+
+# Cliente HTTP para el módulo nativo de red y el instalador de paquetes.
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "blocking"], default-features = false }
+
+# Fecha y hora para el módulo nativo tiempo.
+chrono = { version = "0.4", features = ["serde"] }
+# Zonas horarias IANA para el objeto Tiempo.
+chrono-tz = "0.10"
+# Zona horaria local del sistema como nombre IANA.
+iana-time-zone = "0.1"
+
+# Entrada secreta en consola (pedir_secreto).
+rpassword = "7"
+
+# Codificación base64 y URL para métodos de texto.
+base64 = "0.22"
+percent-encoding = "2"
+
+# Números aleatorios para Matematica.aleatorio.
+rand = "0.9"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"

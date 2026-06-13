@@ -1,0 +1,71 @@
+// Módulo nativo quetzal/red (fase 10 — permisos)
+//
+// Peticiones HTTP simples sobre la red. Cada operación consulta el guardián
+// de permisos. Sin permiso de red en quetzal.json la operación lanza E0701.
+//
+// Importación:
+//   importar { red } desde "quetzal/red"
+//
+// Permiso requerido en quetzal.json:
+//   "permisos": {
+//     "red": { "habilitado": true }
+//   }
+//
+// También acepta la forma en lista del esquema original:
+//   "permisos": [
+//     { "tipo": "red", "habilitado": true }
+//   ]
+//
+// Funciones disponibles:
+//   red.obtener(url)        — HTTP GET, devuelve el cuerpo de la respuesta como texto
+//   red.enviar(url, cuerpo) — HTTP POST con cuerpo de texto, devuelve la respuesta
+//
+// Detalles de implementación:
+//   - Cliente HTTP bloqueante con timeout de 30 segundos
+//   - TLS vía rustls (sin OpenSSL del sistema)
+//   - Solo devuelve el cuerpo; códigos de estado no se exponen al lenguaje aún
+//
+// Errores:
+//   E0701 — permiso de red denegado
+//   E0703 — fallo de red (URL inválida, timeout, error de conexión o lectura)
+
+importar { red } desde "quetzal/red"
+
+// --- red.obtener(url) -> texto ---
+// Realiza una petición HTTP GET y devuelve el cuerpo de la respuesta como texto.
+// Requiere "red": { "habilitado": true } en quetzal.json.
+texto pagina = red.obtener("https://httpbin.org/get")
+consola.mostrar(t"Respuesta GET (primeros 200 caracteres): {pagina.subtexto(0, 200)}")
+
+// --- red.enviar(url, cuerpo) -> texto ---
+// Realiza una petición HTTP POST enviando el cuerpo como texto plano.
+// Requiere permiso de red habilitado.
+texto respuesta_post = red.enviar("https://httpbin.org/post", "{\"mensaje\": \"hola desde Quetzal\"}")
+consola.mostrar(t"Respuesta POST: {respuesta_post}")
+
+// --- Ejemplo con API JSON ---
+// Muchas APIs aceptan POST con cuerpo JSON en texto.
+texto cuerpo_json = "{\"nombre\": \"Quetzal\", \"version\": \"0.0.2\"}"
+texto respuesta_api = red.enviar("https://httpbin.org/post", cuerpo_json)
+consola.mostrar(respuesta_api)
+
+// --- Manejo de permisos denegados ---
+// Sin permiso de red, red.obtener y red.enviar lanzan E0701.
+intentar {
+    texto bloqueado = red.obtener("https://ejemplo.com")
+    consola.mostrar(bloqueado)
+} capturar (excepcion e) {
+    consola.mostrar_error(t"Red bloqueada: {e.mensaje}")
+    // El mensaje indica cómo habilitar red en quetzal.json.
+} finalmente {
+    consola.mostrar_informacion("Fin del ejemplo de red.")
+}
+
+// --- Manejo de errores de conexión ---
+// URLs inválidas, timeouts o caídas del servidor lanzan E0703.
+intentar {
+    texto fallo = red.obtener("https://dominio-inexistente-quetzal-prueba.invalid")
+    consola.mostrar(fallo)
+} capturar (excepcion e) {
+    consola.mostrar_advertencia(t"Error de red (E0703): {e.mensaje}")
+}

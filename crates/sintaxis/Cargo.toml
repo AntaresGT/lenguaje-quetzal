@@ -1,0 +1,13 @@
+[package]
+name = "sintaxis"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Parser del Lenguaje Quetzal: convierte tokens en AST."
+
+[dependencies]
+nucleo = { workspace = true }
+lexico = { workspace = true }
+ast = { workspace = true }

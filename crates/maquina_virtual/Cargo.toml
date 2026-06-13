@@ -1,0 +1,21 @@
+[package]
+name = "maquina_virtual"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Máquina virtual del Lenguaje Quetzal: ejecuta bytecode con pila y marcos."
+
+[dependencies]
+nucleo = { workspace = true }
+bytecode = { workspace = true }
+
+# Precisión decimal para el tipo número sin errores de acarreo.
+rust_decimal = { workspace = true }
+
+# Representación de valores jsn.
+serde_json = { workspace = true }
+
+# Tablas ordenadas para objetos y módulos cargados.
+indexmap = { workspace = true }

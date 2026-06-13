@@ -1,0 +1,14 @@
+// Módulo calculadora del proyecto de ejemplo
+
+entero sumar(entero a, entero b) {
+    retornar a + b
+}
+
+entero restar(entero a, entero b) {
+    retornar a - b
+}
+
+exportar {
+    sumar,
+    restar
+}

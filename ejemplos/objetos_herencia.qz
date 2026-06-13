@@ -7,14 +7,14 @@ objeto Animal {
         texto var especie
     publico:
         Animal(texto nombre, texto especie) {
-            ambiente.nombre = nombre
-            ambiente.especie = especie
+            esto.nombre = nombre
+            esto.especie = especie
         }
         texto obtener_nombre() {
-            retornar ambiente.nombre
+            retornar esto.nombre
         }
         texto obtener_especie() {
-            retornar ambiente.especie
+            retornar esto.especie
         }
 
         vacio comer() {
@@ -22,7 +22,7 @@ objeto Animal {
         }
 }
 
-objeto Perro como Animal {
+objeto Perro hereda Animal {
     publico:
         Perro(texto nombre, texto especie) {
             padre.Animal(nombre, especie)
@@ -34,7 +34,7 @@ objeto Perro como Animal {
 }
 
 // Herencia en cascada
-objeto Mamifero como Animal {
+objeto Mamifero hereda Animal {
     publico:
         Mamifero(texto nombre, texto especie) {
             padre.Animal(nombre, especie)
@@ -45,7 +45,7 @@ objeto Mamifero como Animal {
         }
 }
 
-objeto Gato como Mamifero {
+objeto Gato hereda Mamifero {
     publico:
         Gato(texto nombre, texto especie) {
             padre.Mamifero(nombre, especie)
@@ -57,7 +57,7 @@ objeto Gato como Mamifero {
 }
 
 // Herencia multiple
-objeto Felino como Mamifero, Animal {
+objeto Felino hereda Mamifero, Animal {
     publico:
         Felino(texto nombre, texto especie) {
             padre.Mamifero(nombre, especie)

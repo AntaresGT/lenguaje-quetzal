@@ -1,0 +1,22 @@
+[package]
+name = "lnc"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "CLI del Lenguaje Quetzal: el binario quetzal."
+
+[[bin]]
+name = "quetzal"
+path = "src/principal.rs"
+
+[dependencies]
+nucleo = { workspace = true }
+diagnosticos = { workspace = true }
+motor = { workspace = true }
+repl = { workspace = true }
+paquetes = { workspace = true }
+
+# Parseo de argumentos de línea de comandos.
+clap = { workspace = true }

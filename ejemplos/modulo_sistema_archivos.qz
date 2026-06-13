@@ -1,0 +1,329 @@
+// Módulo nativo quetzal/sistema_archivos — SistemaArchivos, Archivo y Ruta
+//
+// El módulo expone tres objetos:
+//   SistemaArchivos — funciones libres para operaciones de una sola llamada
+//                     (leer, escribir, copiar, listar, eliminar, ...).
+//   Archivo         — objeto instanciable con cursor: ideal para abrir un
+//                     archivo y trabajarlo por partes (archivos grandes,
+//                     binarios, escritura incremental).
+//   Ruta            — objeto instanciable para manipular rutas (unir, padre,
+//                     extensión, ...) sin tocar el disco.
+//
+// Importación:
+//   importar { SistemaArchivos, Archivo, Ruta } desde "quetzal/sistema_archivos"
+//   importar { Bits } desde "quetzal/bits"   // para datos binarios
+//
+// Permisos requeridos en quetzal.json:
+//   "permisos": {
+//     "sistema_archivos": {
+//       "habilitado": true,
+//       "directorios": [
+//         { "ruta": "./datos", "permiso": "lectura" },
+//         { "ruta": "./salida", "permiso": "escritura" },
+//         { "ruta": "./temporal", "permiso": "todo" }
+//       ]
+//     }
+//   }
+//
+// Niveles de permiso por directorio:
+//   lectura   — leer, comprobar existencia, listar y consultar metadatos
+//   escritura — crear, escribir, agregar, copiar (destino), mover y eliminar
+//   todo      — lectura + escritura en el mismo directorio
+//
+// Errores que puede lanzar cualquier operación (capturables con intentar):
+//   E0701 — permiso denegado (falta declaración o ruta fuera del directorio)
+//   E0702 — fallo de E/S (archivo inexistente, directorio no vacío, etc.)
+//   E0406 — argumento inválido (modo desconocido, archivo cerrado, leer en
+//           modo escritura, byte fuera de 0-255, texto no UTF-8, ...)
+//   E0210 — cantidad incorrecta de argumentos
+//
+// ── API de SistemaArchivos (funciones libres) ────────────────────────────
+//   Todo parámetro `ruta` acepta un texto o una instancia de Ruta.
+//   Texto:
+//     SistemaArchivos.leer_texto(ruta)              -> texto
+//     SistemaArchivos.leer_lineas(ruta)             -> lista<texto>
+//     SistemaArchivos.escribir_texto(ruta, txt)     — crea o sobrescribe
+//     SistemaArchivos.agregar_texto(ruta, txt)      — añade al final
+//   Binario (devuelve/acepta Bits; también acepta lista<entero>):
+//     SistemaArchivos.leer_bits(ruta)               -> Bits
+//     SistemaArchivos.escribir_bits(ruta, bits)
+//     SistemaArchivos.agregar_bits(ruta, bits)
+//   Consultas:
+//     SistemaArchivos.existe(ruta)                  -> log
+//     SistemaArchivos.es_archivo(ruta)              -> log
+//     SistemaArchivos.es_directorio(ruta)           -> log
+//     SistemaArchivos.tamaño(ruta)                  -> entero (bytes)
+//     SistemaArchivos.metadatos(ruta)               -> jsn {tamaño, es_archivo,
+//                       es_directorio, solo_lectura, modificado, creado}
+//   Directorios:
+//     SistemaArchivos.listar(ruta)                  -> lista<texto> (nombres)
+//     SistemaArchivos.crear_directorio(ruta)        — crea intermedios
+//     SistemaArchivos.eliminar_archivo(ruta)
+//     SistemaArchivos.eliminar_directorio(ruta)     — solo si está vacío
+//     SistemaArchivos.eliminar_todo(ruta)           — directorio recursivo
+//   Copiar / mover:
+//     SistemaArchivos.copiar(origen, destino)       — archivo
+//     SistemaArchivos.mover(origen, destino)        — archivo o directorio
+//
+// ── API de Archivo (objeto instanciable con cursor) ──────────────────────
+//   Constructores:
+//     nuevo Archivo(ruta)         — modo "lectura"; E0702 si no existe
+//     nuevo Archivo(ruta, modo)   — modos:
+//       "lectura"           solo leer
+//       "escritura"         crea o trunca al instante
+//       "agregar"           crea si falta; escrituras siempre al final
+//       "lectura_escritura" crea si falta, sin truncar
+//   Lectura (E0406 si el modo no permite leer; avanzan la posición):
+//     .leer_texto()       -> texto         — todo desde la posición
+//     .leer_texto(n)      -> texto         — lote de hasta n bytes (respeta UTF-8)
+//     .leer_lineas()      -> lista<texto>  — todas las líneas restantes
+//     .leer_linea()       -> texto | nulo  — siguiente línea; nulo al final
+//     .leer_bits(n)       -> Bits          — lote de hasta n bytes; vacío al final
+//     .leer_todo_bits()   -> Bits          — todo desde la posición
+//     .al_final()         -> log           — ¿el cursor llegó al final?
+//     .bits_restantes()   -> entero        — bytes que faltan por leer
+//   Escritura (E0406 si el modo no permite escribir):
+//     .escribir(txt)  .escribir_linea(txt)  — escribir_linea agrega "\n"
+//     .escribir_bits(bits)                  — Bits o lista<entero>
+//   Posición (cursor en bytes desde el inicio):
+//     .posicion() -> entero   .ir_a(n)   .ir_al_inicio()   .ir_al_final()
+//   Información (funcionan incluso con el archivo cerrado):
+//     .ruta() .nombre() .extension() .modo()              -> texto
+//     .tamaño() -> entero    .existe() .esta_abierto()    -> log
+//   Ciclo de vida:
+//     .cerrar()    — toda operación posterior lanza E0406 (idempotente)
+//     .eliminar()  — borra el archivo del disco y lo marca cerrado
+//
+// ── API de Ruta (objeto inmutable) ───────────────────────────────────────
+//   Constructores:
+//     nuevo Ruta(texto)            nuevo Ruta(base, parte)
+//   Funciones libres:
+//     Ruta.actual()    -> Ruta     — directorio de trabajo
+//     Ruta.temporal()  -> Ruta     — directorio temporal del sistema
+//     Ruta.separador() -> texto    — "/" o "\"
+//   Métodos de texto puro (sin permisos):
+//     .texto() .nombre() .nombre_sin_extension() .extension()  -> texto
+//     .padre() .unir(parte) .con_extension(ext)                -> Ruta
+//     .componentes() -> lista<texto>     .es_absoluta() -> log
+//   Métodos que tocan disco (permiso de lectura):
+//     .existe() .es_archivo() .es_directorio() -> log
+//     .absoluta() -> Ruta — canonicaliza; E0702 si la ruta no existe
+
+importar { SistemaArchivos, Archivo, Ruta } desde "quetzal/sistema_archivos"
+importar { Bits } desde "quetzal/bits"
+
+// ── Preparación: directorios de trabajo ──────────────────────────────────
+
+// crear_directorio crea también los intermedios (como mkdir -p).
+// Requiere permiso de escritura (o "todo") sobre la ruta.
+SistemaArchivos.crear_directorio("./temporal/ejemplo")
+
+// ── SistemaArchivos: texto en una sola llamada ───────────────────────────
+
+// escribir_texto crea el archivo o lo sobrescribe por completo.
+SistemaArchivos.escribir_texto("./temporal/ejemplo/notas.txt", "primera línea\n")
+
+// agregar_texto añade al final sin tocar lo existente (crea si falta).
+SistemaArchivos.agregar_texto("./temporal/ejemplo/notas.txt", "segunda línea\n")
+
+// leer_texto devuelve el contenido completo como un solo texto.
+texto contenido = SistemaArchivos.leer_texto("./temporal/ejemplo/notas.txt")
+consola.mostrar(t"Contenido completo:\n{contenido}")
+
+// leer_lineas devuelve una lista (sin los saltos de línea).
+lista<texto> lineas = SistemaArchivos.leer_lineas("./temporal/ejemplo/notas.txt")
+consola.mostrar(t"Líneas leídas: {lineas.longitud()}")
+
+// ── SistemaArchivos: consultas y metadatos ───────────────────────────────
+
+log hay_notas = SistemaArchivos.existe("./temporal/ejemplo/notas.txt")
+log es_archivo = SistemaArchivos.es_archivo("./temporal/ejemplo/notas.txt")
+log es_directorio = SistemaArchivos.es_directorio("./temporal/ejemplo")
+entero bytes_notas = SistemaArchivos.tamaño("./temporal/ejemplo/notas.txt")
+consola.mostrar(t"¿Existe? {hay_notas}, ¿es archivo? {es_archivo}, ¿es directorio el padre? {es_directorio}")
+consola.mostrar(t"Tamaño en bytes: {bytes_notas}")
+
+// metadatos devuelve un jsn con todo junto (fechas como marcas Unix en ms,
+// listas para usar con nuevo Tiempo(marca)).
+jsn meta = SistemaArchivos.metadatos("./temporal/ejemplo/notas.txt")
+consola.mostrar(t"Metadatos: tamaño={meta.tamaño}, solo lectura={meta.solo_lectura}")
+
+// ── SistemaArchivos: binario con Bits ────────────────────────────────────
+
+// Un Bits es un búfer de bytes: ideal para archivos binarios (imágenes,
+// cabeceras, formatos propios). Ver ejemplos/modulo_bits.qz para su API.
+Bits cabecera = Bits.desde_hex("89 50 4e 47")     // firma PNG
+SistemaArchivos.escribir_bits("./temporal/ejemplo/firma.bin", cabecera)
+
+// agregar_bits también acepta una lista<entero> con valores 0-255.
+SistemaArchivos.agregar_bits("./temporal/ejemplo/firma.bin", [13, 10])
+
+Bits crudo = SistemaArchivos.leer_bits("./temporal/ejemplo/firma.bin")
+consola.mostrar(t"Binario leído: {crudo} -> hex {crudo.a_hex()}")
+
+// ── SistemaArchivos: listar, copiar, mover, eliminar ─────────────────────
+
+SistemaArchivos.copiar("./temporal/ejemplo/notas.txt", "./temporal/ejemplo/respaldo.txt")
+SistemaArchivos.mover("./temporal/ejemplo/respaldo.txt", "./temporal/ejemplo/respaldo_final.txt")
+
+lista<texto> entradas = SistemaArchivos.listar("./temporal/ejemplo")
+consola.mostrar(t"Entradas del directorio: {entradas.texto()}")
+
+// eliminar_archivo borra un archivo; eliminar_directorio exige que esté
+// vacío; eliminar_todo borra un directorio con todo su contenido.
+SistemaArchivos.eliminar_archivo("./temporal/ejemplo/respaldo_final.txt")
+
+// ── Ruta: manipular rutas sin tocar el disco ─────────────────────────────
+
+// nuevo Ruta(base, parte) equivale a nuevo Ruta(base).unir(parte).
+Ruta informe = nuevo Ruta("./temporal/ejemplo", "informes/ventas.csv")
+consola.mostrar(t"Ruta completa: {informe}")
+consola.mostrar(t"Nombre: {informe.nombre()}")                     // ventas.csv
+consola.mostrar(t"Sin extensión: {informe.nombre_sin_extension()}") // ventas
+consola.mostrar(t"Extensión: {informe.extension()}")               // csv
+consola.mostrar(t"¿Es absoluta? {informe.es_absoluta()}")
+
+// Las operaciones devuelven una Ruta nueva (inmutable).
+Ruta carpeta = informe.padre()
+Ruta como_json = informe.con_extension("json")
+consola.mostrar(t"Carpeta: {carpeta}")
+consola.mostrar(t"Como JSON: {como_json.nombre()}")
+consola.mostrar(t"Componentes: {informe.componentes().texto()}")
+consola.mostrar(t"Separador del sistema: {Ruta.separador()}")
+
+// Una Ruta puede pasarse directamente a cualquier función que pida ruta.
+Ruta destino_notas = nuevo Ruta("./temporal/ejemplo", "notas.txt")
+consola.mostrar(t"Tamaño vía Ruta: {SistemaArchivos.tamaño(destino_notas)}")
+
+// Estos métodos sí tocan el disco (requieren permiso de lectura).
+consola.mostrar(t"¿La ruta existe? {destino_notas.existe()}")
+consola.mostrar(t"¿Es archivo? {destino_notas.es_archivo()}")
+
+// ── Archivo: escritura incremental ───────────────────────────────────────
+
+// Modo "escritura": crea el archivo o lo trunca en el momento de instanciar.
+Archivo registro = nuevo Archivo("./temporal/ejemplo/registro.log", "escritura")
+registro.escribir_linea("[INFO] aplicación iniciada")
+registro.escribir_linea("[INFO] cargando configuración")
+registro.escribir("[WARN] sin red")    // escribir no agrega salto de línea
+registro.escribir("\n")
+consola.mostrar(t"Archivo: {registro}, tamaño: {registro.tamaño()} bytes")
+registro.cerrar()
+
+// Modo "agregar": las escrituras van siempre al final (bitácoras).
+Archivo bitacora = nuevo Archivo("./temporal/ejemplo/registro.log", "agregar")
+bitacora.escribir_linea("[INFO] entrada agregada después de cerrar")
+bitacora.cerrar()
+
+// ── Archivo: lectura completa ────────────────────────────────────────────
+
+// Modo por defecto: "lectura". E0702 si el archivo no existe.
+Archivo lector = nuevo Archivo("./temporal/ejemplo/registro.log")
+consola.mostrar(t"Ruta: {lector.ruta()}, nombre: {lector.nombre()}, modo: {lector.modo()}")
+lista<texto> todas = lector.leer_lineas()
+consola.mostrar(t"Líneas en el registro: {todas.longitud()}")
+
+// El cursor quedó al final; ir_al_inicio() lo regresa para releer.
+consola.mostrar(t"¿Al final? {lector.al_final()}")
+lector.ir_al_inicio()
+texto primera_parte = lector.leer_texto(6)   // lote de hasta 6 bytes
+consola.mostrar(t"Primeros bytes como texto: {primera_parte}")
+consola.mostrar(t"Posición actual: {lector.posicion()}")
+lector.cerrar()
+
+// ── Archivo: procesar archivos grandes por lotes (RAM constante) ─────────
+
+// La instancia funciona como cursor: cada lectura parcial avanza la
+// posición. Un mientras procesa el archivo sin cargarlo entero en memoria.
+
+// Línea por línea (leer_linea devuelve nulo al llegar al final):
+Archivo grande = nuevo Archivo("./temporal/ejemplo/registro.log")
+entero var contador = 0
+mientras (!grande.al_final()) {
+    texto linea = grande.leer_linea()
+    contador = contador + 1
+    consola.mostrar(t"  línea {contador}: {linea}")
+}
+grande.cerrar()
+
+// Por bloques de bytes (binarios enormes: copias, sumas de verificación...):
+Archivo binario = nuevo Archivo("./temporal/ejemplo/registro.log")
+entero var bloques = 0
+mientras (!binario.al_final()) {
+    Bits bloque = binario.leer_bits(16)   // lotes de 16 bytes
+    bloques = bloques + 1
+    // procesar el bloque... (la RAM usada es solo el tamaño del lote)
+}
+consola.mostrar(t"Procesado en {bloques} bloques de 16 bytes")
+consola.mostrar(t"Bytes restantes: {binario.bits_restantes()}")
+binario.cerrar()
+
+// ── Archivo: lectura y escritura combinadas con ir_a ─────────────────────
+
+// Modo "lectura_escritura": crea si falta y no trunca; permite ambas
+// operaciones moviendo el cursor con ir_a / ir_al_inicio / ir_al_final.
+Archivo mixto = nuevo Archivo("./temporal/ejemplo/contador.txt", "lectura_escritura")
+mixto.escribir("0042")
+mixto.ir_al_inicio()
+texto valor = mixto.leer_texto()
+consola.mostrar(t"Valor guardado: {valor}")
+mixto.ir_a(2)                          // sobrescribe desde el byte 2
+mixto.escribir("99")
+mixto.ir_al_inicio()
+consola.mostrar(t"Valor editado: {mixto.leer_texto()}")   // 0099
+mixto.cerrar()
+
+// ── Manejo de errores ────────────────────────────────────────────────────
+
+// E0702: el archivo no existe (modo lectura exige que exista).
+intentar {
+    Archivo fantasma = nuevo Archivo("./temporal/ejemplo/no_existe.txt")
+} capturar (excepcion e) {
+    consola.mostrar_error(t"E/S: {e.mensaje}")
+}
+
+// E0406: modo desconocido al instanciar.
+intentar {
+    Archivo invalido = nuevo Archivo("./temporal/ejemplo/x.txt", "lectura_total")
+} capturar (excepcion e) {
+    consola.mostrar_error(t"Modo inválido: {e.mensaje}")
+}
+
+// E0406: leer un archivo abierto solo para escribir.
+intentar {
+    Archivo solo_escribir = nuevo Archivo("./temporal/ejemplo/x.txt", "escritura")
+    texto imposible = solo_escribir.leer_texto()
+} capturar (excepcion e) {
+    consola.mostrar_error(t"Modo incompatible: {e.mensaje}")
+}
+
+// E0406: operar sobre un archivo cerrado.
+intentar {
+    Archivo cerrado = nuevo Archivo("./temporal/ejemplo/x.txt", "agregar")
+    cerrado.cerrar()
+    cerrado.escribir("ya no se puede")
+} capturar (excepcion e) {
+    consola.mostrar_error(t"Archivo cerrado: {e.mensaje}")
+}
+
+// E0701: permiso denegado (ruta fuera de los directorios declarados).
+// El mensaje explica cómo habilitar el permiso en quetzal.json.
+intentar {
+    texto secreto = SistemaArchivos.leer_texto("./fuera_de_permisos/secreto.txt")
+} capturar (excepcion e) {
+    consola.mostrar_error(t"Acceso denegado: {e.mensaje}")
+} finalmente {
+    consola.mostrar_informacion("La captura de errores funciona con cualquier operación.")
+}
+
+// ── Limpieza final ───────────────────────────────────────────────────────
+
+// .eliminar() borra el archivo del disco y marca la instancia como cerrada.
+Archivo temporal_x = nuevo Archivo("./temporal/ejemplo/x.txt", "agregar")
+temporal_x.eliminar()
+consola.mostrar(t"¿x.txt sigue abierto? {temporal_x.esta_abierto()}")
+consola.mostrar(t"¿x.txt existe aún? {temporal_x.existe()}")
+
+// eliminar_todo borra el directorio del ejemplo con todo su contenido.
+SistemaArchivos.eliminar_todo("./temporal/ejemplo")
+consola.mostrar_informacion("Fin del ejemplo de sistema_archivos.")

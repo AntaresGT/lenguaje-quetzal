@@ -1,0 +1,37 @@
+[package]
+name = "modulos_nativos"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Módulos nativos del Lenguaje Quetzal: consola, matematica, texto, listas, jsn, tiempo, red y sistema_archivos."
+
+[dependencies]
+nucleo = { workspace = true }
+maquina_virtual = { workspace = true }
+runtime = { workspace = true }
+
+# Precisión decimal para operaciones del módulo matematica.
+rust_decimal = { workspace = true }
+
+# Valores jsn y serialización.
+serde_json = { workspace = true }
+
+# Mapas ordenados de los valores jsn.
+indexmap = { workspace = true }
+
+# Fecha y hora para el módulo tiempo.
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
+iana-time-zone = { workspace = true }
+
+# Codificación base64 y URL para métodos de texto.
+base64 = { workspace = true }
+percent-encoding = { workspace = true }
+
+# Números aleatorios para Matematica.aleatorio.
+rand = { workspace = true }
+
+# Peticiones HTTP del módulo red (bloqueante, con rustls).
+reqwest = { workspace = true }

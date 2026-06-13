@@ -53,16 +53,16 @@ objeto DefinicionUsuario {
         entero edad
     publico:
         DefinicionUsuario(texto nombre, entero edad){
-            ambiente.nombre = nombre
-            ambiente.edad = edad
+            esto.nombre = nombre
+            esto.edad = edad
         }
 
         texto obtener_nombre() {
-            retornar ambiente.nombre
+            retornar esto.nombre
         }
 
         entero obtener_edad() {
-            retornar ambiente.edad
+            retornar esto.edad
         }
 }
 

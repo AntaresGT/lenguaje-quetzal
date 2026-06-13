@@ -1,0 +1,23 @@
+[package]
+name = "pruebas_runtime"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+publish = false
+description = "Pruebas de integración de la máquina virtual de Quetzal."
+
+[dependencies]
+nucleo = { workspace = true }
+sintaxis = { workspace = true }
+semantica = { workspace = true }
+bytecode = { workspace = true }
+maquina_virtual = { workspace = true }
+modulos_nativos = { workspace = true }
+runtime = { workspace = true }
+paquetes = { workspace = true }
+serde_json = { workspace = true }
+indexmap = { workspace = true }
+rust_decimal = { workspace = true }
+
+[lib]
+path = "lib.rs"

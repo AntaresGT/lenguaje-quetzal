@@ -1,0 +1,15 @@
+[package]
+name = "pruebas_bytecode"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+publish = false
+description = "Pruebas de integración del generador de bytecode de Quetzal."
+
+[dependencies]
+nucleo = { workspace = true }
+sintaxis = { workspace = true }
+bytecode = { workspace = true }
+
+[lib]
+path = "lib.rs"

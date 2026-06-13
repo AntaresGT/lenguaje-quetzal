@@ -10,7 +10,7 @@ objeto Usuario {
         // Funciones privadas del objeto
         // Estas funciones solo pueden ser llamadas desde dentro del objeto
         texto obtener_nombre_privado() {
-            retornar ambiente.nombre
+            retornar esto.nombre
         }
 
     publico:
@@ -18,16 +18,16 @@ objeto Usuario {
         Usuario(texto nombre, entero edad) {
             // La palabra clave 'ambiente' se usa para referirse a las variables del objeto o funciones del objeto
             // Se usa unicamente dentro del objeto
-            ambiente.nombre = nombre
-            ambiente.edad = edad
+            esto.nombre = nombre
+            esto.edad = edad
         }
 
         texto obtener_nombre() {
-            retornar ambiente.obtener_nombre_privado()
+            retornar esto.obtener_nombre_privado()
         }
 
         entero obtener_edad() {
-            retornar ambiente.edad
+            retornar esto.edad
         }
 }
 
@@ -40,16 +40,16 @@ objeto DefinicionUsuario {
     entero var edad
 
     DefinicionUsuario(texto nombre, entero edad) {
-        ambiente.nombre = nombre
-        ambiente.edad = edad
+        esto.nombre = nombre
+        esto.edad = edad
     }
 
     texto obtener_nombre() {
-        retornar ambiente.nombre
+        retornar esto.nombre
     }
 
     entero obtener_edad() {
-        retornar ambiente.edad
+        retornar esto.edad
     }
 }
 
@@ -78,18 +78,18 @@ objeto UsuarioLibre2 {
         libre entero var edad = 0
 
         libre texto obtener_nombre() {
-            retornar ambiente.nombre
+            retornar esto.nombre
         }
 
         libre entero obtener_edad() {
-            retornar ambiente.edad
+            retornar esto.edad
         }
     publico:
 
         // Metodos que se pueden accerder desde afuera sin instanciar el objeto
         libre vacio concatenar_apellido(texto nuevo_apellido) {
-            texto actual_nombre = ambiente.obtener_nombre()
-            ambiente.nombre = actual_nombre + " " + nuevo_apellido
+            texto actual_nombre = esto.obtener_nombre()
+            esto.nombre = actual_nombre + " " + nuevo_apellido
         }
 }
 

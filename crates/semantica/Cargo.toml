@@ -1,0 +1,16 @@
+[package]
+name = "semantica"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Análisis semántico del Lenguaje Quetzal: tipos, mutabilidad y símbolos."
+
+[dependencies]
+nucleo = { workspace = true }
+ast = { workspace = true }
+lexico = { workspace = true }
+
+# Tablas ordenadas para símbolos y exports.
+indexmap = { workspace = true }

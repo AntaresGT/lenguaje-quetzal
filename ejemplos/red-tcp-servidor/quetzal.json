@@ -1,0 +1,11 @@
+{
+    "version": "0.1.0",
+    "aplicacion": "red-tcp-servidor",
+    "entrada": "principal.qz",
+    "tipo": "aplicacion",
+    "quetzal": "0.0.2",
+    "dependencias": {},
+    "permisos": {
+        "red": { "habilitado": true, "servidor": true }
+    }
+}

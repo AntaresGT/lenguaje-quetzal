@@ -35,3 +35,15 @@ rand = { workspace = true }
 
 # Peticiones HTTP del módulo red (bloqueante, con rustls).
 reqwest = { workspace = true }
+
+# Runtime asincrónico para las variantes _asincrono de red/socket
+# (spawn_blocking de E/S TCP sin bloquear el bucle de eventos).
+tokio = { workspace = true }
+
+# RedSocket (WebSocket en inglés) de red/socket_rs (ClienteRs/ServidorRs),
+# sobre el mismo runtime.
+tokio-tungstenite = { workspace = true }
+futures-util = { workspace = true }
+
+# Análisis de URLs ws://wss:// en ClienteRs.conectar.
+url = { workspace = true }

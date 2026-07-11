@@ -1,0 +1,38 @@
+// ============================================================================
+// red-tcp-servidor: ServidorSocket TCP con eco de línea por conexión
+// ============================================================================
+//
+// Deja un ServidorSocket escuchando en el puerto fijo 8090. Acepta muchas
+// conexiones (una por cada ejecución de un cliente): cada una manda una
+// línea de texto y recibe su eco. Pruébalo con 'red-tcp-cliente-sincrono' o
+// 'red-tcp-cliente-asincrono' desde otra terminal.
+//
+// Requiere en quetzal.json: "red": { "habilitado": true, "servidor": true }
+
+// Servidor TCP y la conexión que recibe el manejador 'al_conectar'.
+importar { ServidorSocket, ConexionSocket } desde "quetzal/red"
+
+ServidorSocket servidor = nuevo ServidorSocket() // instancia sin manejador ni puerto todavía
+
+// Se invoca una sola vez por cada conexión nueva aceptada. Lee una línea de
+// texto y responde el eco; luego cierra ESA conexión (el servidor sigue
+// escuchando para aceptar más).
+vacio manejar_conexion(ConexionSocket conexion) {
+    texto linea = conexion.recibir_linea()           // bloquea hasta que llega una línea completa
+    consola.mostrar(t"[TCP] línea recibida: {linea}") // registra lo que llegó
+    conexion.enviar_texto(t"eco: {linea}\n")          // responde con el eco (con salto de línea)
+    conexion.cerrar()                                 // cierra el socket de esta conexión
+}
+
+servidor.al_conectar(manejar_conexion) // registra el manejador (por referencia, sin copiarlo)
+servidor.escuchar(8090)                // abre el socket en el puerto fijo 8090
+
+consola.mostrar_informacion(t"Servidor TCP escuchando en 127.0.0.1:{servidor.puerto()}")
+consola.mostrar_informacion("Ctrl+C para detenerlo. Pruébalo desde otra terminal con:")
+consola.mostrar("  quetzal ejecutar ejemplos/red-tcp-cliente-sincrono")
+consola.mostrar("  quetzal ejecutar ejemplos/red-tcp-cliente-asincrono")
+
+// El motor mantiene vivo el bucle de eventos después de aquí (como el event
+// loop de Node.js) mientras 'servidor' siga escuchando: este script nunca
+// llama a 'servidor.detener()', así que sigue aceptando conexiones hasta
+// que se cancele manualmente (Ctrl+C).

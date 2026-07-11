@@ -104,6 +104,19 @@ percent-encoding = "2"
 # Números aleatorios para Matematica.aleatorio.
 rand = "0.9"
 
+# RedSocket (WebSocket en inglés) del módulo nativo de red (ClienteRs/
+# ServidorRs), sobre el mismo runtime tokio del bucle de eventos; rustls
+# para soportar wss://.
+tokio-tungstenite = { version = "0.29", features = ["rustls-tls-webpki-roots"] }
+# Traits Stream/Sink para leer y escribir sobre un WebSocketStream.
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+# Análisis de URLs ws://wss:// (anfitrión/puerto/ruta) para ClienteRs.conectar.
+url = "2"
+
+# WebSocket síncrono (sin tokio) para las contrapartes crudas de prueba de
+# ClienteRs/ServidorRs (mismo espíritu que probar red/socket con std::net).
+tungstenite = "0.29"
+
 [profile.release]
 opt-level = 3
 lto = "thin"

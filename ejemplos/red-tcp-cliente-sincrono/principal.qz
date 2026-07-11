@@ -1,0 +1,29 @@
+// ============================================================================
+// red-tcp-cliente-sincrono: Socket TCP con métodos bloqueantes
+// ============================================================================
+//
+// Ejecuta primero 'red-tcp-servidor' (deja un ServidorSocket en el puerto
+// 8090) y luego, en otra terminal, este archivo:
+//   quetzal ejecutar ejemplos/red-tcp-cliente-sincrono
+//
+// 'conectar'/'enviar_texto'/'recibir_linea' (sin '_asincrono') BLOQUEAN el
+// hilo de la VM. Contra un servidor de otro proceso eso no es un problema
+// (compara con 'red-tcp-cliente-asincrono', la variante que usa
+// 'conectar_asincrono'/'recibir_bits_asincrono' + 'esperar').
+
+importar { Socket } desde "quetzal/red" // socket TCP cliente
+
+Socket plantilla = nuevo Socket()                       // instancia sin conectar todavía
+Socket conexion = plantilla.conectar("127.0.0.1", 8090) // conecta; devuelve una instancia nueva ya conectada
+
+conexion.enviar_texto("hola desde el cliente sincrono\n") // envía la línea (con salto de línea)
+texto respuesta = conexion.recibir_linea()                // bloquea hasta que llega la línea de eco
+conexion.cerrar()                                         // cierra el socket, ya no se necesita
+
+consola.mostrar(t"Respuesta del servidor TCP: {respuesta}")
+
+si (respuesta == "eco: hola desde el cliente sincrono") {
+    consola.mostrar_informacion("Cliente TCP síncrono: verificación exitosa.")
+} sino {
+    consola.mostrar_error("Cliente TCP síncrono: la respuesta no coincide con lo esperado.")
+}

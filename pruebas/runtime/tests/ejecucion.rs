@@ -58,6 +58,27 @@ fn ejecutar_deberia_evaluar_aritmetica_con_precedencia() {
 }
 
 #[test]
+fn funcion_asincrona_deberia_resolverse_con_esperar() {
+    let entorno = ejecutar(
+        "asincrono entero duplicar(entero valor) {\n\
+         \x20   retornar valor * 2\n\
+         }\n\
+         entero resultado = esperar duplicar(21)\n",
+    );
+    assert_eq!(como_entero(&global(&entorno, "resultado")), 42);
+}
+
+#[test]
+fn esperar_sobre_un_valor_normal_lo_devuelve_sin_cambios() {
+    // `esperar` sobre algo que no es una tarea simplemente pasa el valor,
+    // para que el código pueda tratar funciones síncronas y asincrónicas de
+    // forma uniforme.
+    let entorno = ejecutar("entero resultado = esperar 7\n");
+    assert_eq!(como_entero(&global(&entorno, "resultado")), 7);
+}
+
+
+#[test]
 fn ejecutar_deberia_sumar_decimales_exactos() {
     // La razón de usar rust_decimal: 0.1 + 0.2 debe ser exactamente 0.3.
     let entorno = ejecutar("número resultado = 0.1 + 0.2\nlog exacto = resultado == 0.3\n");

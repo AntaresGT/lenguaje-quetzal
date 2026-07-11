@@ -8,6 +8,7 @@ use bytecode::{FuncionCompilada, ModuloCompilado, ObjetoCompilado};
 use indexmap::IndexMap;
 use rust_decimal::Decimal;
 
+use crate::bucle_eventos::CargaNativa;
 use crate::errores::DatosExcepcion;
 
 /// Entorno de un módulo cargado: su bytecode y sus variables globales.
@@ -51,6 +52,9 @@ pub enum Valor {
     },
     /// Resultado pendiente de una función `asincrono` (se resuelve con `esperar`).
     Tarea(Rc<DatosTarea>),
+    /// Tarea nativa asincrónica pendiente en el bucle de eventos (E/S de red,
+    /// sockets, ...). Se resuelve con `esperar`, igual que una [`Valor::Tarea`].
+    TareaNativa(Rc<EstadoTareaNativa>),
     /// Valor capturado por `capturar (excepcion e)`.
     Excepcion(Rc<DatosExcepcion>),
     /// Iterador interno de los bucles `para ... en/cada`.
@@ -110,6 +114,15 @@ pub struct EstadoIterador {
     pub posicion: usize,
 }
 
+/// Identificador de una tarea nativa asincrónica pendiente en el bucle de
+/// eventos (ver [`crate::bucle_eventos`]). El resultado real viaja por el
+/// canal del bucle como [`CargaNativa`] y se convierte a [`Valor`] al
+/// resolverse (`esperar`), vía [`carga_a_valor`].
+#[derive(Debug)]
+pub struct EstadoTareaNativa {
+    pub id: u64,
+}
+
 impl Valor {
     pub fn texto(texto: impl AsRef<str>) -> Self {
         Valor::Texto(Rc::from(texto.as_ref()))
@@ -138,7 +151,7 @@ impl Valor {
             Valor::Clase(_) => "objeto",
             Valor::Instancia(_) | Valor::Padre { .. } => "instancia",
             Valor::InstanciaNativa(_) => "instancia nativa",
-            Valor::Tarea(_) => "tarea",
+            Valor::Tarea(_) | Valor::TareaNativa(_) => "tarea",
             Valor::Excepcion(_) => "excepcion",
             Valor::Iterador(_) => "iterador",
         }
@@ -226,7 +239,7 @@ pub fn texto_de_valor(valor: &Valor) -> String {
             Some(Valor::Texto(texto)) => texto.to_string(),
             _ => format!("<{}>", instancia.tipo),
         },
-        Valor::Tarea(_) => "<tarea pendiente>".to_string(),
+        Valor::Tarea(_) | Valor::TareaNativa(_) => "<tarea pendiente>".to_string(),
         Valor::Excepcion(datos) => datos.mensaje.clone(),
         Valor::Iterador(_) => "<iterador>".to_string(),
     }
@@ -290,5 +303,145 @@ pub fn json_a_valor(json: &serde_json::Value) -> Valor {
                 .map(|(clave, valor)| (clave.clone(), json_a_valor(valor)))
                 .collect(),
         ),
+    }
+}
+
+// ----- Bits: instancia nativa compartida -----
+//
+// La construcción de una instancia `Bits` vive aquí (no en `modulos_nativos`)
+// para que el bucle de eventos pueda convertir resultados binarios de tareas
+// nativas (E/S) a valores de Quetzal sin que este crate dependa de
+// `modulos_nativos`. El módulo `modulos_nativos::bits` reutiliza estas mismas
+// funciones para no duplicar la representación.
+
+/// Nombre del tipo nativo usado para instancias `Bits`.
+pub const TIPO_BITS: &str = "Bits";
+
+/// Cantidad máxima de bytes mostrados en la representación textual.
+const BYTES_EN_REPRESENTACION_BITS: usize = 16;
+
+/// Representación al imprimir: `<Bits 4f 4b 0a (3 bytes)>` (recortada).
+pub fn representacion_bits(bytes: &[u8]) -> String {
+    if bytes.is_empty() {
+        return "<Bits (0 bytes)>".to_string();
+    }
+    let visibles: Vec<String> = bytes
+        .iter()
+        .take(BYTES_EN_REPRESENTACION_BITS)
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    let resto = if bytes.len() > BYTES_EN_REPRESENTACION_BITS {
+        "…"
+    } else {
+        ""
+    };
+    format!("<Bits {}{resto} ({} bytes)>", visibles.join(" "), bytes.len())
+}
+
+/// Construye una instancia nativa `Bits` a partir de bytes crudos.
+pub fn instancia_bits_desde(bytes: &[u8]) -> Valor {
+    let lista: Vec<Valor> = bytes
+        .iter()
+        .map(|byte| Valor::Entero(i64::from(*byte)))
+        .collect();
+    let mut datos = IndexMap::new();
+    datos.insert("datos".to_string(), Valor::lista(lista));
+    datos.insert(
+        "texto".to_string(),
+        Valor::texto(representacion_bits(bytes)),
+    );
+    Valor::InstanciaNativa(Rc::new(DatosInstanciaNativa {
+        tipo: Rc::from(TIPO_BITS),
+        datos: RefCell::new(datos),
+    }))
+}
+
+/// Bytes crudos si el valor es una instancia `Bits`, o `None` si no lo es o
+/// si algún elemento no es un byte válido (0–255).
+pub fn bytes_de_bits(valor: &Valor) -> Option<Vec<u8>> {
+    match valor {
+        Valor::InstanciaNativa(instancia) if &*instancia.tipo == TIPO_BITS => {
+            match instancia.datos.borrow().get("datos") {
+                Some(Valor::Lista(lista)) => lista
+                    .borrow()
+                    .iter()
+                    .map(|elemento| match elemento {
+                        Valor::Entero(entero) if (0..=255).contains(entero) => {
+                            Some(*entero as u8)
+                        }
+                        _ => None,
+                    })
+                    .collect(),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+// ----- Bucle de eventos: conversión Valor <-> CargaNativa -----
+
+/// Convierte el resultado (enviable entre hilos) de una tarea nativa al
+/// valor de Quetzal equivalente.
+pub fn carga_a_valor(carga: CargaNativa) -> Valor {
+    match carga {
+        CargaNativa::Nula => Valor::Nulo,
+        CargaNativa::Entero(entero) => Valor::Entero(entero),
+        CargaNativa::Texto(texto) => Valor::texto(texto),
+        CargaNativa::Bytes(bytes) => instancia_bits_desde(&bytes),
+        CargaNativa::Lista(elementos) => {
+            Valor::lista(elementos.into_iter().map(carga_a_valor).collect())
+        }
+        CargaNativa::Mapa(pares) => Valor::jsn(
+            pares
+                .into_iter()
+                .map(|(clave, valor)| (clave, carga_a_valor(valor)))
+                .collect(),
+        ),
+        CargaNativa::Instancia { tipo, campos } => {
+            Valor::InstanciaNativa(Rc::new(DatosInstanciaNativa {
+                tipo: Rc::from(tipo.as_str()),
+                datos: RefCell::new(
+                    campos
+                        .into_iter()
+                        .map(|(clave, valor)| (clave, carga_a_valor(valor)))
+                        .collect(),
+                ),
+            }))
+        }
+    }
+}
+
+/// Convierte un valor de Quetzal a una carga enviable entre hilos, para que
+/// un hilo de fondo (por ejemplo, la conexión de un servidor) pueda usar lo
+/// que produjo un manejador de Quetzal. Los tipos sin equivalente binario se
+/// serializan como su representación textual.
+pub fn valor_a_carga(valor: &Valor) -> CargaNativa {
+    match valor {
+        Valor::Nulo => CargaNativa::Nula,
+        Valor::Entero(entero) => CargaNativa::Entero(*entero),
+        Valor::Texto(texto) => CargaNativa::Texto(texto.to_string()),
+        Valor::Lista(lista) => {
+            CargaNativa::Lista(lista.borrow().iter().map(valor_a_carga).collect())
+        }
+        Valor::Jsn(mapa) => CargaNativa::Mapa(
+            mapa.borrow()
+                .iter()
+                .map(|(clave, valor)| (clave.clone(), valor_a_carga(valor)))
+                .collect(),
+        ),
+        Valor::InstanciaNativa(instancia) if &*instancia.tipo != TIPO_BITS => CargaNativa::Instancia {
+            tipo: instancia.tipo.to_string(),
+            campos: instancia
+                .datos
+                .borrow()
+                .iter()
+                .map(|(clave, valor)| (clave.clone(), valor_a_carga(valor)))
+                .collect(),
+        },
+        otro => match bytes_de_bits(otro) {
+            Some(bytes) => CargaNativa::Bytes(bytes),
+            None => CargaNativa::Texto(texto_de_valor(otro)),
+        },
     }
 }

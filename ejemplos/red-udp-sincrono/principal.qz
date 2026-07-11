@@ -1,0 +1,46 @@
+// ============================================================================
+// red-udp-sincrono: SocketUdp con 'recibir()' bloqueante
+// ============================================================================
+//
+// Ejecútalo solo, no necesita otro proceso:
+//   quetzal ejecutar ejemplos/red-udp-sincrono
+//
+// UDP no tiene conexión ni manejador de Quetzal de por medio (a diferencia
+// de ServidorHttp/ServidorSocket/ServidorRs): 'recibir()' solo lee
+// directamente del socket del sistema operativo, así que emisor y receptor
+// pueden vivir tranquilamente en el mismo script sin riesgo de bloqueo.
+// Compara con 'red-udp-asincrono', que hace lo mismo con 'recibir_asincrono'.
+//
+// Requiere en quetzal.json:
+//   "red": { "habilitado": true, "cliente": true, "servidor": true }
+
+// SocketUdp: un solo tipo hace de emisor y de receptor (no hay conexión).
+importar { SocketUdp } desde "quetzal/red"
+// Bits: los datagramas siempre llegan como binario, sin importar qué se envió.
+importar { Bits } desde "quetzal/bits"
+
+SocketUdp receptor = nuevo SocketUdp() // socket que va a recibir los datagramas
+receptor.enlazar(0)                    // se enlaza a un puerto libre elegido por el sistema
+entero puerto = receptor.puerto()      // puerto real donde quedó enlazado
+SocketUdp emisor = nuevo SocketUdp()   // socket que va a enviar (se autoenlaza al enviar)
+
+// --- Datagrama de texto ---
+emisor.enviar_a("127.0.0.1", puerto, "hola udp") // envía un datagrama de texto
+jsn datagrama_texto = receptor.recibir()          // bloquea hasta recibir ese datagrama
+Bits datos_texto = datagrama_texto.datos          // campo 'datos': los bytes recibidos (Bits)
+consola.mostrar(t"Recibido de {datagrama_texto.origen}:{datagrama_texto.puerto} -> {datos_texto.a_texto()}")
+
+// --- Datagrama binario ---
+emisor.enviar_a("127.0.0.1", puerto, Bits.desde_hex("48656c6c6f")) // envía binario ("Hello")
+jsn datagrama_bits = receptor.recibir()                            // recibe el segundo datagrama
+Bits datos_bits = datagrama_bits.datos                             // bytes crudos recibidos
+consola.mostrar(t"Recibido (hex): {datos_bits.a_hex()}")
+
+receptor.cerrar() // libera el socket receptor
+emisor.cerrar()   // libera el socket emisor
+
+si (datos_texto.a_texto() == "hola udp" && datos_bits.a_hex() == "48656c6c6f") {
+    consola.mostrar_informacion("UDP síncrono: verificación exitosa.")
+} sino {
+    consola.mostrar_error("UDP síncrono: algún datagrama no coincide con lo esperado.")
+}

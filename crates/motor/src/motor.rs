@@ -49,30 +49,50 @@ impl MotorQuetzal {
 
     /// Ejecuta un fragmento de código Quetzal. Los imports relativos se
     /// resuelven desde el directorio actual.
+    ///
+    /// Tras terminar el código principal, mantiene vivo el bucle de eventos
+    /// mientras haya trabajo activo (por ejemplo, un `ServidorHttp` en
+    /// escucha que aún no llamó a `detener()`), igual que el bucle de
+    /// eventos de Node.js sigue corriendo mientras haya servidores abiertos.
     pub fn ejecutar_texto(&self, codigo: &str) -> ResultadoMultiple<()> {
         let fuente = Fuente::nueva("<entrada>", codigo);
         let mut vm = maquina_virtual::Vm::nueva(Rc::clone(&self.nativos));
-        let mut cargador = Cargador::nuevo(Some(&mut vm));
-        let base = std::env::current_dir().ok();
-        let resultado = cargador.cargar_fuente(&fuente, base.as_deref());
-        self.fuentes.replace(cargador.fuentes);
+        let resultado = {
+            let mut cargador = Cargador::nuevo(Some(&mut vm));
+            let base = std::env::current_dir().ok();
+            let resultado = cargador.cargar_fuente(&fuente, base.as_deref());
+            self.fuentes.replace(cargador.fuentes);
+            resultado
+        };
+        if resultado.is_ok() {
+            vm.drenar_bucle_eventos();
+        }
         resultado
     }
 
     /// Ejecuta un archivo `.qz` o un proyecto (directorio con `quetzal.json`).
+    ///
+    /// Tras terminar el código principal, mantiene vivo el bucle de eventos
+    /// mientras haya trabajo activo (ver [`Self::ejecutar_texto`]).
     pub fn ejecutar_archivo(&self, ruta: &str) -> ResultadoMultiple<()> {
         let (entrada, raiz) = resolver_entrada(ruta).map_err(|error| vec![error])?;
         let mut vm = maquina_virtual::Vm::nueva(Rc::clone(&self.nativos));
-        let mut cargador = Cargador::nuevo(Some(&mut vm));
-        if let Some(raiz) = &raiz {
-            // Los permisos del quetzal.json aplican a toda la ejecución.
-            let manifiesto =
-                paquetes::Manifiesto::leer_de_directorio(raiz).map_err(|error| vec![error])?;
-            self.permisos.configurar(manifiesto.permisos, raiz);
-            cargador = cargador.con_proyecto(raiz);
+        let resultado = {
+            let mut cargador = Cargador::nuevo(Some(&mut vm));
+            if let Some(raiz) = &raiz {
+                // Los permisos del quetzal.json aplican a toda la ejecución.
+                let manifiesto = paquetes::Manifiesto::leer_de_directorio(raiz)
+                    .map_err(|error| vec![error])?;
+                self.permisos.configurar(manifiesto.permisos, raiz);
+                cargador = cargador.con_proyecto(raiz);
+            }
+            let resultado = cargador.cargar_archivo(&entrada);
+            self.fuentes.replace(cargador.fuentes);
+            resultado
+        };
+        if resultado.is_ok() {
+            vm.drenar_bucle_eventos();
         }
-        let resultado = cargador.cargar_archivo(&entrada);
-        self.fuentes.replace(cargador.fuentes);
         resultado
     }
 

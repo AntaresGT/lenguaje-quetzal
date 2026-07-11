@@ -9,7 +9,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use indexmap::IndexMap;
 use maquina_virtual::{DatosInstanciaNativa, Fallo, RegistroNativos, Valor};
 
 use crate::util::{
@@ -21,38 +20,16 @@ const TIPO: &str = "Bits";
 /// Función nativa de este módulo, registrable bajo varios nombres.
 type Nativa = fn(&[Valor]) -> Result<Valor, Fallo>;
 
-/// Cantidad máxima de bytes mostrados en la representación textual.
-const BYTES_EN_REPR: usize = 16;
-
 // ----- Instancias -----
 
-/// Representación al imprimir: `<Bits 4f 4b 0a (3 bytes)>` (recortada).
-fn representacion(bytes: &[u8]) -> String {
-    if bytes.is_empty() {
-        return "<Bits (0 bytes)>".to_string();
-    }
-    let visibles: Vec<String> = bytes
-        .iter()
-        .take(BYTES_EN_REPR)
-        .map(|byte| format!("{byte:02x}"))
-        .collect();
-    let resto = if bytes.len() > BYTES_EN_REPR { "…" } else { "" };
-    format!("<Bits {}{resto} ({} bytes)>", visibles.join(" "), bytes.len())
-}
-
 /// Crea una instancia de `Bits` a partir de bytes crudos.
+///
+/// La construcción vive en `maquina_virtual` (no aquí) para que el bucle de
+/// eventos pueda producir instancias `Bits` a partir de resultados binarios
+/// de tareas nativas (E/S) sin depender de este crate. Esta función es solo
+/// un alias conveniente para el resto del módulo.
 pub(crate) fn valor_bits(bytes: &[u8]) -> Valor {
-    let lista: Vec<Valor> = bytes
-        .iter()
-        .map(|byte| Valor::Entero(i64::from(*byte)))
-        .collect();
-    let mut datos = IndexMap::new();
-    datos.insert("datos".to_string(), Valor::lista(lista));
-    datos.insert("texto".to_string(), Valor::texto(representacion(bytes)));
-    Valor::InstanciaNativa(Rc::new(DatosInstanciaNativa {
-        tipo: Rc::from(TIPO),
-        datos: RefCell::new(datos),
-    }))
+    maquina_virtual::instancia_bits_desde(bytes)
 }
 
 /// Receptor (`esto`) de un método: la instancia de `Bits`.
@@ -112,7 +89,10 @@ fn actualizar_representacion(funcion: &str, instancia: &DatosInstanciaNativa) ->
     instancia
         .datos
         .borrow_mut()
-        .insert("texto".to_string(), Valor::texto(representacion(&bytes)));
+        .insert(
+            "texto".to_string(),
+            Valor::texto(maquina_virtual::valores::representacion_bits(&bytes)),
+        );
     Ok(())
 }
 

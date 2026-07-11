@@ -162,6 +162,79 @@ fn modulo_sistema_archivos_deberia_respetar_permisos() {
 }
 
 #[test]
+fn guardian_deberia_permitir_solo_cliente_o_solo_servidor() {
+    let raiz = directorio_temporal("red_granular_cliente");
+    let guardian = GuardianPermisos::denegado();
+    guardian.configurar(
+        permisos_de_json(r#"{"red": {"habilitado": true, "cliente": true}}"#),
+        &raiz,
+    );
+    assert!(guardian.verificar_red_cliente("ejemplo.com", 443).is_ok());
+    assert!(
+        guardian.verificar_red_servidor(8080).is_err(),
+        "sin 'servidor' explícito, no se puede escuchar"
+    );
+
+    guardian.configurar(
+        permisos_de_json(r#"{"red": {"habilitado": true, "servidor": true}}"#),
+        &raiz,
+    );
+    assert!(guardian.verificar_red_servidor(8080).is_ok());
+    assert!(
+        guardian.verificar_red_cliente("ejemplo.com", 443).is_err(),
+        "sin 'cliente' explícito, no se puede conectar"
+    );
+    let _ = std::fs::remove_dir_all(&raiz);
+}
+
+#[test]
+fn guardian_deberia_respetar_lista_blanca_de_anfitriones_y_puertos() {
+    let raiz = directorio_temporal("red_granular_listas");
+    let guardian = GuardianPermisos::denegado();
+    guardian.configurar(
+        permisos_de_json(
+            r#"{"red": {"habilitado": true, "cliente": true, "servidor": true,
+                "anfitriones": ["api.ejemplo.com"], "puertos": [8080, 8443]}}"#,
+        ),
+        &raiz,
+    );
+
+    assert!(
+        guardian
+            .verificar_red_cliente("api.ejemplo.com", 8080)
+            .is_ok()
+    );
+    assert!(
+        guardian
+            .verificar_red_cliente("otro-dominio.com", 8080)
+            .is_err(),
+        "el anfitrión no está en la lista blanca"
+    );
+    assert!(
+        guardian
+            .verificar_red_cliente("api.ejemplo.com", 9999)
+            .is_err(),
+        "el puerto no está en la lista blanca"
+    );
+    assert!(guardian.verificar_red_servidor(8443).is_ok());
+    assert!(
+        guardian.verificar_red_servidor(3000).is_err(),
+        "el puerto 3000 no está en la lista blanca"
+    );
+    let _ = std::fs::remove_dir_all(&raiz);
+}
+
+#[test]
+fn guardian_forma_simple_habilita_cliente_y_servidor_sin_restricciones() {
+    let raiz = directorio_temporal("red_granular_simple");
+    let guardian = GuardianPermisos::denegado();
+    guardian.configurar(permisos_de_json(r#"{"red": {"habilitado": true}}"#), &raiz);
+    assert!(guardian.verificar_red_cliente("cualquiera.com", 1).is_ok());
+    assert!(guardian.verificar_red_servidor(65000).is_ok());
+    let _ = std::fs::remove_dir_all(&raiz);
+}
+
+#[test]
 fn modulo_red_deberia_denegarse_sin_permiso() {
     let registro = modulos_nativos::crear_registro();
     let obtener = registro

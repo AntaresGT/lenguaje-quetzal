@@ -22,7 +22,7 @@ fn manifiesto_deberia_leer_un_proyecto_valido() {
         manifiesto.dependencias.get("fechas").map(String::as_str),
         Some("1.2.0")
     );
-    assert!(!manifiesto.permisos.red);
+    assert!(!manifiesto.permisos.red.habilitado);
 }
 
 #[test]
@@ -76,7 +76,10 @@ fn permisos_deberian_leer_objeto_y_lista() {
         }"#,
     )
     .expect("permisos en objeto");
-    assert!(objeto.permisos.red);
+    assert!(objeto.permisos.red.habilitado);
+    // Forma simple (sin "cliente"/"servidor"): habilita ambos.
+    assert!(objeto.permisos.red.cliente);
+    assert!(objeto.permisos.red.servidor);
     assert!(objeto.permisos.sistema_archivos.habilitado);
     assert_eq!(objeto.permisos.sistema_archivos.directorios.len(), 1);
 

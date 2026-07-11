@@ -17,5 +17,5 @@ pub use bloqueo::{Bloqueo, DependenciaBloqueada};
 pub use cache::CacheBytecode;
 pub use instalacion::instalar_dependencias;
 pub use manifiesto::Manifiesto;
-pub use permisos::{Acceso, Permisos};
+pub use permisos::{Acceso, PermisoRed, Permisos};
 pub use proyecto::crear_proyecto;

@@ -1,6 +1,7 @@
 //! Intérprete de bytecode: pila de valores, marcos y excepciones.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use bytecode::{Constante, FuncionCompilada, Instruccion, ModuloCompilado, ObjetoCompilado, Trozo};
@@ -8,15 +9,22 @@ use indexmap::IndexMap;
 use nucleo::{ErrorQuetzal, Ubicacion};
 use rust_decimal::Decimal;
 
+use crate::bucle_eventos::{BucleEventos, CargaNativa, Mensaje};
 use crate::errores::{DatosExcepcion, Fallo};
 use crate::nativos::RegistroNativos;
 use crate::valores::{
     ClaseObjeto, DatosTarea, EntornoModulo, EstadoIterador, Instancia, Valor, Variable,
-    texto_de_valor,
+    carga_a_valor, texto_de_valor,
 };
 
 /// Límite de marcos anidados (recursión).
 const LIMITE_PROFUNDIDAD: usize = 200;
+
+/// Despachador genérico de un servicio nativo (por ejemplo `servidor_http`):
+/// recibe la VM, el identificador del recurso concreto y los datos de la
+/// solicitud, y devuelve la carga de respuesta. Lo registra el módulo nativo
+/// correspondiente la primera vez que se usa (ver [`Vm::registrar_despachador`]).
+type Despachador = Box<dyn Fn(&mut Vm, u64, CargaNativa) -> CargaNativa>;
 
 /// Máquina virtual del Lenguaje Quetzal.
 pub struct Vm {
@@ -25,6 +33,14 @@ pub struct Vm {
     pub modulos: IndexMap<String, Rc<EntornoModulo>>,
     /// Pila de nombres de funciones en ejecución (para `e.llamadas`).
     pila_llamadas: Vec<String>,
+    /// Bucle de eventos: E/S de fondo (tokio) + despacho de solicitudes en
+    /// el hilo de la VM. Ver `crate::bucle_eventos`.
+    bucle: BucleEventos,
+    /// Resultados de tareas nativas que llegaron mientras se esperaba otra
+    /// tarea distinta (se guardan para cuando se espere la suya).
+    resultados_pendientes: RefCell<HashMap<u64, Result<CargaNativa, String>>>,
+    /// Despachadores de solicitudes de servidores/recursos, por servicio.
+    despachadores: RefCell<HashMap<String, Despachador>>,
 }
 
 /// Marco de ejecución de un trozo de bytecode.
@@ -49,6 +65,125 @@ impl Vm {
             nativos,
             modulos: IndexMap::new(),
             pila_llamadas: Vec::new(),
+            bucle: BucleEventos::nuevo(),
+            resultados_pendientes: RefCell::new(HashMap::new()),
+            despachadores: RefCell::new(HashMap::new()),
+        }
+    }
+
+    /// El bucle de eventos de esta VM (E/S de fondo y despacho de eventos).
+    pub fn bucle(&self) -> &BucleEventos {
+        &self.bucle
+    }
+
+    /// Registra el despachador de un servicio nativo (por ejemplo
+    /// `"servidor_http"`) si todavía no existe uno. Los módulos nativos lo
+    /// llaman la primera vez que se usa el recurso correspondiente
+    /// (`servidor.escuchar(...)`); el mismo despachador atiende a todos los
+    /// recursos de ese servicio, identificándolos por `id_recurso`.
+    pub fn registrar_despachador<F>(&self, servicio: impl Into<String>, funcion: F)
+    where
+        F: Fn(&mut Vm, u64, CargaNativa) -> CargaNativa + 'static,
+    {
+        self.despachadores
+            .borrow_mut()
+            .entry(servicio.into())
+            .or_insert_with(|| Box::new(funcion));
+    }
+
+    /// Atiende una solicitud entrante despachándola al servicio registrado.
+    /// Devuelve `CargaNativa::Nula` si no hay despachador para ese servicio.
+    fn despachar_solicitud(&mut self, servicio: &str, id_recurso: u64, datos: CargaNativa) -> CargaNativa {
+        let Some(funcion) = self.despachadores.borrow_mut().remove(servicio) else {
+            return CargaNativa::Nula;
+        };
+        let resultado = funcion(self, id_recurso, datos);
+        self.despachadores
+            .borrow_mut()
+            .entry(servicio.to_string())
+            .or_insert(funcion);
+        resultado
+    }
+
+    /// Bombea el bucle de eventos hasta que la tarea nativa `id` se resuelve,
+    /// atendiendo mientras tanto cualquier otra solicitud que llegue (por
+    /// ejemplo, peticiones entrantes de un servidor en escucha). Así ninguna
+    /// espera bloquea al resto del programa.
+    fn resolver_tarea_nativa(&mut self, id: u64, ubicacion: Ubicacion) -> Result<Valor, Fallo> {
+        if let Some(resultado) = self.resultados_pendientes.borrow_mut().remove(&id) {
+            return self.convertir_resultado_tarea(resultado, ubicacion);
+        }
+        loop {
+            match self.bucle.recibir() {
+                Some(Mensaje::TareaLista {
+                    id: llegado,
+                    resultado,
+                }) if llegado == id => {
+                    return self.convertir_resultado_tarea(resultado, ubicacion);
+                }
+                Some(Mensaje::TareaLista {
+                    id: llegado,
+                    resultado,
+                }) => {
+                    self.resultados_pendientes
+                        .borrow_mut()
+                        .insert(llegado, resultado);
+                }
+                Some(Mensaje::Solicitud {
+                    servicio,
+                    id_recurso,
+                    datos,
+                    respuesta,
+                }) => {
+                    let salida = self.despachar_solicitud(&servicio, id_recurso, datos);
+                    let _ = respuesta.send(salida);
+                }
+                None => {
+                    return Err(Fallo::Error(Box::new(
+                        ErrorQuetzal::interno(
+                            "el bucle de eventos se cerró antes de resolver una tarea nativa",
+                        )
+                        .con_ubicacion(ubicacion),
+                    )));
+                }
+            }
+        }
+    }
+
+    fn convertir_resultado_tarea(
+        &self,
+        resultado: Result<CargaNativa, String>,
+        ubicacion: Ubicacion,
+    ) -> Result<Valor, Fallo> {
+        resultado
+            .map(carga_a_valor)
+            .map_err(|mensaje| self.excepcion("E0702", mensaje, Some(ubicacion)))
+    }
+
+    /// Mantiene vivo el bucle de eventos mientras haya servidores u otras
+    /// tareas activas registradas (`BucleEventos::registrar_trabajo_activo`),
+    /// atendiendo peticiones y tareas hasta que todas se detengan. Lo llama
+    /// el motor al terminar el código principal del programa, igual que el
+    /// bucle de eventos de Node.js sigue vivo mientras haya servidores
+    /// escuchando.
+    pub fn drenar_bucle_eventos(&mut self) {
+        use std::time::Duration;
+        while self.bucle.hay_trabajo_activo() {
+            match self.bucle.recibir_con_limite(Duration::from_millis(200)) {
+                Some(Mensaje::TareaLista { id, resultado }) => {
+                    self.resultados_pendientes.borrow_mut().insert(id, resultado);
+                }
+                Some(Mensaje::Solicitud {
+                    servicio,
+                    id_recurso,
+                    datos,
+                    respuesta,
+                }) => {
+                    let salida = self.despachar_solicitud(&servicio, id_recurso, datos);
+                    let _ = respuesta.send(salida);
+                }
+                None => {}
+            }
         }
     }
 
@@ -205,6 +340,26 @@ impl Vm {
         let resultado = self.ejecutar_trozo(&funcion.trozo, &mut marco);
         self.pila_llamadas.pop();
         resultado
+    }
+
+    /// Resuelve un valor `esperar`: si es una [`Valor::Tarea`] (función
+    /// Quetzal `asincrono`) la ejecuta; si es una [`Valor::TareaNativa`]
+    /// (E/S en el bucle de eventos) bombea el bucle hasta que se resuelve;
+    /// cualquier otro valor se devuelve sin cambios. Es la implementación de
+    /// la instrucción `Esperar`, expuesta también para que los módulos
+    /// nativos (y las pruebas) puedan esperar tareas fuera del bytecode.
+    pub fn esperar(&mut self, valor: Valor, ubicacion: Ubicacion) -> Result<Valor, Fallo> {
+        match valor {
+            Valor::Tarea(tarea) => self.llamar_funcion(
+                &tarea.funcion,
+                &tarea.entorno,
+                tarea.argumentos.clone(),
+                tarea.instancia.clone(),
+                Some(ubicacion),
+            ),
+            Valor::TareaNativa(tarea) => self.resolver_tarea_nativa(tarea.id, ubicacion),
+            otro => Ok(otro),
+        }
     }
 
     fn excepcion(&self, codigo: &str, mensaje: String, ubicacion: Option<Ubicacion>) -> Fallo {
@@ -478,7 +633,7 @@ impl Vm {
                     // su constructor con la clave `{modulo}.constructor`.
                     Valor::ModuloNativo(modulo) => {
                         let clave = format!("{modulo}.constructor");
-                        if self.nativos.buscar_funcion(&clave).is_none() {
+                        if !self.nativos.existe_funcion(&clave) {
                             return Err(self.excepcion(
                                 "E0406",
                                 format!("'{nombre}' no es un objeto instanciable"),
@@ -594,17 +749,7 @@ impl Vm {
 
             Instruccion::Esperar => {
                 let valor = self.sacar(pila, ubicacion)?;
-                let resultado = match valor {
-                    Valor::Tarea(tarea) => self.llamar_funcion(
-                        &tarea.funcion,
-                        &tarea.entorno,
-                        tarea.argumentos.clone(),
-                        tarea.instancia.clone(),
-                        Some(ubicacion),
-                    )?,
-                    otro => otro,
-                };
-                pila.push(resultado);
+                pila.push(self.esperar(valor, ubicacion)?);
             }
         }
         Ok(Flujo::Continuar)
@@ -931,19 +1076,26 @@ impl Vm {
     }
 
     fn llamar_nativa(
-        &self,
+        &mut self,
         nombre: &str,
         argumentos: &[Valor],
         ubicacion: Ubicacion,
     ) -> Result<Valor, Fallo> {
-        let funcion = self.nativos.buscar_funcion(nombre).ok_or_else(|| {
-            self.excepcion(
+        // Clon del `Rc`: evita mantener un préstamo de `self.nativos` mientras
+        // se llama una función `ConVm` que necesita `&mut self`.
+        let nativos = Rc::clone(&self.nativos);
+        let resultado = if let Some(funcion) = nativos.buscar_funcion(nombre) {
+            funcion(argumentos)
+        } else if let Some(funcion) = nativos.buscar_funcion_con_vm(nombre) {
+            funcion(self, argumentos)
+        } else {
+            return Err(self.excepcion(
                 "E0201",
                 format!("la función nativa '{nombre}' no existe"),
                 Some(ubicacion),
-            )
-        })?;
-        funcion(argumentos).map_err(|fallo| match fallo {
+            ));
+        };
+        resultado.map_err(|fallo| match fallo {
             Fallo::Excepcion(mut datos) => {
                 if datos.ubicacion.is_none() {
                     datos.ubicacion = Some(ubicacion);
@@ -1092,7 +1244,7 @@ impl Vm {
             // despacha como `Tiempo.agregar_dias` con el receptor primero.
             Valor::InstanciaNativa(datos) => {
                 let clave = format!("{}.{nombre}", datos.tipo);
-                if self.nativos.buscar_funcion(&clave).is_none() {
+                if !self.nativos.existe_funcion(&clave) {
                     return Err(self.excepcion(
                         "E0201",
                         format!(
@@ -1111,7 +1263,7 @@ impl Vm {
             _ => {
                 let tipo = receptor.nombre_tipo();
                 let clave = format!("{tipo}.{nombre}");
-                if self.nativos.buscar_funcion(&clave).is_none() {
+                if !self.nativos.existe_funcion(&clave) {
                     return Err(self.excepcion(
                         "E0406",
                         format!("el tipo '{tipo}' no tiene un método '{nombre}'"),
@@ -1309,7 +1461,7 @@ impl Vm {
                 if let Some(constante) = self.nativos.buscar_constante(&clave) {
                     return Ok(constante.clone());
                 }
-                if self.nativos.buscar_funcion(&clave).is_some() {
+                if self.nativos.existe_funcion(&clave) {
                     return Ok(Valor::Nativa(Rc::from(clave.as_str())));
                 }
                 Err(self.excepcion(

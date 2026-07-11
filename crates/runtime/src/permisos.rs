@@ -39,9 +39,11 @@ impl GuardianPermisos {
         estado.raiz = Some(raiz.to_path_buf());
     }
 
-    /// Verifica que el programa pueda usar la red.
+    /// Verifica que el programa pueda usar la red en general (compatibilidad
+    /// con el módulo original `red.obtener`/`red.enviar`, sin distinguir
+    /// cliente de servidor).
     pub fn verificar_red(&self) -> Result<(), String> {
-        if self.estado.borrow().permisos.red {
+        if self.estado.borrow().permisos.red.habilitado {
             return Ok(());
         }
         Err(
@@ -49,6 +51,59 @@ impl GuardianPermisos {
              \"permisos\": {\"red\": {\"habilitado\": true}}"
                 .to_string(),
         )
+    }
+
+    /// Verifica que el programa pueda conectarse como cliente a `anfitrion`
+    /// (dominio o IP) en `puerto`. Sin "anfitriones"/"puertos" declarados en
+    /// `quetzal.json`, cualquier anfitrión o puerto es válido.
+    pub fn verificar_red_cliente(&self, anfitrion: &str, puerto: u16) -> Result<(), String> {
+        let estado = self.estado.borrow();
+        let red = &estado.permisos.red;
+        if !red.habilitado || !red.cliente {
+            return Err(format!(
+                "el programa no tiene permiso para conectarse a '{anfitrion}:{puerto}'; \
+                 habilítalo en quetzal.json: \"permisos\": {{\"red\": {{\"habilitado\": true, \
+                 \"cliente\": true}}}}"
+            ));
+        }
+        if !red.anfitriones.is_empty() && !red.anfitriones.iter().any(|permitido| permitido == "*" || permitido == anfitrion) {
+            return Err(format!(
+                "el programa no tiene permiso para conectarse al anfitrión '{anfitrion}'; \
+                 agrégalo en quetzal.json: \"permisos\": {{\"red\": {{\"habilitado\": true, \
+                 \"cliente\": true, \"anfitriones\": [\"{anfitrion}\"]}}}}"
+            ));
+        }
+        if !red.puertos.is_empty() && !red.puertos.contains(&puerto) {
+            return Err(format!(
+                "el programa no tiene permiso para usar el puerto {puerto}; agrégalo en \
+                 quetzal.json: \"permisos\": {{\"red\": {{\"habilitado\": true, \"cliente\": \
+                 true, \"puertos\": [{puerto}]}}}}"
+            ));
+        }
+        Ok(())
+    }
+
+    /// Verifica que el programa pueda escuchar como servidor en `puerto`.
+    /// Sin "puertos" declarados en `quetzal.json`, cualquier puerto es
+    /// válido.
+    pub fn verificar_red_servidor(&self, puerto: u16) -> Result<(), String> {
+        let estado = self.estado.borrow();
+        let red = &estado.permisos.red;
+        if !red.habilitado || !red.servidor {
+            return Err(format!(
+                "el programa no tiene permiso para crear un servidor en el puerto {puerto}; \
+                 habilítalo en quetzal.json: \"permisos\": {{\"red\": {{\"habilitado\": true, \
+                 \"servidor\": true, \"puertos\": [{puerto}]}}}}"
+            ));
+        }
+        if !red.puertos.is_empty() && !red.puertos.contains(&puerto) {
+            return Err(format!(
+                "el programa no tiene permiso para escuchar en el puerto {puerto}; agrégalo en \
+                 quetzal.json: \"permisos\": {{\"red\": {{\"habilitado\": true, \"servidor\": \
+                 true, \"puertos\": [{puerto}]}}}}"
+            ));
+        }
+        Ok(())
     }
 
     /// Verifica acceso de lectura a una ruta.

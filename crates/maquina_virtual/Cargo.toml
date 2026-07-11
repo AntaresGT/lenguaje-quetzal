@@ -19,3 +19,6 @@ serde_json = { workspace = true }
 
 # Tablas ordenadas para objetos y módulos cargados.
 indexmap = { workspace = true }
+
+# Runtime asincrónico del bucle de eventos (E/S en el fondo, ver bucle_eventos).
+tokio = { workspace = true }

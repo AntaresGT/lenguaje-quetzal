@@ -6,12 +6,17 @@
 //! error claro) y el tipo `número` usa decimales exactos
 //! (`0.1 + 0.2 == 0.3`).
 
+pub mod bucle_eventos;
 pub mod errores;
 pub mod nativos;
 pub mod valores;
 pub mod vm;
 
+pub use bucle_eventos::{BucleEventos, CargaNativa, ManijaBucle, Mensaje};
 pub use errores::{DatosExcepcion, Fallo};
-pub use nativos::{FuncionNativa, RegistroNativos, normalizar_nombre};
-pub use valores::{DatosInstanciaNativa, Valor, Variable, texto_de_valor};
+pub use nativos::{FuncionNativa, FuncionNativaConVm, RegistroNativos, normalizar_nombre};
+pub use valores::{
+    DatosInstanciaNativa, EstadoTareaNativa, Valor, Variable, bytes_de_bits, carga_a_valor,
+    instancia_bits_desde, texto_de_valor, valor_a_carga,
+};
 pub use vm::Vm;

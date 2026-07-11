@@ -1,0 +1,53 @@
+// ============================================================================
+// red-redsocket-servidor: ServidorRs con eco de mensajes
+// ============================================================================
+//
+// RedSocket (Rs) es el equivalente en español de WebSocket: el nombre de
+// los tipos de esta API está en español (ServidorRs/ClienteRs/ConexionRs),
+// pero el esquema de la URL sigue siendo 'ws://'/'wss://' porque lo define
+// el protocolo estándar (RFC 6455), no nuestra API.
+//
+// Deja un ServidorRs escuchando en el puerto fijo 8091. Acepta muchas
+// conexiones: cada mensaje que llega se responde con su eco. Pruébalo con
+// 'red-redsocket-cliente' desde otra terminal.
+//
+// Nota: 'quetzal/red' no tiene una variante '_asincrona' de ClienteRs (el
+// cliente RedSocket ya usa internamente el runtime asincrónico del bucle de
+// eventos para todos sus métodos), así que aquí no hace falta separar
+// "servidor síncrono/asincrónico": solo existe esta forma.
+//
+// Requiere en quetzal.json: "red": { "habilitado": true, "servidor": true }
+
+// Servidor RedSocket (ServidorRs, equivalente a WebSocketServer) y la
+// conexión que reciben los manejadores (ConexionRs, equivalente a
+// WebSocketConnection).
+importar { ServidorRs, ConexionRs } desde "quetzal/red"
+
+ServidorRs servidor = nuevo ServidorRs() // instancia sin manejadores ni puerto todavía
+
+// Se invoca una sola vez por cada conexión nueva aceptada (antes de que
+// llegue ningún mensaje).
+vacio manejar_conexion(ConexionRs conexion) {
+    consola.mostrar("[RedSocket] nueva conexión aceptada")
+}
+
+// Se invoca por cada mensaje de texto o binario recibido en cualquier
+// conexión abierta: responde el eco sin cerrar nada, para poder seguir
+// mandando más mensajes por la misma conexión.
+vacio manejar_mensaje(ConexionRs conexion, texto mensaje) {
+    consola.mostrar(t"[RedSocket] mensaje recibido: {mensaje}") // registra lo que llegó
+    conexion.enviar_texto(t"eco: {mensaje}")                     // responde con el eco
+}
+
+servidor.al_conectar(manejar_conexion) // registra el manejador de conexión (por referencia)
+servidor.al_mensaje(manejar_mensaje)   // registra el manejador de mensaje (por referencia)
+servidor.escuchar(8091)                // abre el socket en el puerto fijo 8091
+
+consola.mostrar_informacion(t"Servidor RedSocket escuchando en 127.0.0.1:{servidor.puerto()}")
+consola.mostrar_informacion("Ctrl+C para detenerlo. Pruébalo desde otra terminal con:")
+consola.mostrar("  quetzal ejecutar ejemplos/red-redsocket-cliente")
+
+// El motor mantiene vivo el bucle de eventos después de aquí (como el event
+// loop de Node.js) mientras 'servidor' siga escuchando: este script nunca
+// llama a 'servidor.detener()', así que sigue aceptando conexiones hasta
+// que se cancele manualmente (Ctrl+C).

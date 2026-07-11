@@ -1,0 +1,29 @@
+// ============================================================================
+// red-redsocket-cliente: ClienteRs enviando y recibiendo mensajes
+// ============================================================================
+//
+// RedSocket (Rs) es el equivalente en español de WebSocket: ClienteRs es
+// nuestro nombre para el tipo que en inglés se conoce como WebSocketClient.
+// El esquema de la URL sigue siendo 'ws://'/'wss://' porque lo define el
+// protocolo estándar (RFC 6455), no nuestra API.
+//
+// Ejecuta primero 'red-redsocket-servidor' (deja un ServidorRs en el puerto
+// 8091) y luego, en otra terminal, este archivo:
+//   quetzal ejecutar ejemplos/red-redsocket-cliente
+
+importar { ClienteRs } desde "quetzal/red" // cliente RedSocket (ClienteRs = WebSocketClient)
+
+ClienteRs plantilla = nuevo ClienteRs()                         // instancia sin conectar todavía
+ClienteRs conexion = plantilla.conectar("ws://127.0.0.1:8091/") // hace el handshake; devuelve una instancia nueva ya conectada
+
+conexion.enviar_texto("hola desde el cliente") // envía un marco de texto por el RedSocket
+texto respuesta = conexion.recibir()           // bloquea hasta que llega el marco de eco del servidor
+conexion.cerrar()                              // cierra la conexión RedSocket, ya no se necesita
+
+consola.mostrar(t"Respuesta del servidor RedSocket: {respuesta}")
+
+si (respuesta == "eco: hola desde el cliente") {
+    consola.mostrar_informacion("RedSocket: verificación exitosa.")
+} sino {
+    consola.mostrar_error("RedSocket: la respuesta no coincide con lo esperado.")
+}

@@ -1,0 +1,38 @@
+// ============================================================================
+// red-tcp-cliente-asincrono: Socket TCP con '_asincrono' + 'esperar'
+// ============================================================================
+//
+// Ejecuta primero 'red-tcp-servidor' (deja un ServidorSocket en el puerto
+// 8090) y luego, en otra terminal, este archivo:
+//   quetzal ejecutar ejemplos/red-tcp-cliente-asincrono
+//
+// 'conectar_asincrono' y 'recibir_bits_asincrono' devuelven una tarea nativa
+// que se resuelve con 'esperar': mientras se espera, el bucle de eventos
+// sigue bombeado (no se bloquea el hilo de la VM). 'enviar_texto' sí es
+// síncrono, pero como solo escribe en el búfer del sistema operativo (sin
+// esperar nada del otro lado) no hace falta una variante asincrónica.
+
+// Bits: 'recibir_bits_asincrono' siempre devuelve binario, aunque el
+// servidor haya mandado texto (por eso se decodifica con '.a_texto()').
+importar { Socket } desde "quetzal/red"
+importar { Bits } desde "quetzal/bits"
+
+Socket plantilla = nuevo Socket() // instancia sin conectar todavía
+
+// Conecta sin bloquear el hilo de la VM mientras se espera el handshake TCP.
+Socket conexion = esperar plantilla.conectar_asincrono("127.0.0.1", 8090)
+
+conexion.enviar_texto("hola desde el cliente asincrono\n") // envía la línea (síncrono: no hace falta esperar)
+
+// Recibe hasta 256 bytes sin bloquear el hilo de la VM mientras se espera.
+Bits datos_recibidos = esperar conexion.recibir_bits_asincrono(256)
+texto respuesta = datos_recibidos.a_texto().recortar() // decodifica y quita el salto de línea final
+conexion.cerrar()                                       // cierra el socket, ya no se necesita
+
+consola.mostrar(t"Respuesta del servidor TCP: {respuesta}")
+
+si (respuesta == "eco: hola desde el cliente asincrono") {
+    consola.mostrar_informacion("Cliente TCP asincrónico: verificación exitosa.")
+} sino {
+    consola.mostrar_error("Cliente TCP asincrónico: la respuesta no coincide con lo esperado.")
+}

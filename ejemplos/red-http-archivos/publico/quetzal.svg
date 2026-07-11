@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+    <circle cx="60" cy="60" r="56" fill="#0b6e4f" />
+    <circle cx="60" cy="60" r="56" fill="none" stroke="#f4c542" stroke-width="4" />
+    <text x="60" y="68" font-size="14" font-family="sans-serif" fill="#f4c542" text-anchor="middle">Quetzal</text>
+</svg>

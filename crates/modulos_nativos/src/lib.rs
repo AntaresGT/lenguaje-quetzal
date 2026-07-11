@@ -50,6 +50,19 @@ pub fn modulo_de_tipo_exportado(modulo: &str, simbolo_normalizado: &str) -> Opti
     match (modulo, simbolo_normalizado) {
         ("sistema_archivos", "archivo") => Some("archivo"),
         ("sistema_archivos", "ruta") => Some("ruta"),
+        ("red", "clientehttp") => Some("clientehttp"),
+        ("red", "respuestahttp") => Some("clientehttp"),
+        ("red", "servidorhttp") => Some("servidorhttp"),
+        ("red", "peticionhttp") => Some("servidorhttp"),
+        ("red", "respuestaservidor") => Some("respuestas"),
+        ("red", "respuestas") => Some("respuestas"),
+        ("red", "socket") => Some("socket"),
+        ("red", "servidorsocket") => Some("servidorsocket"),
+        ("red", "conexionsocket") => Some("servidorsocket"),
+        ("red", "socketudp") => Some("socketudp"),
+        ("red", "clienters") => Some("clienters"),
+        ("red", "servidorrs") => Some("servidorrs"),
+        ("red", "conexionrs") => Some("servidorrs"),
         _ => None,
     }
 }

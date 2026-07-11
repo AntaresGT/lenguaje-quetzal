@@ -19,6 +19,8 @@ pub enum TipoSemantico {
         parametros: Vec<TipoSemantico>,
         retorno: Box<TipoSemantico>,
     },
+    /// Referencia invocable sin firma estática conocida (`funcion`).
+    FuncionDinamica,
     /// El literal `nulo`: asignable a cualquier tipo.
     Nulo,
     /// Tipo que no puede determinarse estáticamente (módulos nativos,
@@ -41,6 +43,9 @@ impl TipoSemantico {
             Tipo::Lista(Some(interior)) => {
                 TipoSemantico::Lista(Some(Box::new(TipoSemantico::desde_ast(interior))))
             }
+            Tipo::Nombrado(nombre) if nombre.eq_ignore_ascii_case("funcion") => {
+                TipoSemantico::FuncionDinamica
+            }
             Tipo::Nombrado(nombre) => TipoSemantico::Objeto(nombre.clone()),
         }
     }
@@ -57,6 +62,9 @@ impl TipoSemantico {
             (TipoSemantico::Lista(_), TipoSemantico::Lista(None)) => true,
             (TipoSemantico::Lista(None), TipoSemantico::Lista(_)) => true,
             (TipoSemantico::Lista(Some(a)), TipoSemantico::Lista(Some(b))) => a.es_asignable_a(b),
+            (TipoSemantico::Funcion { .. }, TipoSemantico::FuncionDinamica)
+            | (TipoSemantico::FuncionDinamica, TipoSemantico::Funcion { .. })
+            | (TipoSemantico::FuncionDinamica, TipoSemantico::FuncionDinamica) => true,
             (a, b) => a == b,
         }
     }
@@ -81,6 +89,7 @@ impl TipoSemantico {
             TipoSemantico::Lista(Some(interior)) => format!("lista<{}>", interior.nombre()),
             TipoSemantico::Objeto(nombre) => nombre.clone(),
             TipoSemantico::Funcion { retorno, .. } => format!("función -> {}", retorno.nombre()),
+            TipoSemantico::FuncionDinamica => "funcion".to_string(),
             TipoSemantico::Nulo => "nulo".to_string(),
             TipoSemantico::Desconocido => "desconocido".to_string(),
         }

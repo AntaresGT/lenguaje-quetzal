@@ -13,14 +13,15 @@
 //!
 //! - `ClienteRs`: `conectar(url)` (permiso de cliente), `enviar_texto`,
 //!   `enviar_bits`, `recibir()` (texto, `Bits` o `nulo` si el otro lado
-//!   cerró la conexión), `cerrar()`.
+//!   cerró la conexión), `enviar_ping`, `enviar_pong`, `esta_conectado` y
+//!   `cerrar()`.
 //! - `ServidorRs`: `escuchar(puerto)` (permiso de servidor), con dos
 //!   manejadores por referencia: `al_conectar(manejador)` se invoca una vez
 //!   por conexión nueva con `manejador(ConexionRs conexion)`; `al_mensaje`
 //!   se invoca por cada mensaje recibido con
 //!   `manejador(ConexionRs conexion, mensaje)` (`mensaje` es texto o
-//!   `Bits`). `ConexionRs` comparte `enviar_texto`/`enviar_bits`/`cerrar`
-//!   con `ClienteRs`. `detener()` para poder testear.
+//!   `Bits`). `ConexionRs` comparte envío, marcos de control, estado y
+//!   cierre con `ClienteRs`. `detener()` para poder testear.
 //!
 //! Arquitectura: cada conexión (cliente o aceptada por un servidor) se
 //! separa en mitad de escritura y mitad de lectura (`futures_util::split`).
@@ -131,8 +132,7 @@ fn quitar_lector(registro: &RegistroLectores, id: u64) {
 /// RedSocket, para el chequeo de permisos de cliente. El esquema sigue
 /// siendo `ws://`/`wss://`: lo define el protocolo (RFC 6455), no esta API.
 fn analizar_url_rs(funcion: &str, url_texto: &str) -> Result<(url::Url, String, u16), Fallo> {
-    let url = url::Url::parse(url_texto)
-        .map_err(|causa| error("E0406", format!("'{funcion}': URL inválida '{url_texto}': {causa}")))?;
+    let url = url::Url::parse(url_texto).map_err(|causa| error("E0406", format!("'{funcion}': URL inválida '{url_texto}': {causa}")))?;
     match url.scheme() {
         "ws" | "wss" => {}
         otro => {
@@ -278,8 +278,9 @@ fn metodo_enviar_bits(tipo: &'static str, escritores: &RegistroEscritores) -> ma
     })
 }
 
-fn metodo_recibir(lectores: &RegistroLectores) -> maquina_virtual::FuncionNativaConVm {
+fn metodo_recibir(escritores: &RegistroEscritores, lectores: &RegistroLectores) -> maquina_virtual::FuncionNativaConVm {
     const F: &str = "ClienteRs.recibir";
+    let escritores = Arc::clone(escritores);
     let lectores = Arc::clone(lectores);
     Box::new(move |vm, argumentos| {
         exigir_aridad(F, &argumentos[1..], 0)?;
@@ -303,9 +304,56 @@ fn metodo_recibir(lectores: &RegistroLectores) -> maquina_virtual::FuncionNativa
         });
         match resultado {
             Ok(Some(valor)) => Ok(valor),
-            Ok(None) => Ok(Valor::Nulo),
+            Ok(None) => {
+                quitar_lector(&lectores, id);
+                if let Some(escritor) = quitar_escritor(&escritores, id) {
+                    cerrar_escritor_async(vm, &escritor);
+                }
+                instancia.datos.borrow_mut().insert("id".to_string(), Valor::Nulo);
+                Ok(Valor::Nulo)
+            }
             Err(causa) => Err(error_rs(format!("no se pudo recibir: {causa}"))),
         }
+    })
+}
+
+fn metodo_esta_conectado(tipo: &'static str, escritores: &RegistroEscritores) -> impl Fn(&[Valor]) -> Result<Valor, Fallo> + 'static {
+    let escritores = Arc::clone(escritores);
+    move |argumentos| {
+        let funcion = &format!("{tipo}.esta_conectado");
+        exigir_aridad(funcion, &argumentos[1..], 0)?;
+        let instancia = receptor_con_tipo(funcion, argumentos, tipo)?;
+        let Some(Valor::Entero(id)) = instancia.datos.borrow().get("id").cloned() else {
+            return Ok(Valor::Log(false));
+        };
+        let conectado = escritores
+            .lock()
+            .map_err(|_| error_rs("el registro de conexiones RedSocket está dañado"))?
+            .contains_key(&(id as u64));
+        Ok(Valor::Log(conectado))
+    }
+}
+
+fn metodo_enviar_control(tipo: &'static str, escritores: &RegistroEscritores, ping: bool) -> maquina_virtual::FuncionNativaConVm {
+    let escritores = Arc::clone(escritores);
+    Box::new(move |vm, argumentos| {
+        let nombre = if ping { "enviar_ping" } else { "enviar_pong" };
+        let funcion = &format!("{tipo}.{nombre}");
+        exigir_aridad(funcion, &argumentos[1..], 0)?;
+        let instancia = receptor_con_tipo(funcion, argumentos, tipo)?;
+        let id = id_de_instancia(funcion, &instancia)?;
+        let escritor = obtener_escritor(&escritores, id)?;
+        let mensaje = if ping {
+            Message::Ping(Vec::new().into())
+        } else {
+            Message::Pong(Vec::new().into())
+        };
+        vm.bucle()
+            .manija()
+            .runtime()
+            .block_on(async { escritor.lock().await.send(mensaje).await })
+            .map_err(|causa| error_rs(format!("no se pudo enviar el marco de control: {causa}")))?;
+        Ok(Valor::Nulo)
     })
 }
 
@@ -392,7 +440,12 @@ fn metodo_al_conectar(argumentos: &[Valor]) -> Result<Valor, Fallo> {
     const F: &str = "ServidorRs.al_conectar";
     exigir_aridad(F, &argumentos[1..], 1)?;
     let instancia = receptor_con_tipo(F, argumentos, TIPO_SERVIDOR_RS)?;
-    let manejador = exigir_manejador(F, argumentos.get(1).ok_or_else(|| error("E0210", format!("'{F}' necesita al menos 1 argumento")))?)?;
+    let manejador = exigir_manejador(
+        F,
+        argumentos
+            .get(1)
+            .ok_or_else(|| error("E0210", format!("'{F}' necesita al menos 1 argumento")))?,
+    )?;
     instancia.datos.borrow_mut().insert("manejador_conectar".to_string(), manejador);
     Ok(Valor::Nulo)
 }
@@ -401,7 +454,12 @@ fn metodo_al_mensaje(argumentos: &[Valor]) -> Result<Valor, Fallo> {
     const F: &str = "ServidorRs.al_mensaje";
     exigir_aridad(F, &argumentos[1..], 1)?;
     let instancia = receptor_con_tipo(F, argumentos, TIPO_SERVIDOR_RS)?;
-    let manejador = exigir_manejador(F, argumentos.get(1).ok_or_else(|| error("E0210", format!("'{F}' necesita al menos 1 argumento")))?)?;
+    let manejador = exigir_manejador(
+        F,
+        argumentos
+            .get(1)
+            .ok_or_else(|| error("E0210", format!("'{F}' necesita al menos 1 argumento")))?,
+    )?;
     instancia.datos.borrow_mut().insert("manejador_mensaje".to_string(), manejador);
     Ok(Valor::Nulo)
 }
@@ -457,13 +515,23 @@ fn despachar_evento(
 
     match evento.as_str() {
         "conectar" => {
-            let manejador = instancia_servidor.datos.borrow().get("manejador_conectar").cloned().unwrap_or(Valor::Nulo);
+            let manejador = instancia_servidor
+                .datos
+                .borrow()
+                .get("manejador_conectar")
+                .cloned()
+                .unwrap_or(Valor::Nulo);
             if let Valor::Funcion(funcion, entorno) = manejador {
                 let _ = vm.llamar_funcion(&funcion, &entorno, vec![conexion_valor], None, None);
             }
         }
         "mensaje" => {
-            let manejador = instancia_servidor.datos.borrow().get("manejador_mensaje").cloned().unwrap_or(Valor::Nulo);
+            let manejador = instancia_servidor
+                .datos
+                .borrow()
+                .get("manejador_mensaje")
+                .cloned()
+                .unwrap_or(Valor::Nulo);
             if let Valor::Funcion(funcion, entorno) = manejador {
                 let mensaje_valor = match mapa.get("datos") {
                     Some(CargaNativa::Texto(texto)) => Valor::texto(texto.clone()),
@@ -481,7 +549,13 @@ fn despachar_evento(
 /// Tarea de fondo por conexión aceptada: hace el *handshake* RedSocket,
 /// avisa al hilo de la VM de la conexión nueva y luego reenvía cada mensaje
 /// entrante como un evento más, hasta que la conexión se cierra.
-async fn manejar_conexion_rs(tcp: TcpStream, id_servidor: u64, escritores: RegistroEscritores, contador: Arc<AtomicU64>, manija: ManijaBucle) {
+async fn manejar_conexion_rs(
+    tcp: TcpStream,
+    id_servidor: u64,
+    escritores: RegistroEscritores,
+    contador: Arc<AtomicU64>,
+    manija: ManijaBucle,
+) {
     let flujo = MaybeTlsStream::Plain(tcp);
     let Ok(rs) = tokio_tungstenite::accept_async(flujo).await else {
         return;
@@ -492,10 +566,14 @@ async fn manejar_conexion_rs(tcp: TcpStream, id_servidor: u64, escritores: Regis
         return;
     }
 
-    enviar_evento(&manija, id_servidor, CargaNativa::Mapa(vec![
-        ("evento".to_string(), CargaNativa::Texto("conectar".to_string())),
-        ("id_conexion".to_string(), CargaNativa::Entero(id_conexion as i64)),
-    ]));
+    enviar_evento(
+        &manija,
+        id_servidor,
+        CargaNativa::Mapa(vec![
+            ("evento".to_string(), CargaNativa::Texto("conectar".to_string())),
+            ("id_conexion".to_string(), CargaNativa::Entero(id_conexion as i64)),
+        ]),
+    );
 
     while let Some(resultado) = lectura.next().await {
         let Ok(mensaje) = resultado else { break };
@@ -505,17 +583,25 @@ async fn manejar_conexion_rs(tcp: TcpStream, id_servidor: u64, escritores: Regis
             Message::Close(_) => break,
             _ => continue,
         };
-        enviar_evento(&manija, id_servidor, CargaNativa::Mapa(vec![
-            ("evento".to_string(), CargaNativa::Texto("mensaje".to_string())),
-            ("id_conexion".to_string(), CargaNativa::Entero(id_conexion as i64)),
-            ("datos".to_string(), datos),
-        ]));
+        enviar_evento(
+            &manija,
+            id_servidor,
+            CargaNativa::Mapa(vec![
+                ("evento".to_string(), CargaNativa::Texto("mensaje".to_string())),
+                ("id_conexion".to_string(), CargaNativa::Entero(id_conexion as i64)),
+                ("datos".to_string(), datos),
+            ]),
+        );
     }
 
-    enviar_evento(&manija, id_servidor, CargaNativa::Mapa(vec![
-        ("evento".to_string(), CargaNativa::Texto("cerrar".to_string())),
-        ("id_conexion".to_string(), CargaNativa::Entero(id_conexion as i64)),
-    ]));
+    enviar_evento(
+        &manija,
+        id_servidor,
+        CargaNativa::Mapa(vec![
+            ("evento".to_string(), CargaNativa::Texto("cerrar".to_string())),
+            ("id_conexion".to_string(), CargaNativa::Entero(id_conexion as i64)),
+        ]),
+    );
 }
 
 fn enviar_evento(manija: &ManijaBucle, id_servidor: u64, datos: CargaNativa) {
@@ -671,15 +757,18 @@ pub fn registrar(registro: &mut RegistroNativos, guardian: &Rc<GuardianPermisos>
         &format!("{TIPO_CLIENTE_RS}.conectar"),
         metodo_conectar(guardian, &escritores, &lectores, &contador),
     );
-    registro.registrar_funcion_con_vm(&format!("{TIPO_CLIENTE_RS}.recibir"), metodo_recibir(&lectores));
-    registro.registrar_funcion_con_vm(
-        &format!("{TIPO_CLIENTE_RS}.cerrar"),
-        metodo_cerrar_cliente(&escritores, &lectores),
-    );
+    registro.registrar_funcion_con_vm(&format!("{TIPO_CLIENTE_RS}.recibir"), metodo_recibir(&escritores, &lectores));
+    registro.registrar_funcion_con_vm(&format!("{TIPO_CLIENTE_RS}.cerrar"), metodo_cerrar_cliente(&escritores, &lectores));
 
     for tipo in [TIPO_CLIENTE_RS, TIPO_CONEXION_RS] {
         registro.registrar_funcion_con_vm(&format!("{tipo}.enviar_texto"), metodo_enviar_texto(tipo, &escritores));
         registro.registrar_funcion_con_vm(&format!("{tipo}.enviar_bits"), metodo_enviar_bits(tipo, &escritores));
+        registro.registrar_funcion(
+            &format!("{tipo}.esta_conectado"),
+            Box::new(metodo_esta_conectado(tipo, &escritores)),
+        );
+        registro.registrar_funcion_con_vm(&format!("{tipo}.enviar_ping"), metodo_enviar_control(tipo, &escritores, true));
+        registro.registrar_funcion_con_vm(&format!("{tipo}.enviar_pong"), metodo_enviar_control(tipo, &escritores, false));
     }
     registro.registrar_funcion_con_vm(&format!("{TIPO_CONEXION_RS}.cerrar"), metodo_cerrar_conexion(&escritores));
 

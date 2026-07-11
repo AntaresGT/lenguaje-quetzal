@@ -84,6 +84,39 @@ fn entero_global(entorno: &maquina_virtual::valores::EntornoModulo, nombre: &str
     }
 }
 
+fn logico_global(entorno: &maquina_virtual::valores::EntornoModulo, nombre: &str) -> bool {
+    match entorno
+        .globales
+        .borrow()
+        .get(nombre)
+        .unwrap_or_else(|| panic!("debe existir '{nombre}'"))
+        .valor
+    {
+        Valor::Log(valor) => valor,
+        ref otro => panic!("se esperaba un lógico en '{nombre}', llegó {}", otro.nombre_tipo()),
+    }
+}
+
+#[test]
+fn socket_udp_deberia_exponer_estado_direccion_y_difusion() {
+    let entorno = ejecutar_con_permiso_completo(
+        "importar { SocketUdp } desde \"quetzal/red\"\n\
+         SocketUdp socket = nuevo SocketUdp()\n\
+         log antes = socket.esta_enlazado()\n\
+         socket.enlazar(0)\n\
+         log durante = socket.esta_enlazado()\n\
+         jsn direccion = socket.direccion_local()\n\
+         entero puerto_local = direccion.puerto\n\
+         socket.permitir_difusion(verdadero)\n\
+         socket.cerrar()\n\
+         log despues = socket.esta_enlazado()\n",
+    );
+    assert!(!logico_global(&entorno, "antes"));
+    assert!(logico_global(&entorno, "durante"));
+    assert!(entero_global(&entorno, "puerto_local") > 0);
+    assert!(!logico_global(&entorno, "despues"));
+}
+
 #[test]
 fn socket_udp_deberia_enviar_y_recibir_texto_sincrono() {
     let entorno = ejecutar_con_permiso_completo(

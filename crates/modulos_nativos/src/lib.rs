@@ -54,6 +54,7 @@ pub fn modulo_de_tipo_exportado(modulo: &str, simbolo_normalizado: &str) -> Opti
         ("red", "respuestahttp") => Some("clientehttp"),
         ("red", "servidorhttp") => Some("servidorhttp"),
         ("red", "peticionhttp") => Some("servidorhttp"),
+        ("red", "partemultiparte") => Some("servidorhttp"),
         ("red", "respuestaservidor") => Some("respuestas"),
         ("red", "respuestas") => Some("respuestas"),
         ("red", "socket") => Some("socket"),
@@ -63,6 +64,7 @@ pub fn modulo_de_tipo_exportado(modulo: &str, simbolo_normalizado: &str) -> Opti
         ("red", "clienters") => Some("clienters"),
         ("red", "servidorrs") => Some("servidorrs"),
         ("red", "conexionrs") => Some("servidorrs"),
+        ("red", "enrutador") => Some("enrutador"),
         _ => None,
     }
 }

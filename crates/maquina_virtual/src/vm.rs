@@ -24,7 +24,7 @@ const LIMITE_PROFUNDIDAD: usize = 200;
 /// recibe la VM, el identificador del recurso concreto y los datos de la
 /// solicitud, y devuelve la carga de respuesta. Lo registra el módulo nativo
 /// correspondiente la primera vez que se usa (ver [`Vm::registrar_despachador`]).
-type Despachador = Box<dyn Fn(&mut Vm, u64, CargaNativa) -> CargaNativa>;
+type Despachador = Rc<dyn Fn(&mut Vm, u64, CargaNativa) -> CargaNativa>;
 
 /// Máquina virtual del Lenguaje Quetzal.
 pub struct Vm {
@@ -88,21 +88,21 @@ impl Vm {
         self.despachadores
             .borrow_mut()
             .entry(servicio.into())
-            .or_insert_with(|| Box::new(funcion));
+            .or_insert_with(|| Rc::new(funcion));
     }
 
     /// Atiende una solicitud entrante despachándola al servicio registrado.
     /// Devuelve `CargaNativa::Nula` si no hay despachador para ese servicio.
-    fn despachar_solicitud(&mut self, servicio: &str, id_recurso: u64, datos: CargaNativa) -> CargaNativa {
-        let Some(funcion) = self.despachadores.borrow_mut().remove(servicio) else {
+    fn despachar_solicitud(
+        &mut self,
+        servicio: &str,
+        id_recurso: u64,
+        datos: CargaNativa,
+    ) -> CargaNativa {
+        let Some(funcion) = self.despachadores.borrow().get(servicio).cloned() else {
             return CargaNativa::Nula;
         };
-        let resultado = funcion(self, id_recurso, datos);
-        self.despachadores
-            .borrow_mut()
-            .entry(servicio.to_string())
-            .or_insert(funcion);
-        resultado
+        funcion(self, id_recurso, datos)
     }
 
     /// Bombea el bucle de eventos hasta que la tarea nativa `id` se resuelve,
@@ -171,7 +171,9 @@ impl Vm {
         while self.bucle.hay_trabajo_activo() {
             match self.bucle.recibir_con_limite(Duration::from_millis(200)) {
                 Some(Mensaje::TareaLista { id, resultado }) => {
-                    self.resultados_pendientes.borrow_mut().insert(id, resultado);
+                    self.resultados_pendientes
+                        .borrow_mut()
+                        .insert(id, resultado);
                 }
                 Some(Mensaje::Solicitud {
                     servicio,
@@ -1247,10 +1249,7 @@ impl Vm {
                 if !self.nativos.existe_funcion(&clave) {
                     return Err(self.excepcion(
                         "E0201",
-                        format!(
-                            "el objeto '{}' no tiene un método '{nombre}'",
-                            datos.tipo
-                        ),
+                        format!("el objeto '{}' no tiene un método '{nombre}'", datos.tipo),
                         Some(ubicacion),
                     ));
                 }
@@ -1437,6 +1436,10 @@ impl Vm {
                 if let Some(valor) = buscar_atributo_libre(self, &clase, nombre) {
                     return Ok(valor);
                 }
+                if let Some((funcion, entorno)) = buscar_metodo_libre_en_clase(self, &clase, nombre)
+                {
+                    return Ok(Valor::Funcion(funcion, entorno));
+                }
                 Err(self.excepcion(
                     "E0201",
                     format!(
@@ -1446,16 +1449,23 @@ impl Vm {
                     Some(ubicacion),
                 ))
             }
-            Valor::Clase(clase) => buscar_atributo_libre(self, clase, nombre).ok_or_else(|| {
-                self.excepcion(
+            Valor::Clase(clase) => {
+                if let Some(valor) = buscar_atributo_libre(self, clase, nombre) {
+                    return Ok(valor);
+                }
+                if let Some((funcion, entorno)) = buscar_metodo_libre_en_clase(self, clase, nombre)
+                {
+                    return Ok(Valor::Funcion(funcion, entorno));
+                }
+                Err(self.excepcion(
                     "E0201",
                     format!(
-                        "el objeto '{}' no tiene un atributo libre '{nombre}'",
+                        "el objeto '{}' no tiene un miembro libre '{nombre}'",
                         clase.compilado.nombre
                     ),
                     Some(ubicacion),
-                )
-            }),
+                ))
+            }
             Valor::ModuloNativo(modulo) => {
                 let clave = format!("{modulo}.{nombre}");
                 if let Some(constante) = self.nativos.buscar_constante(&clave) {
@@ -1762,6 +1772,37 @@ fn buscar_metodo_en_clase(
     {
         if let Some(clase_padre) = buscar_clase_por_nombre(vm, clase, nombre_padre)
             && let Some(encontrado) = buscar_metodo_en_clase(vm, &clase_padre, nombre)
+        {
+            return Some(encontrado);
+        }
+    }
+    None
+}
+
+/// Busca un método libre por referencia, incluyendo la cadena de herencia.
+/// Los métodos de instancia no pueden convertirse en función sin capturar
+/// un receptor y por eso quedan excluidos.
+fn buscar_metodo_libre_en_clase(
+    vm: &Vm,
+    clase: &Rc<ClaseObjeto>,
+    nombre: &str,
+) -> Option<(Rc<FuncionCompilada>, Rc<EntornoModulo>)> {
+    if let Some(metodo) = clase
+        .compilado
+        .metodos
+        .iter()
+        .find(|metodo| metodo.funcion.nombre == nombre && metodo.libre)
+    {
+        return Some((Rc::new(metodo.funcion.clone()), Rc::clone(&clase.entorno)));
+    }
+    for nombre_padre in clase
+        .compilado
+        .padres
+        .iter()
+        .chain(clase.compilado.extiende_como.iter())
+    {
+        if let Some(clase_padre) = buscar_clase_por_nombre(vm, clase, nombre_padre)
+            && let Some(encontrado) = buscar_metodo_libre_en_clase(vm, &clase_padre, nombre)
         {
             return Some(encontrado);
         }

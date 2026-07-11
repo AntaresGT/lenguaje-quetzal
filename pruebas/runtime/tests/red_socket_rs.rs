@@ -93,6 +93,19 @@ fn entero_global(entorno: &maquina_virtual::valores::EntornoModulo, nombre: &str
     }
 }
 
+fn logico_global(entorno: &maquina_virtual::valores::EntornoModulo, nombre: &str) -> bool {
+    match entorno
+        .globales
+        .borrow()
+        .get(nombre)
+        .unwrap_or_else(|| panic!("debe existir '{nombre}'"))
+        .valor
+    {
+        Valor::Log(valor) => valor,
+        ref otro => panic!("se esperaba un lógico en '{nombre}', llegó {}", otro.nombre_tipo()),
+    }
+}
+
 // =====================================================================
 // ClienteRs: pruebas contra un servidor WebSocket crudo (tungstenite síncrono)
 // =====================================================================
@@ -105,7 +118,9 @@ fn iniciar_servidor_rs_eco() -> u16 {
     let puerto = escucha.local_addr().expect("dirección local").port();
     thread::spawn(move || {
         if let Ok((flujo, _)) = escucha.accept() {
-            let Ok(mut socket) = tungstenite::accept(flujo) else { return };
+            let Ok(mut socket) = tungstenite::accept(flujo) else {
+                return;
+            };
             loop {
                 match socket.read() {
                     Ok(Message::Text(texto)) => {
@@ -130,16 +145,23 @@ fn cliente_rs_deberia_conectarse_y_hacer_eco_de_texto_y_binario() {
         "importar {{ ClienteRs }} desde \"quetzal/red\"\n\
          importar {{ Bits }} desde \"quetzal/bits\"\n\
          ClienteRs base = nuevo ClienteRs()\n\
+         log base_conectada = base.esta_conectado()\n\
          ClienteRs cliente = base.conectar(\"ws://127.0.0.1:{puerto}/\")\n\
+         log conectada = cliente.esta_conectado()\n\
+         cliente.enviar_ping()\n\
          cliente.enviar_texto(\"hola rs\")\n\
          texto respuesta = cliente.recibir()\n\
          cliente.enviar_bits(Bits.desde_hex(\"48656c6c6f\"))\n\
          Bits eco = cliente.recibir()\n\
          texto eco_hex = eco.a_hex()\n\
-         cliente.cerrar()\n"
+         cliente.cerrar()\n\
+         log cerrada = cliente.esta_conectado()\n"
     ));
+    assert!(!logico_global(&entorno, "base_conectada"));
+    assert!(logico_global(&entorno, "conectada"));
     assert_eq!(texto_global(&entorno, "respuesta"), "eco:hola rs");
     assert_eq!(texto_global(&entorno, "eco_hex"), "48656c6c6f");
+    assert!(!logico_global(&entorno, "cerrada"));
 }
 
 #[test]

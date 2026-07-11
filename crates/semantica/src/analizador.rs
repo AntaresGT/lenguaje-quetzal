@@ -1225,6 +1225,7 @@ impl Analizador {
                 }
                 *retorno
             }
+            TipoSemantico::FuncionDinamica => TipoSemantico::Desconocido,
             TipoSemantico::Desconocido => TipoSemantico::Desconocido,
             otro => {
                 self.error(

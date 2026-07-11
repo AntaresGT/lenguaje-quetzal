@@ -96,6 +96,19 @@ fn entero_global(entorno: &maquina_virtual::valores::EntornoModulo, nombre: &str
     }
 }
 
+fn logico_global(entorno: &maquina_virtual::valores::EntornoModulo, nombre: &str) -> bool {
+    match entorno
+        .globales
+        .borrow()
+        .get(nombre)
+        .unwrap_or_else(|| panic!("debe existir '{nombre}'"))
+        .valor
+    {
+        Valor::Log(valor) => valor,
+        ref otro => panic!("se esperaba un lógico en '{nombre}', llegó {}", otro.nombre_tipo()),
+    }
+}
+
 // =====================================================================
 // Contraparte cruda de prueba: servidor TCP de eco con std::net
 // =====================================================================
@@ -147,6 +160,33 @@ fn socket_deberia_conectarse_y_hacer_eco_sincrono_de_linea_y_bits() {
     ));
     assert_eq!(texto_global(&entorno, "respuesta"), "eco:hola");
     assert_eq!(texto_global(&entorno, "eco_hex"), "48656c6c6f");
+}
+
+#[test]
+fn socket_deberia_exponer_estado_direcciones_y_cierre_parcial() {
+    let puerto = iniciar_servidor_eco(0);
+    let (_vm, entorno) = ejecutar_con_permiso_cliente(&format!(
+        "importar {{ Socket }} desde \"quetzal/red\"\n\
+         Socket base = nuevo Socket()\n\
+         log base_conectada = base.esta_conectado()\n\
+         Socket cliente = base.conectar(\"127.0.0.1\", {puerto})\n\
+         log conectada = cliente.esta_conectado()\n\
+         jsn local = cliente.direccion_local()\n\
+         jsn remota = cliente.direccion_remota()\n\
+         entero puerto_remoto = remota.puerto\n\
+         cliente.sin_demora(verdadero)\n\
+         cliente.enviar_texto(\"estado\\n\")\n\
+         cliente.vaciar()\n\
+         cliente.cerrar_escritura()\n\
+         texto respuesta_estado = cliente.recibir_linea()\n\
+         cliente.cerrar()\n\
+         log cerrada = cliente.esta_conectado()\n"
+    ));
+    assert!(!logico_global(&entorno, "base_conectada"));
+    assert!(logico_global(&entorno, "conectada"));
+    assert_eq!(entero_global(&entorno, "puerto_remoto"), i64::from(puerto));
+    assert_eq!(texto_global(&entorno, "respuesta_estado"), "eco:estado");
+    assert!(!logico_global(&entorno, "cerrada"));
 }
 
 #[test]

@@ -1,0 +1,392 @@
+// ============================================================================
+// red-http-completo: servidor HTTP con TODAS las características de red
+// ============================================================================
+//
+// Este ejemplo demuestra en un solo servidor:
+//   - Constructor con opciones jsn (limite_cuerpo)
+//   - Interceptores globales y de ruta (estilo Express con `siguiente`)
+//   - Manejador global de errores
+//   - Galletas (cookies): fijar, borrar, leer
+//   - Peso del cuerpo + limite_cuerpo (413 si se excede)
+//   - Subida de archivos multipart/form-data + guardado con SistemaArchivos
+//   - Descarga de archivos con Respuestas.archivo (streaming + opciones)
+//   - Enrutador (grupos de rutas) + montar con prefijo
+//   - Eventos de servidor (SSE) con Respuestas.eventos
+//   - Redirecciones con Respuestas.redirigir
+//   - Negociación de contenido (PeticionHttp.acepta / .es)
+//   - Verbos CABEZA, OPCIONES, TODO
+//   - Cliente HTTP con autenticacion_basica + variantes asincronas
+//   - Helpers de respuesta: texto, jsn, bits, error, nada
+//
+// Ejecútalo así:
+//   quetzal ejecutar ejemplos/red-http-completo
+//
+// Luego abre en el navegador:
+//   http://127.0.0.1:8080/
+//
+// Requiere en quetzal.json:
+//   "red": { "habilitado": true, "cliente": true, "servidor": true }
+//   "sistema_archivos": { "habilitado": true, "directorios": [...] }
+
+// --- Importaciones del módulo de red ---
+// ServidorHttp: el servidor HTTP principal con rutas e interceptores.
+// PeticionHttp: la petición que recibe cada manejador de ruta.
+// RespuestaServidor: respuesta configurable (cabeceras, cuerpo, estado).
+// Respuestas: factoría de respuestas (crear, archivo, flujo, eventos, ...).
+// Enrutador: agrupador de rutas que se monta con un prefijo.
+// ClienteHttp: cliente HTTP para hacer peticiones a otros servidores.
+// RespuestaHttp: respuesta que devuelve el ClienteHttp.
+// ParteMultiparte: cada parte de un cuerpo multipart/form-data.
+importar { ServidorHttp, PeticionHttp, RespuestaServidor, Respuestas, Enrutador } desde "quetzal/red" // importa las primitivas del servidor HTTP
+importar { ClienteHttp, RespuestaHttp } desde "quetzal/red" // importa el cliente HTTP y su respuesta
+importar { ParteMultiparte } desde "quetzal/red" // importa el tipo que representa una parte multipart
+
+// --- Importaciones del módulo de sistema de archivos ---
+// SistemaArchivos: funciones libres para leer, escribir, crear directorios.
+// Bits: buffer binario para manejar contenido de archivos como bytes.
+importar { SistemaArchivos } desde "quetzal/sistema_archivos" // importa operaciones de archivos separadas del módulo de red
+importar { Bits } desde "quetzal/bits" // importa el contenedor binario nativo
+
+// --- Crear directorios necesarios para subidas y descargas ---
+// crear_directorio hace un mkdir -p: crea toda la ruta si no existe.
+SistemaArchivos.crear_directorio("subidas")     // carpeta donde se guardan los archivos subidos
+SistemaArchivos.crear_directorio("descargas")   // carpeta donde se guardan las descargas del cliente
+
+// --- Objeto con interceptores libres (estilo Express) ---
+// Los interceptores libres no necesitan instanciar el objeto: se pasan
+// por referencia como `Interceptores.nombre_funcion`.
+objeto Interceptores { // agrupa interceptores reutilizables sin estado
+    publico: // expone sus funciones libres al programa
+        // Interceptor de registro: registra cada petición en consola.
+        // Recibe (peticion, respuesta, siguiente). Debe llamar a
+        // `esperar siguiente(peticion, respuesta)` para continuar la cadena.
+        libre asincrono RespuestaServidor registrar(PeticionHttp peticion, RespuestaServidor respuesta, funcion siguiente) { // declara el interceptor de registro
+            // Lee el método y la ruta de la petición para el log.
+            texto metodo = peticion.metodo()       // obtiene el método HTTP (GET, POST, ...)
+            texto ruta = peticion.ruta()           // obtiene la ruta de la petición
+            consola.mostrar(t"[peticion] {metodo} {ruta}")  // registra en consola
+            // Llama al siguiente interceptor/manejador de la cadena.
+            retornar esperar siguiente(peticion, respuesta) // continúa la cadena y propaga su respuesta
+        } // termina el interceptor de registro
+
+        // Interceptor de autenticación por galleta: verifica que el
+        // cliente envió la galleta "sesion". Si no, cortocircuitúa con 401.
+        libre asincrono RespuestaServidor verificar_sesion(PeticionHttp peticion, RespuestaServidor respuesta, funcion siguiente) { // declara el interceptor de sesión
+            // Lee las galletas de la petición (cabecera Cookie parseada).
+            jsn galletas = peticion.galletas()     // devuelve un jsn con los pares nombre/valor
+            si (galletas.contiene_clave("sesion")) { // comprueba la presencia de una sesión
+                // Si la galleta "sesion" existe, continúa la cadena.
+                retornar esperar siguiente(peticion, respuesta) // autoriza y continúa la cadena
+            } sino { // maneja la ausencia de sesión
+                // Si no existe, cortocircuitúa con una respuesta de error 401.
+                retornar Respuestas.error(401, "no has iniciado sesion") // corta la cadena con estado 401
+            } // termina la decisión de autenticación
+        } // termina el interceptor de sesión
+} // termina el objeto de interceptores
+
+// --- Objeto con manejadores de rutas ---
+// Los manejadores son funciones libres que reciben solo la petición
+// (1 parámetro) y devuelven una respuesta.
+objeto Manejadores { // agrupa los manejadores de las rutas
+    publico: // expone los manejadores al servidor
+        // GET /: página de inicio que muestra links a todas las rutas.
+        libre RespuestaServidor inicio(PeticionHttp peticion) { // declara el manejador de inicio
+            // Negotiación de contenido: si el cliente acepta HTML, responde HTML;
+            // si no, responde JSON. Lee la cabecera Accept directamente.
+            texto accept = peticion.cabecera("accept")  // lee la cabecera Accept (o nulo)
+            si (accept != nulo) { // evita operar sobre una cabecera ausente
+                // Si Accept contiene "text/html", responde HTML.
+                si (accept.contiene("text/html")) { // negocia una representación HTML
+                    retornar Respuestas.texto("<h1>Servidor Quetzal</h1><p>Rutas: /api, /subida, /descarga, /eventos, /redirigir, /galletas</p>") // devuelve la página HTML
+                } // termina la negociación HTML
+            } // termina la comprobación de Accept
+            // Si no acepta HTML, devuelve JSON con la info del servidor.
+            retornar Respuestas.jsn({ nombre: "quetzal", version: "0.0.2", estado: "activo" }) // usa JSON como representación alternativa
+        } // termina el manejador de inicio
+
+        // GET /api: devuelve JSON con información de la petición.
+        libre RespuestaServidor api_info(PeticionHttp peticion) { // declara el manejador de diagnóstico
+            // Lee los parámetros de ruta, consulta y cabeceras.
+            jsn parametros = peticion.parametros()  // parámetros de ruta :nombre
+            jsn consulta = peticion.consulta()      // parámetros de query string ?clave=valor
+            jsn cabeceras = peticion.cabeceras()    // todas las cabeceras HTTP
+            // Devuelve un JSON con toda la información de la petición.
+            retornar Respuestas.jsn({ // construye la respuesta JSON de diagnóstico
+                metodo: peticion.metodo(), // incluye el método recibido
+                ruta: peticion.ruta(), // incluye la ruta normalizada
+                parametros: parametros, // incluye parámetros de ruta
+                consulta: consulta, // incluye parámetros de consulta
+                peso: peticion.peso(),             // peso del cuerpo en bytes
+                cantidad_cabeceras: cabeceras.claves().longitud() // informa cuántas cabeceras distintas llegaron
+            }) // finaliza y devuelve la respuesta JSON
+        } // termina el manejador de diagnóstico
+
+        // POST /subida: recibe un archivo multipart/form-data y lo guarda.
+        libre RespuestaServidor subir_archivo(PeticionHttp peticion) { // declara el manejador de subida
+            // Verifica que el contenido es multipart/form-data.
+            // peticion.es() devuelve el Content-Type si coincide, falso si no, nulo si no hay cuerpo.
+            texto tipo = peticion.es("multipart/form-data")  // verifica Content-Type
+            si (tipo == nulo || tipo == falso) { // rechaza cuerpos ausentes o de tipo incorrecto
+                // Si no es multipart, responde con error 400.
+                retornar Respuestas.error(400, "se espera multipart/form-data") // devuelve un error descriptivo
+            } // termina la validación de Content-Type
+            // Parsea todas las partes del cuerpo multipart.
+            lista<ParteMultiparte> partes = peticion.partes()  // devuelve una lista de ParteMultiparte
+            // Si no hay partes, responde con error 400.
+            si (partes.longitud() == 0) { // valida que exista al menos una parte
+                retornar Respuestas.error(400, "no se recibieron archivos") // informa la subida vacía
+            } // termina la validación de partes
+            // Toma la primera parte (el archivo subido).
+            ParteMultiparte parte = partes[0] // selecciona la primera parte recibida
+            // Obtiene el nombre del archivo original (de Content-Disposition).
+            texto var nombre_archivo = parte.nombre_archivo()  // permite aplicar un nombre seguro cuando el cliente no envía uno
+            si (nombre_archivo == nulo) { // detecta un nombre ausente
+                nombre_archivo = "archivo_sin_nombre"  // nombre por defecto si no viene
+            } // termina la elección del nombre seguro
+            // Guarda los bytes del archivo en la carpeta "subidas" usando
+            // SistemaArchivos.escribir_bits (delegación SOLID: red no escribe
+            // archivos directamente, delega al módulo de sistema de archivos).
+            SistemaArchivos.escribir_bits(t"subidas/{nombre_archivo}", parte.bits()) // delega la persistencia al módulo correcto
+            // Devuelve confirmación con el nombre y tamaño del archivo guardado.
+            retornar Respuestas.jsn({ // crea la confirmación de subida
+                mensaje: "archivo guardado", // describe el resultado
+                nombre: nombre_archivo, // devuelve el nombre utilizado
+                tipo_contenido: parte.tipo_contenido(), // devuelve el tipo declarado
+                bytes: parte.bits().longitud() // devuelve el peso recibido
+            }) // finaliza y devuelve la confirmación
+        } // termina el manejador de subida
+
+        // GET /descarga: sirve un archivo del disco con streaming.
+        libre RespuestaServidor descargar_archivo(PeticionHttp peticion) { // declara el manejador de descarga
+            // Respuestas.archivo transmite el archivo en trozos de 64 KiB
+            // (nunca lo carga completo en memoria), con soporte de Range,
+            // ETag y 304 automático. Opciones: descargar fuerza el
+            // Content-Disposition: attachment (el navegador lo descarga).
+            retornar Respuestas.archivo("publico/notas.txt", { descargar: verdadero }) // transmite el archivo como adjunto
+        } // termina el manejador de descarga
+
+        // GET /estaticos/*: servido por la carpeta estática del servidor
+        // (configurada con servidor.estaticos, no necesita un manejador).
+
+        // GET /eventos: server-sent events (SSE) con Respuestas.eventos.
+        // El generador es una función que devuelve el siguiente evento o
+        // nulo para terminar. El framing `data: ...\n\n` es automático.
+        libre RespuestaServidor eventos(PeticionHttp peticion) { // declara el manejador SSE
+            // Respuestas.eventos crea una respuesta con Content-Type:
+            // text/event-stream y Cache-Control: no-cache. El generador
+            // se llama repetidamente; cada texto devuelto se envía como
+            // un evento `data: texto\n\n`.
+            retornar Respuestas.eventos(generador_eventos) // conecta el generador con el flujo HTTP
+        } // termina el manejador SSE
+
+        // GET /redirigir: redirección a /api con estado 302.
+        libre RespuestaServidor redirigir(PeticionHttp peticion) { // declara el manejador de redirección
+            // Respuestas.redirigir envía una cabecera Location con el URL
+            // y el código de estado indicado (default 302).
+            retornar Respuestas.redirigir("/api", { estado: 302 }) // devuelve Location y estado 302
+        } // termina el manejador de redirección
+
+        // GET /galletas: demuestra fijar y leer galletas.
+        libre RespuestaServidor galletas(PeticionHttp peticion) { // declara el manejador de galletas
+            // Lee las galletas actuales de la petición.
+            jsn actuales = peticion.galletas() // obtiene las galletas recibidas
+            // Crea una respuesta 200 con cuerpo JSON.
+            RespuestaServidor resp = Respuestas.jsn({ galletas_actuales: actuales }) // crea la respuesta base
+            // Fija una nueva galleta "sesion" con opciones: ruta "/", 
+            // solo_http (no accesible desde JavaScript), max_edad 3600s.
+            resp.fijar_galleta("sesion", "activa", { ruta: "/", solo_http: verdadero, max_edad: 3600 }) // agrega la galleta de sesión
+            // Fija otra galleta "visita" para contar visitas.
+            resp.fijar_galleta("visita", "1", { ruta: "/", max_edad: 60 }) // agrega una segunda cabecera Set-Cookie
+            retornar resp // devuelve ambas galletas sin sobrescribirlas
+        } // termina el manejador de galletas
+
+        // GET /borrar-galleta: elimina la galleta "sesion".
+        libre RespuestaServidor borrar_galleta(PeticionHttp peticion) { // declara el manejador de borrado
+            RespuestaServidor resp = Respuestas.texto("galleta eliminada") // crea la respuesta base
+            // borrar_galleta envía Set-Cookie con Max-Age=0 para que el
+            // cliente elimine la galleta. Las opciones de ruta/dominio
+            // deben coincidir con las de fijar_galleta.
+            resp.borrar_galleta("sesion", { ruta: "/" }) // expira la galleta de sesión
+            retornar resp // devuelve la orden de borrado
+        } // termina el manejador de borrado
+
+        // CABEZA /cabeza: responde solo cabeceras, sin cuerpo (HEAD).
+        libre RespuestaServidor cabeza(PeticionHttp peticion) { // declara una respuesta explícita para HEAD
+            // Respuestas.nada crea una respuesta sin cuerpo (como 204).
+            retornar Respuestas.nada(200) // devuelve estado 200 sin cuerpo
+        } // termina el manejador HEAD
+
+        // OPCIONES /opciones: responde con los métodos permitidos (CORS).
+        libre RespuestaServidor opciones(PeticionHttp peticion) { // declara el manejador de preflight
+            RespuestaServidor resp = Respuestas.nada(204) // crea una respuesta sin contenido
+            // Fija cabeceras CORS para permitir peticiones desde otros orígenes.
+            resp.fijar_cabecera("Allow", "GET, POST, PUT, PARCHAR, ELIMINAR, CABEZA, OPCIONES") // anuncia los métodos admitidos
+            resp.fijar_cabecera("Access-Control-Allow-Methods", "GET, POST, PUT, PARCHAR, ELIMINAR") // configura métodos CORS
+            resp.fijar_cabecera("Access-Control-Allow-Headers", "Content-Type, Authorization") // configura cabeceras CORS
+            retornar resp // devuelve la respuesta preflight
+        } // termina el manejador OPTIONS
+} // termina el objeto de manejadores
+
+// --- Función generadora de eventos SSE ---
+// Se llama repetidamente; cada valor devuelto se envía como un trozo
+// del flujo. Devolver nulo termina el flujo. El generador debe incluir
+// el framing `data: ...\n\n` que exige el protocolo SSE.
+entero var contador_eventos = 0  // contador global para los eventos (var = mutable)
+texto generador_eventos() { // declara la fuente incremental de eventos
+    contador_eventos = contador_eventos + 1  // incrementa el contador
+    si (contador_eventos > 5) { // limita el flujo a cinco eventos
+        retornar nulo  // después de 5 eventos, termina el flujo
+    } // termina la comprobación de fin
+    // Devuelve el evento con framing SSE: `data: texto\n\n`.
+    retornar t"data: evento {contador_eventos}\n\n" // emite el siguiente marco SSE
+} // termina el generador
+
+// --- Crear el servidor con opciones jsn ---
+// nuevo ServidorHttp(opciones) acepta un jsn con configuración inicial.
+// limite_cuerpo: rechaza peticiones con cuerpo mayor a 10 MiB (413).
+ServidorHttp servidor = nuevo ServidorHttp({ limite_cuerpo: 10485760 }) // crea el servidor con límite de 10 MiB
+
+// --- Registrar interceptores globales ---
+// usar(interceptor) registra un interceptor que se ejecuta antes de CADA ruta.
+// Los interceptores globales se ejecutan en orden de registro.
+servidor.usar(Interceptores.registrar)  // registra cada petición en consola
+
+// --- Registrar manejador global de errores ---
+// manejar_errores(fun) registra una función que se invoca si un manejador
+// o interceptor lanza una excepción. Recibe (error, peticion) y debe
+// devolver una RespuestaServidor.
+servidor.manejar_errores(manejar_error_global) // instala el manejador de excepciones
+
+// Función manejadora de errores: recibe el mensaje del error y la petición.
+RespuestaServidor manejar_error_global(texto error, PeticionHttp peticion) { // declara el manejador global de errores
+    consola.mostrar_error(t"ERROR en {peticion.ruta()}: {error}")  // registra el error
+    retornar Respuestas.error(500, error)  // devuelve 500 con el mensaje
+} // termina el manejador global de errores
+
+// --- Registrar rutas principales ---
+// obtener(publicar/poner/...)(patron, manejador) registra una ruta.
+// La sobrecarga con 3 args: (patron, [interceptores], manejador) añade
+// interceptores específicos de esa ruta.
+servidor.obtener("/", Manejadores.inicio)                    // GET / -> página de inicio
+servidor.obtener("/api", Manejadores.api_info)               // GET /api -> info de la petición
+servidor.publicar("/subida", Manejadores.subir_archivo)      // POST /subida -> recibe archivo
+servidor.obtener("/descarga", Manejadores.descargar_archivo) // GET /descarga -> sirve archivo
+servidor.obtener("/eventos", Manejadores.eventos)            // GET /eventos -> SSE
+servidor.obtener("/redirigir", Manejadores.redirigir)        // GET /redirigir -> 302 a /api
+servidor.obtener("/galletas", Manejadores.galletas)          // GET /galletas -> fijar galletas
+servidor.obtener("/borrar-galleta", Manejadores.borrar_galleta) // GET /borrar-galleta
+servidor.cabeza("/cabeza", Manejadores.cabeza)               // HEAD /cabeza -> solo cabeceras
+servidor.opciones("/opciones", Manejadores.opciones)         // OPTIONS /opciones -> CORS
+
+// --- Ruta protegida con interceptor de sesión ---
+// El segundo argumento es una lista de interceptores de ruta: se ejecutan
+// después de los globales pero antes del manejador. Si el interceptor
+// cortocircuitúa (devuelve respuesta sin llamar siguiente), el manejador
+// no se ejecuta.
+servidor.obtener("/protegido", [Interceptores.verificar_sesion], Manejadores.api_info) // protege la ruta con un interceptor local
+
+// --- Ruta que acepta cualquier método (TODO) ---
+// todo(patron, manejador) registra una ruta que coincide con cualquier
+// método HTTP (GET, POST, PUT, ...).
+servidor.todo("/eco", Manejadores.api_info) // registra un eco compatible con cualquier método
+
+// --- Carpeta de archivos estáticos ---
+// estaticos(prefijo, directorio) sirve archivos estáticos desde una carpeta.
+// Las peticiones GET /estaticos/... se resuelven como archivos en publico/.
+servidor.estaticos("estaticos", "publico") // delega el prefijo a la carpeta pública
+
+// --- Enrutador (grupo de rutas con prefijo) ---
+// nuevo Enrutador() crea un grupo de rutas que se puede montar con un prefijo.
+// El enrutador tiene la misma API que ServidorHttp (obtener, publicar, usar, ...).
+Enrutador enrutador_api = nuevo Enrutador() // crea un grupo de rutas versionadas
+enrutador_api.obtener("/estado", Manejadores.api_info)       // GET /v1/estado
+enrutador_api.obtener("/info", Manejadores.api_info)         // GET /v1/info
+// montar(prefijo, enrutador) copia las rutas del enrutador al servidor
+// anteponiendo el prefijo a cada patrón. Los interceptores del enrutador
+// se anteponen a los de cada ruta copiada.
+servidor.montar("v1", enrutador_api)  // GET /v1/estado y GET /v1/info
+
+// --- Funciones para los hooks del ciclo de vida ---
+// al_listo y al_cerrar requieren funciones nombradas (Quetzal no tiene
+// funciones anónimas/lambdas). Se pasan por referencia.
+vacio al_listo_servidor() { // declara el hook de inicio
+    consola.mostrar_informacion("El servidor está listo para recibir peticiones") // informa que la escucha comenzó
+} // termina el hook de inicio
+
+vacio al_cerrar_servidor() { // declara el hook de cierre
+    consola.mostrar_informacion("El servidor se ha detenido") // informa que la escucha terminó
+} // termina el hook de cierre
+
+// --- Hook al_listo: se ejecuta cuando el servidor comienza a escuchar ---
+servidor.al_listo(al_listo_servidor) // registra el hook de inicio
+
+// --- Hook al_cerrar: se ejecuta cuando se llama detener() ---
+servidor.al_cerrar(al_cerrar_servidor) // registra el hook de cierre
+
+// --- Iniciar el servidor en el puerto 8080 ---
+// escuchar(puerto) une el servidor a 0.0.0.0:puerto y comienza a aceptar
+// conexiones en hilos del sistema operativo. El bucle de eventos de la VM
+// despacha cada petición al manejador correspondiente.
+servidor.escuchar(8080) // inicia la escucha HTTP en el puerto 8080
+entero puerto = servidor.puerto()  // obtiene el puerto real (puede diferir si se pidió 0)
+consola.mostrar(t"Servidor HTTP escuchando en http://127.0.0.1:{puerto}")
+consola.mostrar("Rutas disponibles:") // presenta el catálogo de rutas
+consola.mostrar("  GET  /              - página de inicio con negociación de contenido") // documenta la ruta raíz
+consola.mostrar("  GET  /api           - información de la petición en JSON") // documenta la ruta API
+consola.mostrar("  POST /subida        - subida de archivos multipart/form-data") // documenta la subida
+consola.mostrar("  GET  /descarga      - descarga de archivo con streaming") // documenta la descarga
+consola.mostrar("  GET  /eventos       - server-sent events (SSE)") // documenta el flujo SSE
+consola.mostrar("  GET  /redirigir     - redirección 302 a /api") // documenta la redirección
+consola.mostrar("  GET  /galletas      - fijar y leer galletas") // documenta las galletas
+consola.mostrar("  GET  /borrar-galleta - eliminar galleta") // documenta el borrado de galleta
+consola.mostrar("  HEAD /cabeza        - solo cabeceras, sin cuerpo") // documenta HEAD
+consola.mostrar("  OPTIONS /opciones   - cabeceras CORS") // documenta OPTIONS
+consola.mostrar("  GET  /protegido     - ruta con interceptor de sesión") // documenta la ruta protegida
+consola.mostrar("  TODO /eco           - acepta cualquier método") // documenta el comodín de método
+consola.mostrar("  GET  /estaticos/... - archivos estáticos de publico/") // documenta archivos estáticos
+consola.mostrar("  GET  /v1/estado     - ruta del enrutador montado en /v1") // documenta el estado versionado
+consola.mostrar("  GET  /v1/info       - ruta del enrutador montado en /v1") // documenta la información versionada
+
+// --- Cliente HTTP asíncrono: probar el servidor desde dentro ---
+// El cliente asíncrono no bloquea el hilo de la VM: `esperar` bombea el
+// bucle de eventos mientras espera la respuesta, permitiendo que el
+// servidor atienda la petición del cliente en el mismo proceso.
+asincrono vacio probar_servidor() { // declara la prueba interna no bloqueante
+    // Crea un cliente HTTP reutilizable.
+    ClienteHttp cliente = nuevo ClienteHttp() // crea una plantilla de cliente reutilizable
+    // Autenticación básica (demostrativa, el servidor no la requiere).
+    cliente.autenticacion_basica("usuario", "clave") // configura Authorization básico
+    // Fija un tiempo de espera de 5 segundos.
+    cliente.fijar_tiempo_espera(5) // limita cada petición a cinco segundos
+
+    // GET asíncrono a /api: esperar bombea el bucle de eventos.
+    RespuestaHttp r = esperar cliente.obtener_asincrono(t"http://127.0.0.1:{puerto}/api")
+    consola.mostrar(t"Cliente: GET /api -> estado {r.estado()}, peso {r.peso()} bytes") // informa estado y peso real
+
+    // GET asíncrono a /descarga y guardar el archivo con descargar_asincrono.
+    esperar cliente.descargar_asincrono(t"http://127.0.0.1:{puerto}/descarga", "descargas/notas.txt")
+    consola.mostrar("Cliente: archivo descargado a descargas/notas.txt") // confirma la descarga por streaming
+
+    // POST asíncrono con cuerpo JSON a /eco (ruta que acepta TODO).
+    RespuestaHttp r2 = esperar cliente.publicar_asincrono(t"http://127.0.0.1:{puerto}/eco", { mensaje: "hola desde el cliente" })
+    consola.mostrar(t"Cliente: POST /eco -> estado {r2.estado()}") // informa el resultado de POST
+
+    // GET asíncrono a /redirigir (sigue la redirección 302 a /api).
+    RespuestaHttp r3 = esperar cliente.obtener_asincrono(t"http://127.0.0.1:{puerto}/redirigir")
+    consola.mostrar(t"Cliente: GET /redirigir -> estado {r3.estado()} (siguió redirección)") // confirma la política de redirección
+
+    // Verificar que la galleta se fijó correctamente.
+    RespuestaHttp r4 = esperar cliente.obtener_asincrono(t"http://127.0.0.1:{puerto}/galletas")
+    texto set_cookie = r4.cabecera("Set-Cookie")  // lee la cabecera Set-Cookie
+    si (set_cookie != nulo) { // comprueba si llegó al menos una galleta
+        consola.mostrar(t"Cliente: galleta recibida: {set_cookie}") // muestra la última cabecera compatible
+    } sino { // maneja una respuesta sin galletas
+        consola.mostrar("Cliente: no se recibió galleta") // informa la ausencia de Set-Cookie
+    } // termina la comprobación de galletas
+
+    // Detener el servidor después de las pruebas.
+    servidor.detener() // detiene el trabajo activo y ejecuta el hook de cierre
+} // termina la prueba interna
+
+// Ejecutar las pruebas asíncronas (el servidor sigue corriendo durante).
+esperar probar_servidor() // ejecuta la prueba mientras bombea el bucle de eventos

@@ -11,10 +11,11 @@
 //! con memoria acotada.
 
 use std::cell::RefCell;
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use indexmap::IndexMap;
 use maquina_virtual::{DatosInstanciaNativa, Fallo, RegistroNativos, Valor};
@@ -53,7 +54,9 @@ fn sa_leer_texto(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result<Va
     const F: &str = "SistemaArchivos.leer_texto";
     exigir_aridad(F, argumentos, 1)?;
     let ruta = arg_ruta(F, argumentos, 0)?;
-    permisos.verificar_lectura(&ruta).map_err(permiso_denegado)?;
+    permisos
+        .verificar_lectura(&ruta)
+        .map_err(permiso_denegado)?;
     let contenido =
         std::fs::read_to_string(&ruta).map_err(|fallo| error_es("leer", &ruta, fallo))?;
     Ok(Valor::texto(contenido))
@@ -63,7 +66,9 @@ fn sa_leer_lineas(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result<V
     const F: &str = "SistemaArchivos.leer_lineas";
     exigir_aridad(F, argumentos, 1)?;
     let ruta = arg_ruta(F, argumentos, 0)?;
-    permisos.verificar_lectura(&ruta).map_err(permiso_denegado)?;
+    permisos
+        .verificar_lectura(&ruta)
+        .map_err(permiso_denegado)?;
     let contenido =
         std::fs::read_to_string(&ruta).map_err(|fallo| error_es("leer", &ruta, fallo))?;
     Ok(Valor::lista(lineas_de_texto(&contenido)))
@@ -74,7 +79,9 @@ fn sa_escribir_texto(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Resul
     exigir_aridad(F, argumentos, 2)?;
     let ruta = arg_ruta(F, argumentos, 0)?;
     let contenido = arg_texto(F, argumentos, 1)?;
-    permisos.verificar_escritura(&ruta).map_err(permiso_denegado)?;
+    permisos
+        .verificar_escritura(&ruta)
+        .map_err(permiso_denegado)?;
     std::fs::write(&ruta, contenido).map_err(|fallo| error_es("escribir", &ruta, fallo))?;
     Ok(Valor::Nulo)
 }
@@ -84,7 +91,9 @@ fn sa_agregar_texto(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result
     exigir_aridad(F, argumentos, 2)?;
     let ruta = arg_ruta(F, argumentos, 0)?;
     let contenido = arg_texto(F, argumentos, 1)?;
-    permisos.verificar_escritura(&ruta).map_err(permiso_denegado)?;
+    permisos
+        .verificar_escritura(&ruta)
+        .map_err(permiso_denegado)?;
     let mut archivo = OpenOptions::new()
         .create(true)
         .append(true)
@@ -102,7 +111,9 @@ fn sa_leer_bits(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result<Val
     const F: &str = "SistemaArchivos.leer_bits";
     exigir_aridad(F, argumentos, 1)?;
     let ruta = arg_ruta(F, argumentos, 0)?;
-    permisos.verificar_lectura(&ruta).map_err(permiso_denegado)?;
+    permisos
+        .verificar_lectura(&ruta)
+        .map_err(permiso_denegado)?;
     let bytes = std::fs::read(&ruta).map_err(|fallo| error_es("leer", &ruta, fallo))?;
     Ok(valor_bits(&bytes))
 }
@@ -112,7 +123,9 @@ fn sa_escribir_bits(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result
     exigir_aridad(F, argumentos, 2)?;
     let ruta = arg_ruta(F, argumentos, 0)?;
     let bytes = arg_bits(F, argumentos, 1)?;
-    permisos.verificar_escritura(&ruta).map_err(permiso_denegado)?;
+    permisos
+        .verificar_escritura(&ruta)
+        .map_err(permiso_denegado)?;
     std::fs::write(&ruta, &bytes).map_err(|fallo| error_es("escribir", &ruta, fallo))?;
     Ok(Valor::Nulo)
 }
@@ -122,7 +135,9 @@ fn sa_agregar_bits(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result<
     exigir_aridad(F, argumentos, 2)?;
     let ruta = arg_ruta(F, argumentos, 0)?;
     let bytes = arg_bits(F, argumentos, 1)?;
-    permisos.verificar_escritura(&ruta).map_err(permiso_denegado)?;
+    permisos
+        .verificar_escritura(&ruta)
+        .map_err(permiso_denegado)?;
     let mut archivo = OpenOptions::new()
         .create(true)
         .append(true)
@@ -140,7 +155,9 @@ fn sa_existe(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result<Valor,
     const F: &str = "SistemaArchivos.existe";
     exigir_aridad(F, argumentos, 1)?;
     let ruta = arg_ruta(F, argumentos, 0)?;
-    permisos.verificar_lectura(&ruta).map_err(permiso_denegado)?;
+    permisos
+        .verificar_lectura(&ruta)
+        .map_err(permiso_denegado)?;
     Ok(Valor::Log(Path::new(&ruta).exists()))
 }
 
@@ -148,7 +165,9 @@ fn sa_es_archivo(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result<Va
     const F: &str = "SistemaArchivos.es_archivo";
     exigir_aridad(F, argumentos, 1)?;
     let ruta = arg_ruta(F, argumentos, 0)?;
-    permisos.verificar_lectura(&ruta).map_err(permiso_denegado)?;
+    permisos
+        .verificar_lectura(&ruta)
+        .map_err(permiso_denegado)?;
     Ok(Valor::Log(Path::new(&ruta).is_file()))
 }
 
@@ -156,7 +175,9 @@ fn sa_es_directorio(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result
     const F: &str = "SistemaArchivos.es_directorio";
     exigir_aridad(F, argumentos, 1)?;
     let ruta = arg_ruta(F, argumentos, 0)?;
-    permisos.verificar_lectura(&ruta).map_err(permiso_denegado)?;
+    permisos
+        .verificar_lectura(&ruta)
+        .map_err(permiso_denegado)?;
     Ok(Valor::Log(Path::new(&ruta).is_dir()))
 }
 
@@ -164,7 +185,9 @@ fn sa_tamaño(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result<Valor
     const F: &str = "SistemaArchivos.tamaño";
     exigir_aridad(F, argumentos, 1)?;
     let ruta = arg_ruta(F, argumentos, 0)?;
-    permisos.verificar_lectura(&ruta).map_err(permiso_denegado)?;
+    permisos
+        .verificar_lectura(&ruta)
+        .map_err(permiso_denegado)?;
     let metadatos =
         std::fs::metadata(&ruta).map_err(|fallo| error_es("consultar", &ruta, fallo))?;
     Ok(Valor::Entero(metadatos.len() as i64))
@@ -183,7 +206,9 @@ fn sa_metadatos(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result<Val
     const F: &str = "SistemaArchivos.metadatos";
     exigir_aridad(F, argumentos, 1)?;
     let ruta = arg_ruta(F, argumentos, 0)?;
-    permisos.verificar_lectura(&ruta).map_err(permiso_denegado)?;
+    permisos
+        .verificar_lectura(&ruta)
+        .map_err(permiso_denegado)?;
     let metadatos =
         std::fs::metadata(&ruta).map_err(|fallo| error_es("consultar", &ruta, fallo))?;
     let mut mapa = IndexMap::new();
@@ -205,7 +230,9 @@ fn sa_listar(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result<Valor,
     const F: &str = "SistemaArchivos.listar";
     exigir_aridad(F, argumentos, 1)?;
     let ruta = arg_ruta(F, argumentos, 0)?;
-    permisos.verificar_lectura(&ruta).map_err(permiso_denegado)?;
+    permisos
+        .verificar_lectura(&ruta)
+        .map_err(permiso_denegado)?;
     let entradas = std::fs::read_dir(&ruta)
         .map_err(|fallo| error_es("listar", &ruta, fallo))?
         .filter_map(|entrada| entrada.ok())
@@ -218,8 +245,11 @@ fn sa_crear_directorio(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Res
     const F: &str = "SistemaArchivos.crear_directorio";
     exigir_aridad(F, argumentos, 1)?;
     let ruta = arg_ruta(F, argumentos, 0)?;
-    permisos.verificar_escritura(&ruta).map_err(permiso_denegado)?;
-    std::fs::create_dir_all(&ruta).map_err(|fallo| error_es("crear el directorio", &ruta, fallo))?;
+    permisos
+        .verificar_escritura(&ruta)
+        .map_err(permiso_denegado)?;
+    std::fs::create_dir_all(&ruta)
+        .map_err(|fallo| error_es("crear el directorio", &ruta, fallo))?;
     Ok(Valor::Nulo)
 }
 
@@ -227,7 +257,9 @@ fn sa_eliminar_archivo(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Res
     const F: &str = "SistemaArchivos.eliminar_archivo";
     exigir_aridad(F, argumentos, 1)?;
     let ruta = arg_ruta(F, argumentos, 0)?;
-    permisos.verificar_escritura(&ruta).map_err(permiso_denegado)?;
+    permisos
+        .verificar_escritura(&ruta)
+        .map_err(permiso_denegado)?;
     std::fs::remove_file(&ruta).map_err(|fallo| error_es("eliminar", &ruta, fallo))?;
     Ok(Valor::Nulo)
 }
@@ -239,7 +271,9 @@ fn sa_eliminar_directorio(
     const F: &str = "SistemaArchivos.eliminar_directorio";
     exigir_aridad(F, argumentos, 1)?;
     let ruta = arg_ruta(F, argumentos, 0)?;
-    permisos.verificar_escritura(&ruta).map_err(permiso_denegado)?;
+    permisos
+        .verificar_escritura(&ruta)
+        .map_err(permiso_denegado)?;
     std::fs::remove_dir(&ruta).map_err(|fallo| error_es("eliminar el directorio", &ruta, fallo))?;
     Ok(Valor::Nulo)
 }
@@ -248,7 +282,9 @@ fn sa_eliminar_todo(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result
     const F: &str = "SistemaArchivos.eliminar_todo";
     exigir_aridad(F, argumentos, 1)?;
     let ruta = arg_ruta(F, argumentos, 0)?;
-    permisos.verificar_escritura(&ruta).map_err(permiso_denegado)?;
+    permisos
+        .verificar_escritura(&ruta)
+        .map_err(permiso_denegado)?;
     std::fs::remove_dir_all(&ruta)
         .map_err(|fallo| error_es("eliminar recursivamente", &ruta, fallo))?;
     Ok(Valor::Nulo)
@@ -261,8 +297,12 @@ fn sa_copiar(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result<Valor,
     exigir_aridad(F, argumentos, 2)?;
     let origen = arg_ruta(F, argumentos, 0)?;
     let destino = arg_ruta(F, argumentos, 1)?;
-    permisos.verificar_lectura(&origen).map_err(permiso_denegado)?;
-    permisos.verificar_escritura(&destino).map_err(permiso_denegado)?;
+    permisos
+        .verificar_lectura(&origen)
+        .map_err(permiso_denegado)?;
+    permisos
+        .verificar_escritura(&destino)
+        .map_err(permiso_denegado)?;
     std::fs::copy(&origen, &destino).map_err(|fallo| error_es("copiar", &origen, fallo))?;
     Ok(Valor::Nulo)
 }
@@ -272,8 +312,12 @@ fn sa_mover(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result<Valor, 
     exigir_aridad(F, argumentos, 2)?;
     let origen = arg_ruta(F, argumentos, 0)?;
     let destino = arg_ruta(F, argumentos, 1)?;
-    permisos.verificar_escritura(&origen).map_err(permiso_denegado)?;
-    permisos.verificar_escritura(&destino).map_err(permiso_denegado)?;
+    permisos
+        .verificar_escritura(&origen)
+        .map_err(permiso_denegado)?;
+    permisos
+        .verificar_escritura(&destino)
+        .map_err(permiso_denegado)?;
     std::fs::rename(&origen, &destino).map_err(|fallo| error_es("mover", &origen, fallo))?;
     Ok(Valor::Nulo)
 }
@@ -321,7 +365,10 @@ impl Modo {
     }
 
     fn permite_escribir(self) -> bool {
-        matches!(self, Modo::Escritura | Modo::Agregar | Modo::LecturaEscritura)
+        matches!(
+            self,
+            Modo::Escritura | Modo::Agregar | Modo::LecturaEscritura
+        )
     }
 }
 
@@ -436,10 +483,7 @@ fn receptor_archivo_info(
             ));
         }
         None => {
-            return Err(error(
-                "E0210",
-                format!("'{funcion}' necesita el receptor"),
-            ));
+            return Err(error("E0210", format!("'{funcion}' necesita el receptor")));
         }
     };
 
@@ -447,7 +491,12 @@ fn receptor_archivo_info(
         let datos = instancia.datos.borrow();
         let ruta = match datos.get("ruta") {
             Some(Valor::Texto(texto)) => texto.to_string(),
-            _ => return Err(error("E0406", format!("'{funcion}' recibió un Archivo sin ruta interna"))),
+            _ => {
+                return Err(error(
+                    "E0406",
+                    format!("'{funcion}' recibió un Archivo sin ruta interna"),
+                ));
+            }
         };
         let modo = match datos.get("modo") {
             Some(Valor::Texto(texto)) => Modo::de_texto(funcion, texto)?,
@@ -508,15 +557,15 @@ fn receptor_archivo(
 
 // ----- Constructor: `nuevo Archivo(ruta[, modo])` -----
 
-fn constructor_archivo(
-    permisos: &GuardianPermisos,
-    argumentos: &[Valor],
-) -> Result<Valor, Fallo> {
+fn constructor_archivo(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result<Valor, Fallo> {
     const F: &str = "nuevo Archivo";
     if argumentos.is_empty() || argumentos.len() > 2 {
         return Err(error(
             "E0210",
-            format!("'{F}' acepta 1 o 2 argumentos, pero recibió {}", argumentos.len()),
+            format!(
+                "'{F}' acepta 1 o 2 argumentos, pero recibió {}",
+                argumentos.len()
+            ),
         ));
     }
     let ruta = arg_ruta(F, argumentos, 0)?;
@@ -527,10 +576,14 @@ fn constructor_archivo(
     };
 
     if modo.permite_leer() {
-        permisos.verificar_lectura(&ruta).map_err(permiso_denegado)?;
+        permisos
+            .verificar_lectura(&ruta)
+            .map_err(permiso_denegado)?;
     }
     if modo.permite_escribir() {
-        permisos.verificar_escritura(&ruta).map_err(permiso_denegado)?;
+        permisos
+            .verificar_escritura(&ruta)
+            .map_err(permiso_denegado)?;
     }
 
     // Efecto inmediato de cada modo: existir (lectura), truncar (escritura)
@@ -615,7 +668,10 @@ fn metodo_leer_texto(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Resul
                     if fallo.valid_up_to() == 0 {
                         return Err(error(
                             "E0406",
-                            format!("'{F}' encontró bytes que no son texto UTF-8 válido en '{}'", estado.ruta),
+                            format!(
+                                "'{F}' encontró bytes que no son texto UTF-8 válido en '{}'",
+                                estado.ruta
+                            ),
                         ));
                     }
                     fallo.valid_up_to()
@@ -727,7 +783,10 @@ fn metodo_leer_linea(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Resul
     String::from_utf8(cruda).map(Valor::texto).map_err(|_| {
         error(
             "E0406",
-            format!("'{F}' encontró una línea que no es texto UTF-8 válido en '{}'", estado.ruta),
+            format!(
+                "'{F}' encontró una línea que no es texto UTF-8 válido en '{}'",
+                estado.ruta
+            ),
         )
     })
 }
@@ -752,11 +811,7 @@ fn metodo_bits_restantes(
 
 // ----- Métodos: escritura -----
 
-fn escribir_bytes(
-    funcion: &str,
-    estado: &EstadoArchivo,
-    bytes: &[u8],
-) -> Result<(), Fallo> {
+fn escribir_bytes(funcion: &str, estado: &EstadoArchivo, bytes: &[u8]) -> Result<(), Fallo> {
     let mut archivo = estado.abrir_escritura(funcion)?;
     archivo
         .write_all(bytes)
@@ -796,10 +851,7 @@ fn metodo_escribir_linea(
     Ok(Valor::Nulo)
 }
 
-fn metodo_escribir_bits(
-    permisos: &GuardianPermisos,
-    argumentos: &[Valor],
-) -> Result<Valor, Fallo> {
+fn metodo_escribir_bits(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result<Valor, Fallo> {
     const F: &str = "Archivo.escribir_bits";
     exigir_aridad(F, &argumentos[1..], 1)?;
     let estado = receptor_archivo(F, permisos, argumentos)?;
@@ -913,7 +965,10 @@ fn metodo_esta_abierto(argumentos: &[Valor]) -> Result<Valor, Fallo> {
     exigir_aridad(F, &argumentos[1..], 0)?;
     match argumentos.first() {
         Some(Valor::InstanciaNativa(instancia)) if &*instancia.tipo == TIPO => {
-            let abierto = matches!(instancia.datos.borrow().get("abierto"), Some(Valor::Log(true)));
+            let abierto = matches!(
+                instancia.datos.borrow().get("abierto"),
+                Some(Valor::Log(true))
+            );
             Ok(Valor::Log(abierto))
         }
         Some(otro) => Err(error(
@@ -959,9 +1014,183 @@ fn metodo_eliminar(permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result<
     permisos
         .verificar_escritura(&estado.ruta)
         .map_err(permiso_denegado)?;
-    std::fs::remove_file(&estado.ruta).map_err(|fallo| error_es("eliminar", &estado.ruta, fallo))?;
+    std::fs::remove_file(&estado.ruta)
+        .map_err(|fallo| error_es("eliminar", &estado.ruta, fallo))?;
     estado.cerrar();
     Ok(Valor::Nulo)
+}
+
+// =====================================================================
+// Funciones pub(crate): delegación SOLID para otros módulos (red, ...)
+// =====================================================================
+
+/// Tabla de tipos de contenido (MIME) por extensión. Mover aquí desde
+/// `red/servidor_http.rs` para que `red` no decida tipos de contenido:
+/// es responsabilidad de `sistema_archivos` (conoce el archivo, su
+/// extensión y su contenido).
+pub(crate) fn tipo_contenido(ruta: &str) -> String {
+    let extension = Path::new(ruta)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    match extension.as_str() {
+        "html" | "htm" => "text/html; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "js" | "mjs" => "text/javascript; charset=utf-8",
+        "json" => "application/json",
+        "txt" => "text/plain; charset=utf-8",
+        "csv" => "text/csv; charset=utf-8",
+        "xml" => "application/xml",
+        "pdf" => "application/pdf",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "svg" => "image/svg+xml",
+        "webp" => "image/webp",
+        "ico" => "image/x-icon",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "mov" => "video/quicktime",
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "ogg" => "audio/ogg",
+        "woff" => "font/woff",
+        "woff2" => "font/woff2",
+        "ttf" => "font/ttf",
+        "zip" => "application/zip",
+        _ => "application/octet-stream",
+    }
+    .to_string()
+}
+
+/// Metadatos de un archivo (tamaño en bytes, modificación en ms Unix,
+/// y si es un archivo regular). `pub(crate)`: lo usa `red::servidor_http`
+/// para construir respuestas de archivo sin tocar `std::fs` directamente
+/// (SRP: `red` no lee el disco).
+pub(crate) fn metadatos_archivo(ruta: &str) -> std::io::Result<(u64, i64, bool)> {
+    let meta = std::fs::metadata(ruta)?;
+    let tamano = meta.len();
+    let es_archivo = meta.is_file();
+    let mtime_ms = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    Ok((tamano, mtime_ms, es_archivo))
+}
+
+static SIGUIENTE_ARCHIVO_TEMPORAL: AtomicU64 = AtomicU64::new(1);
+
+/// Copia un lector a un archivo temporal y reemplaza el destino únicamente
+/// cuando la transferencia termina. Mantiene memoria acotada y evita dejar
+/// una descarga parcial bajo el nombre definitivo.
+pub(crate) fn escribir_desde_lector(
+    ruta: &str,
+    lector: &mut impl Read,
+    limite: usize,
+) -> std::io::Result<u64> {
+    let destino = Path::new(ruta);
+    let nombre = destino
+        .file_name()
+        .and_then(|nombre| nombre.to_str())
+        .unwrap_or("descarga");
+    let identificador = SIGUIENTE_ARCHIVO_TEMPORAL.fetch_add(1, Ordering::Relaxed);
+    let temporal = destino.with_file_name(format!(
+        ".{nombre}.quetzal-{}-{identificador}.temporal",
+        std::process::id()
+    ));
+    let resultado = (|| {
+        let mut archivo = File::create(&temporal)?;
+        let mut buffer = vec![0u8; 64 * 1024];
+        let mut total = 0usize;
+        loop {
+            let leidos = lector.read(&mut buffer)?;
+            if leidos == 0 {
+                break;
+            }
+            total = total.checked_add(leidos).ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "la descarga excede el tamaño representable",
+                )
+            })?;
+            if total > limite {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("la descarga excede el límite de {limite} bytes"),
+                ));
+            }
+            archivo.write_all(&buffer[..leidos])?;
+        }
+        archivo.flush()?;
+        drop(archivo);
+        if destino.exists() {
+            std::fs::remove_file(destino)?;
+        }
+        std::fs::rename(&temporal, destino)?;
+        Ok(total as u64)
+    })();
+    if resultado.is_err() {
+        let _ = std::fs::remove_file(&temporal);
+    }
+    resultado
+}
+
+/// Flujo de lectura de archivo: envuelve un `File` abierto y es `Send` +
+/// `'static`, así puede moverse al hilo de conexión de un servidor HTTP
+/// (que es un `std::thread`, no el hilo de la VM). El hilo de la VM
+/// construye la respuesta (verificando permisos con `GuardianPermisos`),
+/// y el hilo de la conexión transmite el contenido por trozos usando
+/// esta struct, sin cargar el archivo completo en memoria.
+pub(crate) struct FlujoArchivo {
+    archivo: File,
+    pub(crate) tamano: u64,
+}
+
+impl FlujoArchivo {
+    /// Abre el archivo para lectura y devuelve el flujo + su tamaño.
+    /// No verifica permisos: eso lo hace quien llama (en el hilo de la
+    /// VM, con `GuardianPermisos`).
+    pub(crate) fn abrir(ruta: &str) -> std::io::Result<Self> {
+        let archivo = File::open(ruta)?;
+        let tamano = archivo.metadata()?.len();
+        Ok(Self { archivo, tamano })
+    }
+
+    /// Posiciona el cursor del archivo en `posicion` bytes desde el inicio.
+    pub(crate) fn buscar(&mut self, posicion: u64) -> std::io::Result<()> {
+        self.archivo.seek(SeekFrom::Start(posicion)).map(|_| ())
+    }
+
+    /// Lee hasta `buf.len()` bytes del archivo al buffer. Devuelve la
+    /// cantidad de bytes leídos (0 al final del archivo).
+    pub(crate) fn leer_trozo(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.archivo.read(buf)
+    }
+
+    /// Tamaño total del archivo en bytes.
+    pub(crate) fn tamaño(&self) -> u64 {
+        self.tamano
+    }
+}
+
+impl Read for FlujoArchivo {
+    fn read(&mut self, destino: &mut [u8]) -> std::io::Result<usize> {
+        self.archivo.read(destino)
+    }
+}
+
+// =====================================================================
+// Función libre `SistemaArchivos.tipo_contenido`
+// =====================================================================
+
+fn sa_tipo_contenido(_permisos: &GuardianPermisos, argumentos: &[Valor]) -> Result<Valor, Fallo> {
+    const F: &str = "SistemaArchivos.tipo_contenido";
+    exigir_aridad(F, argumentos, 1)?;
+    let ruta = arg_ruta(F, argumentos, 0)?;
+    Ok(Valor::texto(tipo_contenido(&ruta)))
 }
 
 // =====================================================================
@@ -973,7 +1202,7 @@ pub fn registrar(registro: &mut RegistroNativos, guardian: &Rc<GuardianPermisos>
     registro.registrar_modulo("archivo");
 
     // Funciones libres `SistemaArchivos.*` (clave interna `sistema_archivos.*`).
-    let libres: [(&str, NativaConPermisos); 18] = [
+    let libres: [(&str, NativaConPermisos); 19] = [
         ("leer_texto", sa_leer_texto),
         ("leer_lineas", sa_leer_lineas),
         ("escribir_texto", sa_escribir_texto),
@@ -992,6 +1221,7 @@ pub fn registrar(registro: &mut RegistroNativos, guardian: &Rc<GuardianPermisos>
         ("eliminar_archivo", sa_eliminar_archivo),
         ("eliminar_directorio", sa_eliminar_directorio),
         ("eliminar_todo", sa_eliminar_todo),
+        ("tipo_contenido", sa_tipo_contenido),
     ];
     for (nombre, funcion) in libres {
         let permisos = Rc::clone(guardian);
@@ -1000,7 +1230,10 @@ pub fn registrar(registro: &mut RegistroNativos, guardian: &Rc<GuardianPermisos>
             Box::new(move |argumentos| funcion(&permisos, argumentos)),
         );
     }
-    for (nombre, funcion) in [("copiar", sa_copiar as NativaConPermisos), ("mover", sa_mover)] {
+    for (nombre, funcion) in [
+        ("copiar", sa_copiar as NativaConPermisos),
+        ("mover", sa_mover),
+    ] {
         let permisos = Rc::clone(guardian);
         registro.registrar_funcion(
             &format!("sistema_archivos.{nombre}"),

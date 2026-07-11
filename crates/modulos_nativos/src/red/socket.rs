@@ -20,6 +20,9 @@
 //!   aceptación (patrón reactor de `ServidorHttp`); cada conexión aceptada
 //!   se despacha una sola vez al manejador registrado con `al_conectar`,
 //!   que recibe un `ConexionSocket` con la misma API de envío/recepción.
+//! - `Socket` y `ConexionSocket`: exponen estado, dirección local/remota,
+//!   vaciado explícito, cierre solo de escritura y `sin_demora` para
+//!   servicios interactivos que necesitan controlar `TCP_NODELAY`.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -31,6 +34,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use indexmap::IndexMap;
 use maquina_virtual::bucle_eventos::CargaNativa;
 use maquina_virtual::{DatosInstanciaNativa, Fallo, ManijaBucle, Mensaje, RegistroNativos, Valor, Vm};
 use runtime::GuardianPermisos;
@@ -73,23 +77,25 @@ fn mensaje_de_fallo(fallo: Fallo) -> String {
 struct ConexionAbierta {
     lectura: BufReader<TcpStream>,
     escritura: TcpStream,
+    direccion_local: SocketAddr,
+    direccion_remota: SocketAddr,
 }
 
 impl ConexionAbierta {
     fn desde(flujo: TcpStream) -> std::io::Result<Self> {
+        let direccion_local = flujo.local_addr()?;
+        let direccion_remota = flujo.peer_addr()?;
         let escritura = flujo.try_clone()?;
         Ok(Self {
             lectura: BufReader::new(flujo),
             escritura,
+            direccion_local,
+            direccion_remota,
         })
     }
 
     fn fijar_tiempo_espera(&self, segundos: u64) -> std::io::Result<()> {
-        let duracion = if segundos == 0 {
-            None
-        } else {
-            Some(Duration::from_secs(segundos))
-        };
+        let duracion = if segundos == 0 { None } else { Some(Duration::from_secs(segundos)) };
         self.lectura.get_ref().set_read_timeout(duracion)?;
         self.escritura.set_write_timeout(duracion)?;
         Ok(())
@@ -165,9 +171,18 @@ fn recibir_linea_texto(flujos: &RegistroFlujos, id: u64) -> Result<String, Fallo
     Ok(linea)
 }
 
+fn direccion_a_valor(direccion: SocketAddr) -> Valor {
+    let mut datos = IndexMap::new();
+    datos.insert("anfitrion".to_string(), Valor::texto(direccion.ip().to_string()));
+    datos.insert("puerto".to_string(), Valor::Entero(i64::from(direccion.port())));
+    Valor::jsn(datos)
+}
+
 fn cerrar_conexion(flujos: &RegistroFlujos, id: u64) {
     let Ok(mut mapa) = flujos.lock() else { return };
-    let Some(conexion) = mapa.remove(&id) else { return };
+    let Some(conexion) = mapa.remove(&id) else {
+        return;
+    };
     drop(mapa);
     if let Ok(conexion) = conexion.lock() {
         let _ = conexion.escritura.shutdown(std::net::Shutdown::Both);
@@ -263,10 +278,7 @@ fn tiempo_espera_de(instancia: &DatosInstanciaNativa) -> i64 {
     }
 }
 
-fn metodo_fijar_tiempo_espera(
-    tipo: &'static str,
-    flujos: &RegistroFlujos,
-) -> impl Fn(&[Valor]) -> Result<Valor, Fallo> + 'static {
+fn metodo_fijar_tiempo_espera(tipo: &'static str, flujos: &RegistroFlujos) -> impl Fn(&[Valor]) -> Result<Valor, Fallo> + 'static {
     let flujos = Arc::clone(flujos);
     move |argumentos| {
         let funcion = &format!("{tipo}.fijar_tiempo_espera");
@@ -283,7 +295,9 @@ fn metodo_fijar_tiempo_espera(
                     ),
                 ));
             }
-            None => return Err(error("E0210", format!("'{funcion}' necesita al menos 1 argumento"))),
+            None => {
+                return Err(error("E0210", format!("'{funcion}' necesita al menos 1 argumento")));
+            }
         };
         instancia
             .datos
@@ -321,16 +335,13 @@ fn conectar_sincrono(
             ));
         }
         let puerto = puerto as u16;
-        guardian
-            .verificar_red_cliente(&anfitrion, puerto)
-            .map_err(permiso_denegado)?;
+        guardian.verificar_red_cliente(&anfitrion, puerto).map_err(permiso_denegado)?;
 
         let tiempo_espera = tiempo_espera_de(&instancia);
         let direccion = resolver_direccion(F, &anfitrion, puerto)?;
         let flujo = conectar_flujo(direccion, tiempo_espera as u64)
             .map_err(|causa| error_socket(format!("no se pudo conectar a '{anfitrion}:{puerto}': {causa}")))?;
-        let conexion = ConexionAbierta::desde(flujo)
-            .map_err(|causa| error_socket(format!("no se pudo preparar la conexión: {causa}")))?;
+        let conexion = ConexionAbierta::desde(flujo).map_err(|causa| error_socket(format!("no se pudo preparar la conexión: {causa}")))?;
         conexion
             .fijar_tiempo_espera(tiempo_espera as u64)
             .map_err(|causa| error_socket(format!("no se pudo fijar el tiempo de espera: {causa}")))?;
@@ -363,9 +374,7 @@ fn conectar_asincrono(
             ));
         }
         let puerto = puerto as u16;
-        guardian
-            .verificar_red_cliente(&anfitrion, puerto)
-            .map_err(permiso_denegado)?;
+        guardian.verificar_red_cliente(&anfitrion, puerto).map_err(permiso_denegado)?;
         let tiempo_espera = tiempo_espera_de(&instancia);
 
         let id_tarea = vm.bucle().nuevo_id();
@@ -376,13 +385,11 @@ fn conectar_asincrono(
 
         manija.runtime().spawn(async move {
             let resultado = tokio::task::spawn_blocking(move || -> Result<u64, String> {
-                let direccion = resolver_direccion(F, &anfitrion, puerto).map_err(|_| {
-                    format!("no se pudo resolver '{anfitrion}:{puerto}'")
-                })?;
+                let direccion =
+                    resolver_direccion(F, &anfitrion, puerto).map_err(|_| format!("no se pudo resolver '{anfitrion}:{puerto}'"))?;
                 let flujo = conectar_flujo(direccion, tiempo_espera as u64)
                     .map_err(|causa| format!("no se pudo conectar a '{anfitrion}:{puerto}': {causa}"))?;
-                let conexion = ConexionAbierta::desde(flujo)
-                    .map_err(|causa| format!("no se pudo preparar la conexión: {causa}"))?;
+                let conexion = ConexionAbierta::desde(flujo).map_err(|causa| format!("no se pudo preparar la conexión: {causa}"))?;
                 conexion
                     .fijar_tiempo_espera(tiempo_espera as u64)
                     .map_err(|causa| format!("no se pudo fijar el tiempo de espera: {causa}"))?;
@@ -400,7 +407,10 @@ fn conectar_asincrono(
                     ("tiempo_espera".to_string(), CargaNativa::Entero(tiempo_espera)),
                 ],
             });
-            manija_tarea.enviar(Mensaje::TareaLista { id: id_tarea, resultado: carga });
+            manija_tarea.enviar(Mensaje::TareaLista {
+                id: id_tarea,
+                resultado: carga,
+            });
         });
 
         Ok(Valor::TareaNativa(Rc::new(maquina_virtual::EstadoTareaNativa { id: id_tarea })))
@@ -468,9 +478,12 @@ fn metodo_recibir_texto(tipo: &'static str, flujos: &RegistroFlujos) -> impl Fn(
         let instancia = receptor_con_tipo(funcion, argumentos, tipo)?;
         let id = id_de_instancia(funcion, &instancia)?;
         let bytes = recibir_bytes(&flujos, id, TAMANO_LECTURA_TEXTO)?;
-        String::from_utf8(bytes)
-            .map(Valor::texto)
-            .map_err(|_| error("E0406", format!("'{funcion}' no pudo decodificar los datos como texto UTF-8 válido")))
+        String::from_utf8(bytes).map(Valor::texto).map_err(|_| {
+            error(
+                "E0406",
+                format!("'{funcion}' no pudo decodificar los datos como texto UTF-8 válido"),
+            )
+        })
     }
 }
 
@@ -499,6 +512,106 @@ fn metodo_cerrar(tipo: &'static str, flujos: &RegistroFlujos) -> impl Fn(&[Valor
     }
 }
 
+fn metodo_esta_conectado(tipo: &'static str, flujos: &RegistroFlujos) -> impl Fn(&[Valor]) -> Result<Valor, Fallo> + 'static {
+    let flujos = Arc::clone(flujos);
+    move |argumentos| {
+        let funcion = &format!("{tipo}.esta_conectado");
+        exigir_aridad(funcion, &argumentos[1..], 0)?;
+        let instancia = receptor_con_tipo(funcion, argumentos, tipo)?;
+        let Some(Valor::Entero(id)) = instancia.datos.borrow().get("id").cloned() else {
+            return Ok(Valor::Log(false));
+        };
+        let conectado = flujos
+            .lock()
+            .map_err(|_| error_socket("el registro de conexiones está dañado"))?
+            .contains_key(&(id as u64));
+        Ok(Valor::Log(conectado))
+    }
+}
+
+fn metodo_direccion(tipo: &'static str, flujos: &RegistroFlujos, local: bool) -> impl Fn(&[Valor]) -> Result<Valor, Fallo> + 'static {
+    let flujos = Arc::clone(flujos);
+    move |argumentos| {
+        let nombre = if local { "direccion_local" } else { "direccion_remota" };
+        let funcion = &format!("{tipo}.{nombre}");
+        exigir_aridad(funcion, &argumentos[1..], 0)?;
+        let instancia = receptor_con_tipo(funcion, argumentos, tipo)?;
+        let id = id_de_instancia(funcion, &instancia)?;
+        let conexion = obtener_conexion(&flujos, id)?;
+        let conexion = conexion.lock().map_err(|_| error_socket("la conexión está dañada"))?;
+        let direccion = if local {
+            conexion.direccion_local
+        } else {
+            conexion.direccion_remota
+        };
+        Ok(direccion_a_valor(direccion))
+    }
+}
+
+fn metodo_vaciar(tipo: &'static str, flujos: &RegistroFlujos) -> impl Fn(&[Valor]) -> Result<Valor, Fallo> + 'static {
+    let flujos = Arc::clone(flujos);
+    move |argumentos| {
+        let funcion = &format!("{tipo}.vaciar");
+        exigir_aridad(funcion, &argumentos[1..], 0)?;
+        let instancia = receptor_con_tipo(funcion, argumentos, tipo)?;
+        let id = id_de_instancia(funcion, &instancia)?;
+        let conexion = obtener_conexion(&flujos, id)?;
+        conexion
+            .lock()
+            .map_err(|_| error_socket("la conexión está dañada"))?
+            .escritura
+            .flush()
+            .map_err(|causa| error_socket(format!("no se pudo vaciar la salida: {causa}")))?;
+        Ok(Valor::Nulo)
+    }
+}
+
+fn metodo_cerrar_escritura(tipo: &'static str, flujos: &RegistroFlujos) -> impl Fn(&[Valor]) -> Result<Valor, Fallo> + 'static {
+    let flujos = Arc::clone(flujos);
+    move |argumentos| {
+        let funcion = &format!("{tipo}.cerrar_escritura");
+        exigir_aridad(funcion, &argumentos[1..], 0)?;
+        let instancia = receptor_con_tipo(funcion, argumentos, tipo)?;
+        let id = id_de_instancia(funcion, &instancia)?;
+        let conexion = obtener_conexion(&flujos, id)?;
+        conexion
+            .lock()
+            .map_err(|_| error_socket("la conexión está dañada"))?
+            .escritura
+            .shutdown(std::net::Shutdown::Write)
+            .map_err(|causa| error_socket(format!("no se pudo cerrar la escritura: {causa}")))?;
+        Ok(Valor::Nulo)
+    }
+}
+
+fn metodo_sin_demora(tipo: &'static str, flujos: &RegistroFlujos) -> impl Fn(&[Valor]) -> Result<Valor, Fallo> + 'static {
+    let flujos = Arc::clone(flujos);
+    move |argumentos| {
+        let funcion = &format!("{tipo}.sin_demora");
+        exigir_aridad(funcion, &argumentos[1..], 1)?;
+        let instancia = receptor_con_tipo(funcion, argumentos, tipo)?;
+        let habilitado = match argumentos.get(1) {
+            Some(Valor::Log(valor)) => *valor,
+            Some(otro) => {
+                return Err(error(
+                    "E0406",
+                    format!("'{funcion}' espera un lógico, pero recibió '{}'", otro.nombre_tipo()),
+                ));
+            }
+            None => return Err(error("E0210", format!("'{funcion}' necesita 1 argumento"))),
+        };
+        let id = id_de_instancia(funcion, &instancia)?;
+        let conexion = obtener_conexion(&flujos, id)?;
+        conexion
+            .lock()
+            .map_err(|_| error_socket("la conexión está dañada"))?
+            .escritura
+            .set_nodelay(habilitado)
+            .map_err(|causa| error_socket(format!("no se pudo configurar TCP_NODELAY: {causa}")))?;
+        Ok(Valor::Nulo)
+    }
+}
+
 fn metodo_recibir_bits_asincrono(flujos: &RegistroFlujos) -> maquina_virtual::FuncionNativaConVm {
     const F: &str = "Socket.recibir_bits_asincrono";
     let flujos = Arc::clone(flujos);
@@ -516,11 +629,10 @@ fn metodo_recibir_bits_asincrono(flujos: &RegistroFlujos) -> maquina_virtual::Fu
         let manija_tarea = manija.clone();
         let flujos_tarea = Arc::clone(&flujos);
         manija.runtime().spawn(async move {
-            let resultado = tokio::task::spawn_blocking(move || {
-                recibir_bytes(&flujos_tarea, id, maximo as usize).map_err(mensaje_de_fallo)
-            })
-            .await
-            .unwrap_or_else(|causa| Err(format!("la tarea de recepción no pudo completarse: {causa}")));
+            let resultado =
+                tokio::task::spawn_blocking(move || recibir_bytes(&flujos_tarea, id, maximo as usize).map_err(mensaje_de_fallo))
+                    .await
+                    .unwrap_or_else(|causa| Err(format!("la tarea de recepción no pudo completarse: {causa}")));
             manija_tarea.enviar(Mensaje::TareaLista {
                 id: id_tarea,
                 resultado: resultado.map(CargaNativa::Bytes),
@@ -569,7 +681,9 @@ fn metodo_al_conectar(argumentos: &[Valor]) -> Result<Valor, Fallo> {
                 ),
             ));
         }
-        None => return Err(error("E0210", format!("'{F}' necesita al menos 1 argumento"))),
+        None => {
+            return Err(error("E0210", format!("'{F}' necesita al menos 1 argumento")));
+        }
     };
     instancia.datos.borrow_mut().insert("manejador".to_string(), manejador);
     Ok(Valor::Nulo)
@@ -606,12 +720,7 @@ fn despachar_conexion(
         cerrar_conexion(flujos, id_conexion);
         return CargaNativa::Nula;
     };
-    let manejador = instancia_servidor
-        .datos
-        .borrow()
-        .get("manejador")
-        .cloned()
-        .unwrap_or(Valor::Nulo);
+    let manejador = instancia_servidor.datos.borrow().get("manejador").cloned().unwrap_or(Valor::Nulo);
     let Valor::Funcion(funcion, entorno) = manejador else {
         cerrar_conexion(flujos, id_conexion);
         return CargaNativa::Nula;
@@ -689,9 +798,7 @@ fn metodo_escuchar_servidor(
         let manija = vm.bucle().manija();
         let flujos_hilo = Arc::clone(&flujos);
         let contador_hilo = Arc::clone(&contador);
-        thread::spawn(move || {
-            bucle_aceptacion_socket(escucha, id_servidor, manija, bandera, flujos_hilo, contador_hilo)
-        });
+        thread::spawn(move || bucle_aceptacion_socket(escucha, id_servidor, manija, bandera, flujos_hilo, contador_hilo));
 
         Ok(Valor::Nulo)
     })
@@ -800,6 +907,18 @@ pub fn registrar(registro: &mut RegistroNativos, guardian: &Rc<GuardianPermisos>
         registro.registrar_funcion(&format!("{tipo}.recibir_bits"), Box::new(metodo_recibir_bits(tipo, &flujos)));
         registro.registrar_funcion(&format!("{tipo}.recibir_texto"), Box::new(metodo_recibir_texto(tipo, &flujos)));
         registro.registrar_funcion(&format!("{tipo}.recibir_linea"), Box::new(metodo_recibir_linea(tipo, &flujos)));
+        registro.registrar_funcion(&format!("{tipo}.esta_conectado"), Box::new(metodo_esta_conectado(tipo, &flujos)));
+        registro.registrar_funcion(&format!("{tipo}.direccion_local"), Box::new(metodo_direccion(tipo, &flujos, true)));
+        registro.registrar_funcion(
+            &format!("{tipo}.direccion_remota"),
+            Box::new(metodo_direccion(tipo, &flujos, false)),
+        );
+        registro.registrar_funcion(&format!("{tipo}.vaciar"), Box::new(metodo_vaciar(tipo, &flujos)));
+        registro.registrar_funcion(
+            &format!("{tipo}.cerrar_escritura"),
+            Box::new(metodo_cerrar_escritura(tipo, &flujos)),
+        );
+        registro.registrar_funcion(&format!("{tipo}.sin_demora"), Box::new(metodo_sin_demora(tipo, &flujos)));
         registro.registrar_funcion(&format!("{tipo}.cerrar"), Box::new(metodo_cerrar(tipo, &flujos)));
     }
     registro.registrar_funcion(

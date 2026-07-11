@@ -21,6 +21,7 @@
 //!   mismo patrón reactor.
 
 pub mod cliente_http;
+mod protocolo_http;
 pub mod servidor_http;
 pub mod socket;
 pub mod socket_rs;
@@ -41,17 +42,25 @@ pub(crate) fn permiso_denegado(mensaje: String) -> Fallo {
 /// Interpreta un método HTTP en español o inglés (`OBTENER`/`GET`, ...).
 /// Compartido entre el cliente (verbo de la petición) y el servidor (verbo
 /// de la ruta registrada).
-pub(crate) fn metodo_http_desde_texto(funcion: &str, texto: &str) -> Result<reqwest::Method, Fallo> {
-    match maquina_virtual::normalizar_nombre(texto).to_uppercase().as_str() {
+pub(crate) fn metodo_http_desde_texto(
+    funcion: &str,
+    texto: &str,
+) -> Result<reqwest::Method, Fallo> {
+    match maquina_virtual::normalizar_nombre(texto)
+        .to_uppercase()
+        .as_str()
+    {
         "OBTENER" | "GET" => Ok(reqwest::Method::GET),
         "PUBLICAR" | "POST" => Ok(reqwest::Method::POST),
         "PONER" | "PUT" => Ok(reqwest::Method::PUT),
         "PARCHAR" | "PATCH" => Ok(reqwest::Method::PATCH),
         "ELIMINAR" | "DELETE" => Ok(reqwest::Method::DELETE),
+        "CABEZA" | "HEAD" => Ok(reqwest::Method::HEAD),
+        "OPCIONES" | "OPTIONS" => Ok(reqwest::Method::OPTIONS),
         otro => Err(error(
             "E0406",
             format!(
-                "'{funcion}' no reconoce el método '{otro}' (usa OBTENER, PUBLICAR, PONER, PARCHAR o ELIMINAR)"
+                "'{funcion}' no reconoce el método '{otro}' (usa OBTENER, PUBLICAR, PONER, PARCHAR, ELIMINAR, CABEZA u OPCIONES)"
             ),
         )),
     }

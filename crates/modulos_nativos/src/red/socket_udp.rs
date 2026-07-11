@@ -16,6 +16,8 @@
 //!   usuario, así que solo pide permiso de cliente sobre el destino.
 //! - `recibir()` / `recibir_asincrono()`: devuelven un `jsn`
 //!   `{origen, puerto, datos}` con `datos` como `Bits`.
+//! - `esta_enlazado()` y `direccion_local()` permiten observar el ciclo de
+//!   vida; `permitir_difusion(log)` habilita o deshabilita broadcast.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -149,15 +151,17 @@ fn metodo_fijar_tiempo_espera(registro: &RegistroSockets) -> impl Fn(&[Valor]) -
             Some(otro) => {
                 return Err(error(
                     "E0406",
-                    format!(
-                        "'{F}' espera un entero positivo de segundos, pero recibió '{}'",
-                        otro.nombre_tipo()
-                    ),
+                    format!("'{F}' espera un entero positivo de segundos, pero recibió '{}'", otro.nombre_tipo()),
                 ));
             }
-            None => return Err(error("E0210", format!("'{F}' necesita al menos 1 argumento"))),
+            None => {
+                return Err(error("E0210", format!("'{F}' necesita al menos 1 argumento")));
+            }
         };
-        instancia.datos.borrow_mut().insert("tiempo_espera".to_string(), Valor::Entero(segundos));
+        instancia
+            .datos
+            .borrow_mut()
+            .insert("tiempo_espera".to_string(), Valor::Entero(segundos));
         if let Some(id) = id_de_instancia(&instancia) {
             let socket = obtener_socket(&registro, id)?;
             let socket = socket.lock().map_err(|_| error_socket("el SocketUdp está dañado"))?;
@@ -179,8 +183,7 @@ fn asegurar_enlazado(
     if let Some(id) = id_de_instancia(instancia) {
         return Ok(id);
     }
-    let socket = UdpSocket::bind(direccion_local)
-        .map_err(|causa| error_socket(format!("no se pudo enlazar el SocketUdp: {causa}")))?;
+    let socket = UdpSocket::bind(direccion_local).map_err(|causa| error_socket(format!("no se pudo enlazar el SocketUdp: {causa}")))?;
     let tiempo_espera = tiempo_espera_de(instancia);
     fijar_tiempo_espera_socket(&socket, tiempo_espera as u64)
         .map_err(|causa| error_socket(format!("no se pudo fijar el tiempo de espera: {causa}")))?;
@@ -238,6 +241,70 @@ fn metodo_puerto(registro: &RegistroSockets) -> impl Fn(&[Valor]) -> Result<Valo
     }
 }
 
+fn metodo_esta_enlazado(registro: &RegistroSockets) -> impl Fn(&[Valor]) -> Result<Valor, Fallo> + 'static {
+    const F: &str = "SocketUdp.esta_enlazado";
+    let registro = Arc::clone(registro);
+    move |argumentos| {
+        exigir_aridad(F, &argumentos[1..], 0)?;
+        let instancia = receptor(F, argumentos)?;
+        let Some(id) = id_de_instancia(&instancia) else {
+            return Ok(Valor::Log(false));
+        };
+        let enlazado = registro
+            .lock()
+            .map_err(|_| error_socket("el registro de sockets UDP está dañado"))?
+            .contains_key(&id);
+        Ok(Valor::Log(enlazado))
+    }
+}
+
+fn metodo_direccion_local(registro: &RegistroSockets) -> impl Fn(&[Valor]) -> Result<Valor, Fallo> + 'static {
+    const F: &str = "SocketUdp.direccion_local";
+    let registro = Arc::clone(registro);
+    move |argumentos| {
+        exigir_aridad(F, &argumentos[1..], 0)?;
+        let instancia = receptor(F, argumentos)?;
+        let id = id_de_instancia(&instancia).ok_or_else(|| error_socket(format!("'{F}': el SocketUdp no está enlazado")))?;
+        let socket = obtener_socket(&registro, id)?;
+        let direccion = socket
+            .lock()
+            .map_err(|_| error_socket("el SocketUdp está dañado"))?
+            .local_addr()
+            .map_err(|causa| error_socket(format!("no se pudo leer la dirección local: {causa}")))?;
+        let mut datos = IndexMap::new();
+        datos.insert("anfitrion".to_string(), Valor::texto(direccion.ip().to_string()));
+        datos.insert("puerto".to_string(), Valor::Entero(i64::from(direccion.port())));
+        Ok(Valor::jsn(datos))
+    }
+}
+
+fn metodo_permitir_difusion(registro: &RegistroSockets) -> impl Fn(&[Valor]) -> Result<Valor, Fallo> + 'static {
+    const F: &str = "SocketUdp.permitir_difusion";
+    let registro = Arc::clone(registro);
+    move |argumentos| {
+        exigir_aridad(F, &argumentos[1..], 1)?;
+        let instancia = receptor(F, argumentos)?;
+        let habilitado = match argumentos.get(1) {
+            Some(Valor::Log(valor)) => *valor,
+            Some(otro) => {
+                return Err(error(
+                    "E0406",
+                    format!("'{F}' espera un lógico, pero recibió '{}'", otro.nombre_tipo()),
+                ));
+            }
+            None => return Err(error("E0210", format!("'{F}' necesita 1 argumento"))),
+        };
+        let id = id_de_instancia(&instancia).ok_or_else(|| error_socket(format!("'{F}': el SocketUdp no está enlazado")))?;
+        let socket = obtener_socket(&registro, id)?;
+        socket
+            .lock()
+            .map_err(|_| error_socket("el SocketUdp está dañado"))?
+            .set_broadcast(habilitado)
+            .map_err(|causa| error_socket(format!("no se pudo configurar la difusión: {causa}")))?;
+        Ok(Valor::Nulo)
+    }
+}
+
 // =====================================================================
 // enviar_a / recibir (síncronos)
 // =====================================================================
@@ -245,8 +312,12 @@ fn metodo_puerto(registro: &RegistroSockets) -> impl Fn(&[Valor]) -> Result<Valo
 fn bytes_de_datos(funcion: &str, valor: &Valor) -> Result<Vec<u8>, Fallo> {
     match valor {
         Valor::Texto(texto) => Ok(texto.as_bytes().to_vec()),
-        otro => maquina_virtual::bytes_de_bits(otro)
-            .ok_or_else(|| error("E0406", format!("'{funcion}' espera texto o Bits en 'datos', pero recibió '{}'", otro.nombre_tipo()))),
+        otro => maquina_virtual::bytes_de_bits(otro).ok_or_else(|| {
+            error(
+                "E0406",
+                format!("'{funcion}' espera texto o Bits en 'datos', pero recibió '{}'", otro.nombre_tipo()),
+            )
+        }),
     }
 }
 
@@ -339,12 +410,17 @@ fn metodo_recibir_asincrono(registro: &RegistroSockets) -> maquina_virtual::Func
             .await
             .unwrap_or_else(|causa| Err(format!("la tarea de recepción no pudo completarse: {causa}")));
 
-            let carga = resultado.map(|(origen, bytes)| CargaNativa::Mapa(vec![
-                ("origen".to_string(), CargaNativa::Texto(origen.ip().to_string())),
-                ("puerto".to_string(), CargaNativa::Entero(i64::from(origen.port()))),
-                ("datos".to_string(), CargaNativa::Bytes(bytes)),
-            ]));
-            manija_tarea.enviar(Mensaje::TareaLista { id: id_tarea, resultado: carga });
+            let carga = resultado.map(|(origen, bytes)| {
+                CargaNativa::Mapa(vec![
+                    ("origen".to_string(), CargaNativa::Texto(origen.ip().to_string())),
+                    ("puerto".to_string(), CargaNativa::Entero(i64::from(origen.port()))),
+                    ("datos".to_string(), CargaNativa::Bytes(bytes)),
+                ])
+            });
+            manija_tarea.enviar(Mensaje::TareaLista {
+                id: id_tarea,
+                resultado: carga,
+            });
         });
 
         Ok(Valor::TareaNativa(Rc::new(maquina_virtual::EstadoTareaNativa { id: id_tarea })))
@@ -385,13 +461,22 @@ pub fn registrar(registro_nativos: &mut RegistroNativos, guardian: &Rc<GuardianP
     );
     registro_nativos.registrar_funcion(&format!("{TIPO_SOCKET_UDP}.puerto"), Box::new(metodo_puerto(&registro)));
     registro_nativos.registrar_funcion(
+        &format!("{TIPO_SOCKET_UDP}.esta_enlazado"),
+        Box::new(metodo_esta_enlazado(&registro)),
+    );
+    registro_nativos.registrar_funcion(
+        &format!("{TIPO_SOCKET_UDP}.direccion_local"),
+        Box::new(metodo_direccion_local(&registro)),
+    );
+    registro_nativos.registrar_funcion(
+        &format!("{TIPO_SOCKET_UDP}.permitir_difusion"),
+        Box::new(metodo_permitir_difusion(&registro)),
+    );
+    registro_nativos.registrar_funcion(
         &format!("{TIPO_SOCKET_UDP}.enviar_a"),
         Box::new(metodo_enviar_a(guardian, &registro, &contador)),
     );
     registro_nativos.registrar_funcion(&format!("{TIPO_SOCKET_UDP}.recibir"), Box::new(metodo_recibir(&registro)));
-    registro_nativos.registrar_funcion_con_vm(
-        &format!("{TIPO_SOCKET_UDP}.recibir_asincrono"),
-        metodo_recibir_asincrono(&registro),
-    );
+    registro_nativos.registrar_funcion_con_vm(&format!("{TIPO_SOCKET_UDP}.recibir_asincrono"), metodo_recibir_asincrono(&registro));
     registro_nativos.registrar_funcion(&format!("{TIPO_SOCKET_UDP}.cerrar"), Box::new(metodo_cerrar(&registro)));
 }

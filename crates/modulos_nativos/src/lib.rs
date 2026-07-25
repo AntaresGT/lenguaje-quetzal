@@ -46,27 +46,8 @@ pub fn crear_registro_con_permisos(guardian: &Rc<GuardianPermisos>) -> RegistroN
 /// debe resolverse al módulo nativo `archivo` (cuyo `archivo.constructor`
 /// atiende `nuevo Archivo(...)`). Recibe el módulo de origen y el símbolo ya
 /// normalizado (minúsculas, sin tildes ni guiones bajos).
-pub fn modulo_de_tipo_exportado(modulo: &str, simbolo_normalizado: &str) -> Option<&'static str> {
-    match (modulo, simbolo_normalizado) {
-        ("sistema_archivos", "archivo") => Some("archivo"),
-        ("sistema_archivos", "ruta") => Some("ruta"),
-        ("red", "clientehttp") => Some("clientehttp"),
-        ("red", "respuestahttp") => Some("clientehttp"),
-        ("red", "servidorhttp") => Some("servidorhttp"),
-        ("red", "peticionhttp") => Some("servidorhttp"),
-        ("red", "partemultiparte") => Some("servidorhttp"),
-        ("red", "respuestaservidor") => Some("respuestas"),
-        ("red", "respuestas") => Some("respuestas"),
-        ("red", "socket") => Some("socket"),
-        ("red", "servidorsocket") => Some("servidorsocket"),
-        ("red", "conexionsocket") => Some("servidorsocket"),
-        ("red", "socketudp") => Some("socketudp"),
-        ("red", "clienters") => Some("clienters"),
-        ("red", "servidorrs") => Some("servidorrs"),
-        ("red", "conexionrs") => Some("servidorrs"),
-        ("red", "enrutador") => Some("enrutador"),
-        _ => None,
-    }
+pub fn modulo_de_tipo_exportado(_modulo: &str, _simbolo_normalizado: &str) -> Option<&'static str> {
+    None
 }
 
 /// Crea el registro con todos los permisos denegados (seguro por defecto).

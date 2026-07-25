@@ -67,6 +67,9 @@ struct Analizador {
     prototipos: IndexMap<String, InfoPrototipo>,
     /// Tipo de retorno de la función que se analiza (pila por anidamiento).
     pila_retorno: Vec<TipoSemantico>,
+    /// Si la función que se analiza es `asincrono` (pila por anidamiento;
+    /// en el scope global la pila está vacía y `esperar` está permitido).
+    pila_asincrona: Vec<bool>,
     /// Objeto cuyo cuerpo se está analizando.
     objeto_actual: Option<String>,
     /// Si se analiza el cuerpo de un constructor (permite inicializar
@@ -95,6 +98,7 @@ impl Analizador {
             objetos: IndexMap::new(),
             prototipos: IndexMap::new(),
             pila_retorno: Vec::new(),
+            pila_asincrona: Vec::new(),
             objeto_actual: None,
             en_constructor: false,
             profundidad_bucle: 0,
@@ -433,9 +437,17 @@ impl Analizador {
         }
         self.pila_retorno
             .push(TipoSemantico::desde_ast(&funcion.tipo_retorno));
+        self.pila_asincrona.push(funcion.asincrona);
         self.analizar_bloque_sin_ambito(&funcion.cuerpo);
+        self.pila_asincrona.pop();
         self.pila_retorno.pop();
         self.tabla.cerrar_ambito();
+    }
+
+    /// `true` si `esperar` es válido en este punto: a nivel de scope global
+    /// (no hay función en la pila) o dentro de una función `asincrono`.
+    fn esperar_es_valido(&self) -> bool {
+        self.pila_asincrona.last().copied().unwrap_or(true)
     }
 
     fn analizar_objeto(&mut self, objeto: &DefinicionObjeto) {
@@ -1074,7 +1086,27 @@ impl Analizador {
                     TipoSemantico::Desconocido
                 }
             }
-            NodoExpresion::Esperar(interior) => self.inferir_expresion(interior),
+            NodoExpresion::Esperar(interior) => {
+                // Regla: `esperar` solo es válido dentro de una función
+                // `asincrono` o a nivel de scope global (top-level). Dentro
+                // de una función síncrona es un error, porque esa función no
+                // forma parte del bucle de eventos.
+                if !self.esperar_es_valido() {
+                    self.error(
+                        ErrorQuetzal::nuevo(
+                            "E0213",
+                            CategoriaError::Semantico,
+                            "'esperar' solo puede usarse dentro de una función 'asincrono' o a nivel de scope global",
+                        )
+                        .con_ubicacion(expresion.ubicacion)
+                        .con_etiqueta("'esperar' dentro de una función síncrona")
+                        .con_ayuda(
+                            "declara la función como 'asincrono' para poder usar 'esperar' en su cuerpo, o traslada el 'esperar' al scope global",
+                        ),
+                    );
+                }
+                self.inferir_expresion(interior)
+            }
         }
     }
 

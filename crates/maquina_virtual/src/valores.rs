@@ -306,79 +306,6 @@ pub fn json_a_valor(json: &serde_json::Value) -> Valor {
     }
 }
 
-// ----- Bits: instancia nativa compartida -----
-//
-// La construcción de una instancia `Bits` vive aquí (no en `modulos_nativos`)
-// para que el bucle de eventos pueda convertir resultados binarios de tareas
-// nativas (E/S) a valores de Quetzal sin que este crate dependa de
-// `modulos_nativos`. El módulo `modulos_nativos::bits` reutiliza estas mismas
-// funciones para no duplicar la representación.
-
-/// Nombre del tipo nativo usado para instancias `Bits`.
-pub const TIPO_BITS: &str = "Bits";
-
-/// Cantidad máxima de bytes mostrados en la representación textual.
-const BYTES_EN_REPRESENTACION_BITS: usize = 16;
-
-/// Representación al imprimir: `<Bits 4f 4b 0a (3 bytes)>` (recortada).
-pub fn representacion_bits(bytes: &[u8]) -> String {
-    if bytes.is_empty() {
-        return "<Bits (0 bytes)>".to_string();
-    }
-    let visibles: Vec<String> = bytes
-        .iter()
-        .take(BYTES_EN_REPRESENTACION_BITS)
-        .map(|byte| format!("{byte:02x}"))
-        .collect();
-    let resto = if bytes.len() > BYTES_EN_REPRESENTACION_BITS {
-        "…"
-    } else {
-        ""
-    };
-    format!("<Bits {}{resto} ({} bytes)>", visibles.join(" "), bytes.len())
-}
-
-/// Construye una instancia nativa `Bits` a partir de bytes crudos.
-pub fn instancia_bits_desde(bytes: &[u8]) -> Valor {
-    let lista: Vec<Valor> = bytes
-        .iter()
-        .map(|byte| Valor::Entero(i64::from(*byte)))
-        .collect();
-    let mut datos = IndexMap::new();
-    datos.insert("datos".to_string(), Valor::lista(lista));
-    datos.insert(
-        "texto".to_string(),
-        Valor::texto(representacion_bits(bytes)),
-    );
-    Valor::InstanciaNativa(Rc::new(DatosInstanciaNativa {
-        tipo: Rc::from(TIPO_BITS),
-        datos: RefCell::new(datos),
-    }))
-}
-
-/// Bytes crudos si el valor es una instancia `Bits`, o `None` si no lo es o
-/// si algún elemento no es un byte válido (0–255).
-pub fn bytes_de_bits(valor: &Valor) -> Option<Vec<u8>> {
-    match valor {
-        Valor::InstanciaNativa(instancia) if &*instancia.tipo == TIPO_BITS => {
-            match instancia.datos.borrow().get("datos") {
-                Some(Valor::Lista(lista)) => lista
-                    .borrow()
-                    .iter()
-                    .map(|elemento| match elemento {
-                        Valor::Entero(entero) if (0..=255).contains(entero) => {
-                            Some(*entero as u8)
-                        }
-                        _ => None,
-                    })
-                    .collect(),
-                _ => None,
-            }
-        }
-        _ => None,
-    }
-}
-
 // ----- Bucle de eventos: conversión Valor <-> CargaNativa -----
 
 /// Convierte el resultado (enviable entre hilos) de una tarea nativa al
@@ -388,7 +315,6 @@ pub fn carga_a_valor(carga: CargaNativa) -> Valor {
         CargaNativa::Nula => Valor::Nulo,
         CargaNativa::Entero(entero) => Valor::Entero(entero),
         CargaNativa::Texto(texto) => Valor::texto(texto),
-        CargaNativa::Bytes(bytes) => instancia_bits_desde(&bytes),
         CargaNativa::Lista(elementos) => {
             Valor::lista(elementos.into_iter().map(carga_a_valor).collect())
         }
@@ -430,7 +356,7 @@ pub fn valor_a_carga(valor: &Valor) -> CargaNativa {
                 .map(|(clave, valor)| (clave.clone(), valor_a_carga(valor)))
                 .collect(),
         ),
-        Valor::InstanciaNativa(instancia) if &*instancia.tipo != TIPO_BITS => CargaNativa::Instancia {
+        Valor::InstanciaNativa(instancia) => CargaNativa::Instancia {
             tipo: instancia.tipo.to_string(),
             campos: instancia
                 .datos
@@ -439,9 +365,6 @@ pub fn valor_a_carga(valor: &Valor) -> CargaNativa {
                 .map(|(clave, valor)| (clave.clone(), valor_a_carga(valor)))
                 .collect(),
         },
-        otro => match bytes_de_bits(otro) {
-            Some(bytes) => CargaNativa::Bytes(bytes),
-            None => CargaNativa::Texto(texto_de_valor(otro)),
-        },
+        otro => CargaNativa::Texto(texto_de_valor(otro)),
     }
 }

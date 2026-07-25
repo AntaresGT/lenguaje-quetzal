@@ -16,7 +16,7 @@ pub use bucle_eventos::{BucleEventos, CargaNativa, ManijaBucle, Mensaje};
 pub use errores::{DatosExcepcion, Fallo};
 pub use nativos::{FuncionNativa, FuncionNativaConVm, RegistroNativos, normalizar_nombre};
 pub use valores::{
-    DatosInstanciaNativa, EstadoTareaNativa, Valor, Variable, bytes_de_bits, carga_a_valor,
-    instancia_bits_desde, texto_de_valor, valor_a_carga,
+    DatosInstanciaNativa, EstadoTareaNativa, Valor, Variable, carga_a_valor, texto_de_valor,
+    valor_a_carga,
 };
 pub use vm::Vm;

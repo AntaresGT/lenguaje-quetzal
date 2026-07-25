@@ -26,8 +26,6 @@ pub enum CargaNativa {
     Nula,
     Entero(i64),
     Texto(String),
-    /// Datos binarios: se reconstruyen como una instancia `Bits` en Quetzal.
-    Bytes(Vec<u8>),
     Lista(Vec<CargaNativa>),
     Mapa(Vec<(String, CargaNativa)>),
     /// Instancia de un objeto nativo (por ejemplo `RespuestaHttp`): se

@@ -174,6 +174,72 @@ fn analizar_deberia_aceptar_mutacion_de_jsn_mutable() {
 }
 
 #[test]
+fn analizar_deberia_aceptar_esperar_en_scope_global() {
+    // En el scope global (top-level) `esperar` está permitido: es el punto
+    // de entrada al bucle de eventos.
+    let codigo = "asincrono entero duplicar(entero valor) {\n    retornar valor * 2\n}\nentero resultado = esperar duplicar(21)";
+    let resultado = analizar(codigo);
+    assert!(resultado.is_ok(), "errores: {:?}", resultado.err());
+}
+
+#[test]
+fn analizar_deberia_aceptar_esperar_dentro_de_funcion_asincrona() {
+    let codigo = "asincrono entero duplicar(entero valor) {\n    retornar valor * 2\n}\nasincrono vacio tarea() {\n    entero resultado = esperar duplicar(10)\n    consola.mostrar(resultado)\n}";
+    let resultado = analizar(codigo);
+    assert!(resultado.is_ok(), "errores: {:?}", resultado.err());
+}
+
+#[test]
+fn analizar_deberia_rechazar_esperar_dentro_de_funcion_sincrona() {
+    let codigo = "asincrono entero duplicar(entero valor) {\n    retornar valor * 2\n}\nentero calculo() {\n    entero resultado = esperar duplicar(10)\n    retornar resultado\n}";
+    assert_eq!(primer_codigo(analizar(codigo)), "E0213");
+}
+
+#[test]
+fn analizar_deberia_rechazar_esperar_en_metodo_sincrono_de_objeto() {
+    let codigo = "asincrono entero duplicar(entero valor) {\n    retornar valor * 2\n}\nobjeto Util {\n    publico:\n        entero calcular() {\n            entero r = esperar duplicar(5)\n            retornar r\n        }\n}";
+    assert_eq!(primer_codigo(analizar(codigo)), "E0213");
+}
+
+#[test]
+fn analizar_deberia_aceptar_esperar_en_metodo_asincrono_de_objeto() {
+    let codigo = "asincrono entero duplicar(entero valor) {\n    retornar valor * 2\n}\nobjeto Util {\n    publico:\n        asincrono entero calcular() {\n            entero r = esperar duplicar(5)\n            retornar r\n        }\n}";
+    let resultado = analizar(codigo);
+    assert!(resultado.is_ok(), "errores: {:?}", resultado.err());
+}
+
+#[test]
+fn analizar_deberia_aceptar_esperar_en_metodo_libre_asincrono() {
+    let codigo = "asincrono entero duplicar(entero valor) {\n    retornar valor * 2\n}\nobjeto Util {\n    publico:\n        libre asincrono entero calcular() {\n            entero r = esperar duplicar(5)\n            retornar r\n        }\n}";
+    let resultado = analizar(codigo);
+    assert!(resultado.is_ok(), "errores: {:?}", resultado.err());
+}
+
+#[test]
+fn analizar_deberia_rechazar_esperar_en_constructor() {
+    // Los constructores son síncronos por definición: no pueden usar `esperar`.
+    let codigo = "asincrono entero duplicar(entero valor) {\n    retornar valor * 2\n}\nobjeto Util {\n    publico:\n        entero var valor = 0\n        Util(entero inicial) {\n            esto.valor = esperar duplicar(inicial)\n        }\n}";
+    assert_eq!(primer_codigo(analizar(codigo)), "E0213");
+}
+
+#[test]
+fn analizar_deberia_aceptar_funcion_asincrona_con_retorno_vacio() {
+    // Las funciones asíncronas pueden retornar `vacio` (no devuelven valor).
+    let codigo = "asincrono vacio tarea() {\n    consola.mostrar(\"hola\")\n}";
+    let resultado = analizar(codigo);
+    assert!(resultado.is_ok(), "errores: {:?}", resultado.err());
+}
+
+#[test]
+fn analizar_deberia_aceptar_esperar_en_expresiones_complejas() {
+    // `esperar` puede usarse en cualquier contexto de expresión, no solo en
+    // la asignación a una variable.
+    let codigo = "asincrono entero duplicar(entero valor) {\n    retornar valor * 2\n}\nasincrono entero cuadruplicar(entero valor) {\n    retornar esperar duplicar(valor) * 2\n}\nentero resultado = esperar cuadruplicar(5)";
+    let resultado = analizar(codigo);
+    assert!(resultado.is_ok(), "errores: {:?}", resultado.err());
+}
+
+#[test]
 fn analizar_deberia_procesar_todos_los_ejemplos() {
     let directorio = concat!(env!("CARGO_MANIFEST_DIR"), "/../../ejemplos");
     let entradas = std::fs::read_dir(directorio).expect("debería existir ejemplos/");

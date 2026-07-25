@@ -210,3 +210,153 @@ fn ejecutar_deberia_evaluar_palabras_logicas_y_o() {
     assert!(global(&entorno, "adulto").es_igual(&Valor::Log(true)));
     assert!(global(&entorno, "extremo").es_igual(&Valor::Log(false)));
 }
+
+// ----- Bucle de eventos: funciones `asincrono` y `esperar` -----
+
+#[test]
+fn funcion_asincrona_con_tilde_deberia_resolverse_con_esperar() {
+    // La palabra reservada acepta tilde: `asíncrono` ≡ `asincrono`.
+    let entorno = ejecutar(
+        "asíncrono entero duplicar(entero valor) {\n    retornar valor * 2\n}\nentero resultado = esperar duplicar(21)\n",
+    );
+    assert_eq!(como_entero(&global(&entorno, "resultado")), 42);
+}
+
+#[test]
+fn funcion_asincrona_vacio_deberia_poder_esperarse() {
+    // Una función asíncrona `vacio` puede esperarse: simplemente ejecuta su
+    // cuerpo y el `esperar` devuelve `nulo`.
+    let entorno = ejecutar(
+        "entero var contador = 0\nasincrono vacio incrementar() {\n    contador++\n}\nesperar incrementar()\nesperar incrementar()\nentero final = contador\n",
+    );
+    assert_eq!(como_entero(&global(&entorno, "final")), 2);
+}
+
+#[test]
+fn esperar_secuncial_ejecuta_en_orden() {
+    // Múltiples `esperar` consecutivos se resuelven en orden de aparición.
+    let entorno = ejecutar(
+        "asincrono entero sumar(entero a, entero b) {\n    retornar a + b\n}\nentero primero = esperar sumar(1, 2)\nentero segundo = esperar sumar(primero, 10)\nentero tercero = esperar sumar(segundo, 100)\n",
+    );
+    assert_eq!(como_entero(&global(&entorno, "primero")), 3);
+    assert_eq!(como_entero(&global(&entorno, "segundo")), 13);
+    assert_eq!(como_entero(&global(&entorno, "tercero")), 113);
+}
+
+#[test]
+fn funcion_asincrona_puede_esperar_a_otra_funcion_asincrona() {
+    let entorno = ejecutar(
+        "asincrono entero duplicar(entero valor) {\n    retornar valor * 2\n}\nasincrono entero cuadruplicar(entero valor) {\n    entero doble = esperar duplicar(valor)\n    retornar esperar duplicar(doble)\n}\nentero resultado = esperar cuadruplicar(5)\n",
+    );
+    assert_eq!(como_entero(&global(&entorno, "resultado")), 20);
+}
+
+#[test]
+fn esperar_puede_usarse_en_expresiones_complejas() {
+    // `esperar` no solo se asigna a variables: puede combinarse con
+    // operaciones aritméticas, comparaciones, argumentos, etc.
+    let entorno = ejecutar(
+        "asincrono entero duplicar(entero valor) {\n    retornar valor * 2\n}\nentero total = esperar duplicar(10) + esperar duplicar(5)\nlog grande = esperar duplicar(30) > 50\n",
+    );
+    assert_eq!(como_entero(&global(&entorno, "total")), 30);
+    assert!(global(&entorno, "grande").es_igual(&Valor::Log(true)));
+}
+
+#[test]
+fn metodo_asincrono_de_instancia_deberia_resolverse_con_esperar() {
+    let entorno = ejecutar(
+        "objeto Calculadora {\n    publico:\n        asincrono entero duplicar(entero valor) {\n            retornar valor * 2\n        }\n}\nCalculadora calc = nuevo Calculadora()\nentero resultado = esperar calc.duplicar(21)\n",
+    );
+    assert_eq!(como_entero(&global(&entorno, "resultado")), 42);
+}
+
+#[test]
+fn metodo_libre_asincrono_deberia_resolverse_con_esperar() {
+    // Un método `libre` asíncrono se llama sin instancia, directamente sobre
+    // la clase.
+    let entorno = ejecutar(
+        "objeto Util {\n    publico:\n        libre asincrono entero triplicar(entero valor) {\n            retornar valor * 3\n        }\n}\nentero resultado = esperar Util.triplicar(7)\n",
+    );
+    assert_eq!(como_entero(&global(&entorno, "resultado")), 21);
+}
+
+#[test]
+fn metodo_asincrono_puede_usar_esto() {
+    // Un método asíncrono de instancia conserva el receptor `esto`.
+    let entorno = ejecutar(
+        "objeto Acumulador {\n    publico:\n        entero var total = 0\n        Acumulador(entero inicial) {\n            esto.total = inicial\n        }\n        asincrono vacio agregar(entero cantidad) {\n            esto.total += cantidad\n        }\n}\nAcumulador acumulador = nuevo Acumulador(10)\nesperar acumulador.agregar(5)\nesperar acumulador.agregar(7)\nentero final = acumulador.total\n",
+    );
+    assert_eq!(como_entero(&global(&entorno, "final")), 22);
+}
+
+#[test]
+fn llamar_funcion_asincrona_sin_esperar_devuelve_tarea_pendiente() {
+    // Llamar una función `asincrono` sin `esperar` devuelve una tarea
+    // pendiente (fire-and-forget): la tarea existe, no es el valor final.
+    let entorno = ejecutar(
+        "asincrono entero duplicar(entero valor) {\n    retornar valor * 2\n}\njsn r = {\n    tarea: duplicar(21),\n    resultado: esperar duplicar(21)\n}\n",
+    );
+    let tarea = global(&entorno, "r");
+    match tarea {
+        Valor::Jsn(mapa) => {
+            let mapa = mapa.borrow();
+            let tarea = mapa.get("tarea").expect("debe existir la clave 'tarea'");
+            assert!(
+                matches!(tarea, Valor::Tarea(_)),
+                "llamar sin `esperar` debe producir una tarea pendiente, no {}",
+                tarea.nombre_tipo()
+            );
+            let resultado = mapa.get("resultado").expect("debe existir la clave 'resultado'");
+            assert_eq!(como_entero(resultado), 42);
+        }
+        otro => panic!("se esperaba jsn, se obtuvo {otro:?}"),
+    }
+}
+
+#[test]
+fn excepcion_en_funcion_asincrona_se_propaga_al_esperar() {
+    // Si una función asíncrona lanza, el `esperar` propaga la excepción al
+    // contexto llamante, donde puede capturarse.
+    let entorno = ejecutar(
+        "asincrono entero explotar() {\n    lanzar \"boom\"\n}\ntexto var mensaje = \"\"\nintentar {\n    esperar explotar()\n} capturar (excepcion e) {\n    mensaje = e.mensaje\n}\n",
+    );
+    assert_eq!(como_texto(&global(&entorno, "mensaje")), "boom");
+}
+
+#[test]
+fn esperar_en_bucle_se_resuelve_secuncialmente() {
+    // Cada iteración del bucle espera a la tarea de esa iteración antes de
+    // continuar: el orden de ejecución es predecible.
+    let entorno = ejecutar(
+        "asincrono entero duplicar(entero valor) {\n    retornar valor * 2\n}\nlista var resultados = []\npara (entero i en [1, 2, 3]) {\n    entero doble = esperar duplicar(i)\n    resultados.agregar(doble)\n}\n",
+    );
+    let resultados = global(&entorno, "resultados");
+    match resultados {
+        Valor::Lista(elementos) => {
+            let elementos = elementos.borrow();
+            let enteros: Vec<i64> = elementos.iter().map(como_entero).collect();
+            assert_eq!(enteros, vec![2, 4, 6]);
+        }
+        otro => panic!("se esperaba lista, se obtuvo {otro:?}"),
+    }
+}
+
+#[test]
+fn esperar_en_condicional_funciona() {
+    let entorno = ejecutar(
+        "asincrono entero obtener() {\n    retornar 42\n}\nentero var resultado = 0\nsi (verdadero) {\n    resultado = esperar obtener()\n}\n",
+    );
+    assert_eq!(como_entero(&global(&entorno, "resultado")), 42);
+}
+
+#[test]
+fn esperar_funciona_desde_el_scope_global_tras_declarar_funciones() {
+    // El patrón típico: definir varias funciones asíncronas y usarlas todas
+    // desde el scope global, una tras otra.
+    let entorno = ejecutar(
+        "asincrono entero sumar(entero a, entero b) {\n    retornar a + b\n}\nasincrono entero multiplicar(entero a, entero b) {\n    retornar a * b\n}\nasincrono texto formatear(entero valor) {\n    retornar \"resultado: \" + valor.texto()\n}\nentero suma = esperar sumar(3, 4)\nentero producto = esperar multiplicar(suma, 2)\ntexto mensaje = esperar formatear(producto)\n",
+    );
+    assert_eq!(como_entero(&global(&entorno, "suma")), 7);
+    assert_eq!(como_entero(&global(&entorno, "producto")), 14);
+    assert_eq!(como_texto(&global(&entorno, "mensaje")), "resultado: 14");
+}

@@ -33,6 +33,9 @@ pub const MIEMBRO_PRIVADO: &str = "E0207";
 pub const PROTOTIPO_INCOMPLETO: &str = "E0208";
 pub const FUNCION_NO_DEFINIDA: &str = "E0209";
 pub const ARGUMENTOS_INVALIDOS: &str = "E0210";
+/// `esperar` usado dentro de una función síncrona (solo es válido en
+/// funciones `asincrono` o a nivel de scope global).
+pub const ESPERAR_FUERA_DE_ASINCRONO: &str = "E0213";
 
 // Módulos
 pub const MODULO_NO_ENCONTRADO: &str = "E0301";

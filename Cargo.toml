@@ -104,6 +104,9 @@ percent-encoding = "2"
 # Números aleatorios para Matematica.aleatorio.
 rand = "0.9"
 
+# Expresiones regulares para el objeto ExpresiónRegular de quetzal/motor.
+regex = "1"
+
 # RedSocket (WebSocket en inglés) del módulo nativo de red (ClienteRs/
 # ServidorRs), sobre el mismo runtime tokio del bucle de eventos; rustls
 # para soportar wss://.

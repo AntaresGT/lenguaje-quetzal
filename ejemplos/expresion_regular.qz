@@ -1,0 +1,191 @@
+// Módulo nativo quetzal/motor — el objeto ExpresiónRegular
+//
+// quetzal/motor es la "carpeta de utilería" del lenguaje: tipos varios de
+// propósito general. Esta primera entrega expone ExpresiónRegular (también
+// válido sin tilde: ExpresionRegular), un objeto para validar, buscar,
+// extraer, reemplazar, dividir y contar texto con expresiones regulares.
+// No requiere permisos especiales en quetzal.json.
+//
+// Importación:
+//   importar { ExpresiónRegular } desde "quetzal/motor"
+//
+// Cada instancia es inmutable: guarda el patrón y sus banderas, y los
+// métodos `con_*` devuelven una instancia nueva (la original no cambia).
+// Las búsquedas que no encuentran nada devuelven `nulo` (o listas vacías),
+// nunca lanzan excepción. En cambio, construir con un patrón inválido sí
+// lanza una excepción en español.
+//
+// ── Constructor: nuevo ExpresiónRegular(patron) ──────────────────────────
+//   nuevo ExpresiónRegular("^\\d+$")   -> compila el patrón al construir
+//
+// ── Funciones libres (no necesitan instanciar) ───────────────────────────
+//   ExpresiónRegular.escapar(texto)          -> texto  — escapa metacaracteres
+//   ExpresiónRegular.nueva_desde_comodín(gl) -> ER     — "*.qz" -> ^.*\.qz$
+//   ExpresiónRegular.nueva_solo_dígitos()    -> ER     — ^\d+$
+//   ExpresiónRegular.nueva_solo_letras()     -> ER     — letras con acentos y ñ
+//   ExpresiónRegular.nueva_correo()          -> ER     — usuario@dominio.ext
+//   ExpresiónRegular.nueva_url()             -> ER     — http(s)://...
+//   ExpresiónRegular.nueva_ipv4()            -> ER     — (\d{1,3}\.){3}\d{1,3}
+//
+// ── Métodos de instancia ─────────────────────────────────────────────────
+//   Coincidencia (log):
+//     .coincide(texto)               — match en cualquier parte del texto
+//     .coincide_desde_inicio(texto)  — match anclado al inicio
+//     .coincide_completo(texto)      — el texto entero cumple el patrón
+//   Búsqueda:
+//     .buscar(texto)          -> texto? — primera coincidencia o nulo
+//     .buscar_posicion(texto) -> jsn?   — {inicio, fin, coincidencia} o nulo
+//     .buscar_todo(texto)     -> lista<texto>
+//     .buscar_grupos(texto)   -> lista<jsn> — {"0", "1", ..., "nombre": ...}
+//     .contar(texto)          -> entero
+//   Reemplazo y división (el reemplazo es texto literal, sin $1):
+//     .reemplazar(texto, nuevo)      — solo la primera coincidencia
+//     .reemplazar_todo(texto, nuevo) — todas las coincidencias
+//     .dividir(texto)                -> lista<texto>
+//   Introspección:
+//     .es_válida()        -> log
+//     .diagnosticar()     -> jsn {valida, error, posicion}
+//     .patrón()           -> texto
+//     .grupos_nombrados() -> lista<texto>
+//   Banderas (lectura, log):
+//     .ignorar_mayúsculas() .multilínea() .punto_total() .unicode()
+//   Banderas (variantes inmutables, devuelven una instancia nueva):
+//     .con_ignorar_mayúsculas(log) .con_multilínea(log)
+//     .con_punto_total(log) .con_unicode(log)
+
+importar { ExpresiónRegular } desde "quetzal/motor"
+
+// ── Construcción y coincidencia ──────────────────────────────────────────
+
+// Valida números de teléfono guatemaltecos: 8 dígitos con guion.
+ExpresiónRegular telefono = nuevo ExpresiónRegular("^\\d{4}-\\d{4}$")
+log tel_valido = telefono.coincide_completo("5555-1234")
+log tel_invalido = telefono.coincide_completo("555-1234")
+consola.mostrar(t"¿'5555-1234' es teléfono? {tel_valido}")
+consola.mostrar(t"¿'555-1234' es teléfono? {tel_invalido}")
+
+// coincide busca en cualquier parte del texto (no está anclada).
+ExpresiónRegular palabra_quetzal = nuevo ExpresiónRegular("\\bquetzal\\b")
+log aparece = palabra_quetzal.coincide("El quetzal es un ave")
+log al_inicio = palabra_quetzal.coincide_desde_inicio("quetzal sagrado")
+consola.mostrar(t"¿Aparece 'quetzal'? {aparece}")
+consola.mostrar(t"¿Empieza con 'quetzal'? {al_inicio}")
+
+// ── Búsqueda y extracción ────────────────────────────────────────────────
+
+ExpresiónRegular correos = ExpresiónRegular.nueva_correo()
+texto contactos = "Escribe a ana@ejemplo.com o a luis@quetzal.dev para más información"
+
+// buscar devuelve la primera coincidencia (o nulo si no hay).
+texto primero = correos.buscar(contactos)
+consola.mostrar(t"Primer correo: {primero}")
+
+// buscar_todo devuelve todas las coincidencias.
+lista<texto> todos = correos.buscar_todo(contactos)
+consola.mostrar(t"Total de correos: {todos.longitud()}")
+entero conteo = correos.contar(contactos)
+consola.mostrar(t"Conteo con contar: {conteo}")
+
+// buscar_posicion indica dónde está (índices en caracteres).
+jsn posicion = correos.buscar_posicion(contactos)
+consola.mostrar(t"Está en {posicion.inicio}..{posicion.fin}: {posicion.coincidencia}")
+
+// Sin coincidencia -> nulo (nunca excepción).
+ExpresiónRegular digitos = ExpresiónRegular.nueva_solo_dígitos()
+log es_nulo = digitos.buscar("no hay números aquí") == nulo
+consola.mostrar(t"¿buscar sin match devuelve nulo? {es_nulo}")
+
+// ── Grupos capturados ────────────────────────────────────────────────────
+
+// Grupos numerados y nombrados: (?P<nombre>...)
+ExpresiónRegular fecha = nuevo ExpresiónRegular("(?P<anio>\\d{4})-(\\d{2})-(\\d{2})")
+lista<jsn> capturas = fecha.buscar_grupos("Hoy es 2026-07-25 y mañana 2026-07-26")
+para (jsn captura cada capturas) {
+    // "0" es la coincidencia completa; "1", "2", "3" los grupos numerados;
+    // "anio" el grupo nombrado.
+    texto completa = captura["0"]
+    texto anio = captura.anio
+    texto mes = captura["2"]
+    consola.mostrar(t"Fecha completa: {completa}, año: {anio}, mes: {mes}")
+}
+lista<texto> nombrados = fecha.grupos_nombrados()
+consola.mostrar(t"Grupos nombrados: {nombrados}")
+
+// ── Reemplazo y división ─────────────────────────────────────────────────
+
+// reemplazar solo modifica la primera; reemplazar_todo, todas.
+ExpresiónRegular espacios = nuevo ExpresiónRegular("\\s+")
+texto frase = "mucho    espacio   por   aquí"
+texto primera = espacios.reemplazar(frase, "_")
+texto todas = espacios.reemplazar_todo(frase, " ")
+consola.mostrar(t"Primera: '{primera}'")
+consola.mostrar(t"Todas:   '{todas}'")
+
+// El reemplazo es literal: "\d" no se interpreta como patrón, se inserta tal cual.
+texto reemplazo_literal = espacios.reemplazar(frase, "\\d")
+consola.mostrar(t"Literal: '{reemplazo_literal}'")
+
+// dividir usa el patrón como separador.
+ExpresiónRegular separador = nuevo ExpresiónRegular("[,;]")
+lista<texto> campos = separador.dividir("uno,dos;tres,cuatro")
+consola.mostrar(t"Campos: {campos.longitud()}")
+para (texto campo cada campos) {
+    consola.mostrar(t"  - {campo}")
+}
+
+// ── Banderas (inmutables) ────────────────────────────────────────────────
+
+// Cada con_* devuelve una instancia nueva; la original no cambia.
+ExpresiónRegular hola = nuevo ExpresiónRegular("^hola")
+ExpresiónRegular hola_insensible = hola.con_ignorar_mayúsculas(verdadero)
+log sin_bandera = hola.coincide("HOLA")
+log con_bandera = hola_insensible.coincide("HOLA")
+consola.mostrar(t"Sin bandera: {sin_bandera}")
+consola.mostrar(t"Con i: {con_bandera}")
+log original_intacta = !hola.ignorar_mayúsculas()
+consola.mostrar(t"¿La original sigue sin bandera? {original_intacta}")
+
+// Encadenamiento: varias banderas a la vez.
+ExpresiónRegular versatil = nuevo ExpresiónRegular("^.+$")
+    .con_multilínea(verdadero)
+    .con_punto_total(verdadero)
+log bandera_m = versatil.multilínea()
+log bandera_s = versatil.punto_total()
+log bandera_u = versatil.unicode()
+consola.mostrar(t"Banderas: m={bandera_m}, s={bandera_s}, u={bandera_u}")
+
+// ── Constructores de conveniencia y escapar ──────────────────────────────
+
+ExpresiónRegular archivos_qz = ExpresiónRegular.nueva_desde_comodín("*.qz")
+log es_qz = archivos_qz.coincide_completo("motor.qz")
+log es_rs = archivos_qz.coincide_completo("motor.rs")
+consola.mostrar(t"¿'motor.qz' coincide? {es_qz}")
+consola.mostrar(t"¿'motor.rs' coincide? {es_rs}")
+
+ExpresiónRegular ipv4 = ExpresiónRegular.nueva_ipv4()
+log es_ipv4 = ipv4.coincide_completo("192.168.1.1")
+consola.mostrar(t"¿'192.168.1.1' es IPv4? {es_ipv4}")
+
+ExpresiónRegular letras = ExpresiónRegular.nueva_solo_letras()
+log solo_letras = letras.coincide_completo("JoséNuñez")
+consola.mostrar(t"¿'JoséNuñez' solo letras? {solo_letras}")
+
+// escapar vuelve literal un texto con metacaracteres.
+texto literal = ExpresiónRegular.escapar("precio: 100 (oferta)")
+consola.mostrar(t"Escapado: {literal}")
+
+// ── Introspección y errores ──────────────────────────────────────────────
+
+texto patron_telefono = telefono.patrón()
+consola.mostrar(t"Patrón de 'telefono': {patron_telefono}")
+log telefono_valida = telefono.es_válida()
+consola.mostrar(t"¿Es válida? {telefono_valida}")
+jsn diagnostico = telefono.diagnosticar()
+consola.mostrar(t"Diagnóstico: válida={diagnostico.valida}")
+
+// Construir con un patrón inválido lanza una excepción en español.
+intentar {
+    ExpresiónRegular rota = nuevo ExpresiónRegular("(sin-cerrar")
+} capturar (excepcion e) {
+    consola.mostrar_error(t"Patrón inválido detectado: {e.mensaje}")
+}

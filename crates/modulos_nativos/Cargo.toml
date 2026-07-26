@@ -5,7 +5,7 @@ version.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Módulos nativos del Lenguaje Quetzal: consola, matematica, texto, listas, jsn, tiempo, red y sistema_archivos."
+description = "Módulos nativos del Lenguaje Quetzal: consola, matematica, texto, listas, jsn, tiempo, motor, red y sistema_archivos."
 
 [dependencies]
 nucleo = { workspace = true }
@@ -32,6 +32,9 @@ percent-encoding = { workspace = true }
 
 # Números aleatorios para Matematica.aleatorio.
 rand = { workspace = true }
+
+# Expresiones regulares para el objeto ExpresiónRegular de quetzal/motor.
+regex = { workspace = true }
 
 # Peticiones HTTP del módulo red (bloqueante, con rustls).
 reqwest = { workspace = true }

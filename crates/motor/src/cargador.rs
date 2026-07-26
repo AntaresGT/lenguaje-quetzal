@@ -231,7 +231,7 @@ impl<'vm> Cargador<'vm> {
                         .con_ayuda(
                             "los módulos nativos disponibles son: quetzal/matematica, \
                              quetzal/texto, quetzal/listas, quetzal/jsn, quetzal/tiempo, \
-                             quetzal/red, quetzal/sistema_archivos y quetzal/bits",
+                             quetzal/red, quetzal/sistema_archivos, quetzal/bits y quetzal/motor",
                         ),
                     ]);
                 }

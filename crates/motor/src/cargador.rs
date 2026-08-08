@@ -172,7 +172,10 @@ impl<'vm> Cargador<'vm> {
                         } else if let Some(tipo) =
                             // Tipos instanciables exportados por el módulo
                             // (`Archivo` y `Ruta` desde `sistema_archivos`).
-                            modulos_nativos::modulo_de_tipo_exportado(nombre_modulo.as_str(), &normalizado)
+                            modulos_nativos::modulo_de_tipo_exportado(
+                                nombre_modulo.as_str(),
+                                &normalizado,
+                            )
                         {
                             Valor::ModuloNativo(Rc::from(tipo))
                         } else {

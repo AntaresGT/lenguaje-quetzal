@@ -1,0 +1,18 @@
+{
+    "versión": "0.1.0",
+    "aplicación": "sistema_archivos_asincrono",
+    "entrada": "principal.qz",
+    "tipo": "aplicación",
+    "quetzal": "0.0.2",
+    "dependencias": {},
+    "permisos": [
+        {
+            "tipo": "sistema-archivos",
+            "habilitado": true,
+            "directorios": [
+                { "ruta": "./entrada", "permiso": "lectura" },
+                { "ruta": "./salida", "permiso": "todo" }
+            ]
+        }
+    ]
+}

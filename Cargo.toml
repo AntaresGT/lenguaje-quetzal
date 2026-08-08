@@ -107,6 +107,9 @@ rand = "0.9"
 # Expresiones regulares para el objeto ExpresiónRegular de quetzal/motor.
 regex = "1"
 
+# Notificaciones del sistema de archivos para el objeto Observador.
+notify = "8"
+
 # RedSocket (WebSocket en inglés) del módulo nativo de red (ClienteRs/
 # ServidorRs), sobre el mismo runtime tokio del bucle de eventos; rustls
 # para soportar wss://.

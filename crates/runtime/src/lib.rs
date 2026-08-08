@@ -6,4 +6,4 @@
 
 pub mod permisos;
 
-pub use permisos::GuardianPermisos;
+pub use permisos::{AccesoSolicitado, GuardianPermisos};

@@ -102,18 +102,12 @@ fn tareas_nativas_fuera_de_orden_se_guardan_para_su_propio_esperar() {
     let resultado_lenta = vm
         .esperar(tarea_lenta, ubicacion())
         .expect("la tarea lenta se resuelve");
-    assert_eq!(
-        maquina_virtual::texto_de_valor(&resultado_lenta),
-        "LENTA"
-    );
+    assert_eq!(maquina_virtual::texto_de_valor(&resultado_lenta), "LENTA");
 
     let resultado_rapida = vm
         .esperar(tarea_rapida, ubicacion())
         .expect("la tarea rápida, guardada de paso, se resuelve sin volver a bombear");
-    assert_eq!(
-        maquina_virtual::texto_de_valor(&resultado_rapida),
-        "RAPIDA"
-    );
+    assert_eq!(maquina_virtual::texto_de_valor(&resultado_rapida), "RAPIDA");
 }
 
 #[test]
@@ -125,10 +119,13 @@ fn esperar_atiende_solicitudes_de_servidores_mientras_espera_una_tarea() {
     let registro = RegistroNativos::nuevo();
     let mut vm = Vm::nueva(Rc::new(registro));
 
-    vm.registrar_despachador("servicio_de_prueba", |_vm, _id_recurso, datos| match datos {
-        CargaNativa::Texto(texto) => CargaNativa::Texto(texto.to_uppercase()),
-        otro => otro,
-    });
+    vm.registrar_despachador(
+        "servicio_de_prueba",
+        |_vm, _id_recurso, datos| match datos {
+            CargaNativa::Texto(texto) => CargaNativa::Texto(texto.to_uppercase()),
+            otro => otro,
+        },
+    );
 
     let manija = vm.bucle().manija();
     let id_tarea = vm.bucle().nuevo_id();

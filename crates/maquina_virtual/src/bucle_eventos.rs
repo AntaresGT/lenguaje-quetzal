@@ -25,6 +25,7 @@ use std::time::Duration;
 pub enum CargaNativa {
     Nula,
     Entero(i64),
+    Log(bool),
     Texto(String),
     Lista(Vec<CargaNativa>),
     Mapa(Vec<(String, CargaNativa)>),

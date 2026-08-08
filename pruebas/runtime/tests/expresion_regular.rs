@@ -28,12 +28,10 @@ fn ejecutar(codigo: &str) -> Rc<maquina_virtual::valores::EntornoModulo> {
                 let simbolo = maquina_virtual::normalizar_nombre(nombre)
                     .to_lowercase()
                     .replace('_', "");
-                let destino = modulos_nativos::modulo_de_tipo_exportado(
-                    &modulo_normalizado,
-                    &simbolo,
-                )
-                .map(str::to_string)
-                .unwrap_or_else(|| modulo_normalizado.clone());
+                let destino =
+                    modulos_nativos::modulo_de_tipo_exportado(&modulo_normalizado, &simbolo)
+                        .map(str::to_string)
+                        .unwrap_or_else(|| modulo_normalizado.clone());
                 importaciones.insert(
                     local.clone(),
                     maquina_virtual::Variable {

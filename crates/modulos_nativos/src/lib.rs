@@ -5,13 +5,16 @@
 //! `ExpresiónRegular`), los métodos de `texto`, `lista` y `jsn`, las
 //! conversiones de tipos y la función global `rango`.
 
+pub mod archivo;
 pub mod bits;
 pub mod consola;
 pub mod conversiones;
+pub mod flujo;
 pub mod jsn;
 pub mod listas;
 pub mod matematica;
 pub mod motor;
+pub mod observador;
 pub mod red;
 pub mod ruta;
 pub mod sistema_archivos;
@@ -39,6 +42,7 @@ pub fn crear_registro_con_permisos(guardian: &Rc<GuardianPermisos>) -> RegistroN
     motor::registrar(&mut registro);
     red::registrar(&mut registro, guardian);
     sistema_archivos::registrar(&mut registro, guardian);
+    archivo::registrar(&mut registro, guardian);
     ruta::registrar(&mut registro, guardian);
     registro
 }
@@ -52,6 +56,13 @@ pub fn crear_registro_con_permisos(guardian: &Rc<GuardianPermisos>) -> RegistroN
 pub fn modulo_de_tipo_exportado(modulo: &str, simbolo_normalizado: &str) -> Option<&'static str> {
     match (modulo, simbolo_normalizado) {
         ("motor", "expresionregular") => Some("motor"),
+        // `quetzal/sistema_archivos` exporta además los objetos `Archivo`,
+        // `Bits`, `Flujo`, `Observador` y `EventoArchivo`.
+        ("sistema_archivos", "archivo") => Some("archivo"),
+        ("sistema_archivos", "bits") => Some("bits"),
+        ("sistema_archivos", "flujo") => Some("flujo"),
+        ("sistema_archivos", "observador") => Some("observador"),
+        ("sistema_archivos", "eventoarchivo") => Some("eventoarchivo"),
         _ => None,
     }
 }

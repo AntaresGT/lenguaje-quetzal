@@ -49,6 +49,8 @@ pub const INDICE_FUERA_DE_RANGO: &str = "E0403";
 pub const VALOR_NULO: &str = "E0404";
 pub const EXCEPCION_NO_CAPTURADA: &str = "E0405";
 pub const CONVERSION_INVALIDA: &str = "E0406";
+/// Fallo del sistema de archivos (no existe, sin espacio, sin acceso del SO).
+pub const ERROR_ENTRADA_SALIDA: &str = "E0407";
 
 // Permisos
 pub const PERMISO_DENEGADO: &str = "E0501";

@@ -1,0 +1,84 @@
+// Módulo nativo quetzal/sistema_archivos — formas asíncronas y el objeto Archivo
+//
+// Toda acción que interactúa con el sistema tiene dos formas: la síncrona
+// (bloquea el programa) y la asíncrona con sufijo _asincrono, que se usa
+// con esperar. El desarrollador elige la que le convenga.
+//
+//   texto t = SistemaArchivos.leer(ruta)                       // síncrona
+//   texto t = esperar SistemaArchivos.leer_asincrono(ruta)     // asíncrona
+//
+// esperar solo es válido dentro de una función asincrono o en el scope
+// global del archivo de entrada.
+//
+// Archivo es la instancia que devuelven abrir(), crear_directorio() y
+// crear_directorios(): además de metadatos ofrece operaciones sobre esa
+// ruta, también en sus dos formas.
+
+importar { SistemaArchivos, Archivo } desde "quetzal/sistema_archivos"
+
+// ── Preparación asíncrona ────────────────────────────────────────────────
+
+asincrono vacio preparar() {
+    esperar SistemaArchivos.crear_directorios_asincrono("./salida/copias")
+    esperar SistemaArchivos.escribir_asincrono("./salida/copias/notas.txt", "primera nota")
+}
+
+// ── Copiar un archivo sin bloquear ───────────────────────────────────────
+
+asincrono vacio copiar_datos() {
+    log hay_entrada = esperar SistemaArchivos.existe_asincrono("./entrada/datos.csv")
+    si (!hay_entrada) {
+        consola.mostrar_advertencia("No hay ./entrada/datos.csv; se omite la copia.")
+        retornar
+    }
+
+    texto datos = esperar SistemaArchivos.leer_asincrono("./entrada/datos.csv")
+    esperar SistemaArchivos.escribir_asincrono("./salida/copias/datos.csv", datos)
+    consola.mostrar_exito("Copia asíncrona terminada.")
+}
+
+esperar preparar()
+esperar copiar_datos()
+
+// ── El objeto Archivo: metadatos ─────────────────────────────────────────
+
+Archivo notas = SistemaArchivos.abrir("./salida/copias/notas.txt")
+
+consola.mostrar(t"Nombre: {notas.nombre()}")
+consola.mostrar(t"Sin extensión: {notas.nombre_sin_extension()}")
+consola.mostrar(t"Extensión: {notas.extension()}")
+consola.mostrar(t"Ruta completa: {notas.ruta_completa()}")
+consola.mostrar(t"Directorio padre: {notas.directorio_padre()}")
+consola.mostrar(t"Tamaño: {notas.tamaño()} bytes")
+consola.mostrar(t"¿Existe? {notas.existe()} · ¿es archivo? {notas.es_archivo()}")
+consola.mostrar(t"Modificado: {notas.fecha_modificacion().texto_fecha()}")
+
+// ── El objeto Archivo: operaciones ───────────────────────────────────────
+
+// Cada operación tiene su par asíncrono: notas.escribir_asincrono(...), etc.
+notas.escribir("primera nota\nsegunda nota")
+texto contenido = notas.leer()
+consola.mostrar(contenido)
+
+// refrescar relee los metadatos después de modificar el archivo.
+notas.refrescar()
+consola.mostrar(t"Nuevo tamaño: {notas.tamaño()} bytes")
+
+notas.copiar("./salida/copias/notas_respaldo.txt")
+
+asincrono vacio archivar() {
+    Archivo respaldo = esperar SistemaArchivos.abrir_asincrono("./salida/copias/notas_respaldo.txt")
+    esperar respaldo.renombrar_asincrono("notas_2026.txt")
+    esperar respaldo.mover_asincrono("./salida/notas_2026.txt")
+    consola.mostrar(t"Archivado en: {respaldo.ruta()}")
+}
+
+esperar archivar()
+
+// ── Recorrer un directorio con Archivo ───────────────────────────────────
+
+Archivo carpeta = SistemaArchivos.abrir("./salida/copias")
+lista<texto> nombres = carpeta.listar_archivos()
+para (texto var nombre en nombres) {
+    consola.mostrar(t"Copia: {nombre}")
+}

@@ -1,0 +1,86 @@
+// Módulo nativo quetzal/sistema_archivos — el objeto Flujo
+//
+// Un Flujo es un archivo abierto con posición (cursor) persistente: recuerda
+// en qué byte quedó, así que se puede leer o escribir por partes sin volver
+// a recorrer el archivo completo.
+//
+// Modos de apertura y permiso que exigen:
+//   "lectura"            -> lectura
+//   "escritura"          -> escritura (crea o trunca)
+//   "lectura_escritura"  -> lectura + escritura (conserva el contenido)
+//   "anexar"             -> escritura (todo va al final)
+
+importar { SistemaArchivos, Flujo, Bits } desde "quetzal/sistema_archivos"
+
+SistemaArchivos.crear_directorios("./salida")
+
+// ── Escribir por partes ──────────────────────────────────────────────────
+
+Flujo salida = SistemaArchivos.abrir_flujo("./salida/inventario.txt", "escritura")
+salida.escribir("cafe:120\n")
+salida.escribir("azucar:80\n")
+consola.mostrar(t"Se escribieron {salida.posicion()} bytes en total")
+salida.cerrar()
+
+// ── Leer con el cursor ───────────────────────────────────────────────────
+
+Flujo lector = SistemaArchivos.abrir_flujo("./salida/inventario.txt", "lectura")
+
+// leer avanza el cursor tantos bytes como haya leído.
+texto primeros = lector.leer(5)
+consola.mostrar(t"Primeros 5 bytes: '{primeros}' (cursor en {lector.posicion()})")
+
+// leer_todo entrega lo que queda desde donde está el cursor.
+texto resto = lector.leer_todo()
+consola.mostrar(t"Resto del archivo: {resto}")
+
+// ir_a mueve el cursor a una posición absoluta; ir_al_inicio y ir_al_final
+// son los atajos de siempre.
+lector.ir_al_inicio()
+lector.avanzar(5)
+lector.retroceder(2)
+consola.mostrar(t"Cursor colocado en {lector.posicion()} de {lector.longitud()} bytes")
+
+lector.cerrar()
+
+// ── Editar en el lugar ───────────────────────────────────────────────────
+
+// lectura_escritura conserva el contenido: se puede posicionar el cursor y
+// sobrescribir solo un tramo.
+Flujo editor = SistemaArchivos.abrir_flujo("./salida/inventario.txt", "lectura_escritura")
+editor.ir_a(5)
+editor.escribir("999")
+editor.cerrar()
+
+consola.mostrar("Inventario tras la edición:")
+consola.mostrar(SistemaArchivos.leer("./salida/inventario.txt"))
+
+// ── Datos binarios y forma asíncrona ─────────────────────────────────────
+
+asincrono vacio copiar_cabecera() {
+    Flujo binario = SistemaArchivos.abrir_flujo("./salida/marca.bin", "escritura")
+    Bits cabecera = Bits.desde_lista([137, 80, 78, 71])
+    esperar binario.escribir_bits_asincrono(cabecera)
+    binario.cerrar()
+
+    Flujo revision = SistemaArchivos.abrir_flujo("./salida/marca.bin", "lectura")
+    Bits leidos = esperar revision.leer_bits_asincrono(4)
+    revision.cerrar()
+
+    consola.mostrar(t"Cabecera binaria de {leidos.longitud()} bytes")
+}
+
+esperar copiar_cabecera()
+
+// ── Un flujo cerrado ya no opera ─────────────────────────────────────────
+
+Flujo cerrado = SistemaArchivos.abrir_flujo("./salida/inventario.txt", "lectura")
+cerrado.cerrar()
+
+intentar {
+    cerrado.leer(1)
+} capturar (excepcion e) {
+    consola.mostrar_advertencia(e.mensaje)
+}
+
+consola.mostrar_exito("Flujos con cursor persistente completados.")

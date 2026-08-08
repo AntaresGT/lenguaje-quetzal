@@ -28,12 +28,10 @@ fn ejecutar_con_registro(
                     .replace('_', "");
                 // Tipos exportados (`Archivo`, `Ruta`) apuntan a su propio
                 // módulo nativo, igual que hace el cargador del motor.
-                let destino = modulos_nativos::modulo_de_tipo_exportado(
-                    &modulo_normalizado,
-                    &simbolo,
-                )
-                .map(str::to_string)
-                .unwrap_or_else(|| modulo_normalizado.clone());
+                let destino =
+                    modulos_nativos::modulo_de_tipo_exportado(&modulo_normalizado, &simbolo)
+                        .map(str::to_string)
+                        .unwrap_or_else(|| modulo_normalizado.clone());
                 importaciones.insert(
                     local.clone(),
                     maquina_virtual::Variable {

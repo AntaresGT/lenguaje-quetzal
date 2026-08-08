@@ -316,10 +316,7 @@ fn metodo_buscar_posicion(argumentos: &[Valor]) -> Result<Valor, Fallo> {
         "fin".to_string(),
         Valor::Entero(byte_a_caracter(texto, hallazgo.end())),
     );
-    mapa.insert(
-        "coincidencia".to_string(),
-        Valor::texto(hallazgo.as_str()),
-    );
+    mapa.insert("coincidencia".to_string(), Valor::texto(hallazgo.as_str()));
     Ok(Valor::jsn(mapa))
 }
 
@@ -382,7 +379,11 @@ fn metodo_reemplazar(argumentos: &[Valor]) -> Result<Valor, Fallo> {
     let nuevo = arg_texto(F, argumentos, 2)?;
     // El reemplazo es literal: `replacen` con `NoExpand` ignora `$1` y
     // `$<nombre>` por diseño.
-    Ok(Valor::texto(regex.replacen(texto, 1, regex::NoExpand(nuevo))))
+    Ok(Valor::texto(regex.replacen(
+        texto,
+        1,
+        regex::NoExpand(nuevo),
+    )))
 }
 
 fn metodo_reemplazar_todo(argumentos: &[Valor]) -> Result<Valor, Fallo> {
@@ -391,7 +392,9 @@ fn metodo_reemplazar_todo(argumentos: &[Valor]) -> Result<Valor, Fallo> {
     let (_, _, regex) = receptor(F, argumentos)?;
     let texto = arg_texto(F, argumentos, 1)?;
     let nuevo = arg_texto(F, argumentos, 2)?;
-    Ok(Valor::texto(regex.replace_all(texto, regex::NoExpand(nuevo))))
+    Ok(Valor::texto(
+        regex.replace_all(texto, regex::NoExpand(nuevo)),
+    ))
 }
 
 fn metodo_dividir(argumentos: &[Valor]) -> Result<Valor, Fallo> {
@@ -445,11 +448,7 @@ fn metodo_grupos_nombrados(argumentos: &[Valor]) -> Result<Valor, Fallo> {
     const F: &str = "ExpresiónRegular.grupos_nombrados";
     exigir_aridad(F, &argumentos[1..], 0)?;
     let (_, _, regex) = receptor(F, argumentos)?;
-    let nombres: Vec<Valor> = regex
-        .capture_names()
-        .flatten()
-        .map(Valor::texto)
-        .collect();
+    let nombres: Vec<Valor> = regex.capture_names().flatten().map(Valor::texto).collect();
     Ok(Valor::lista(nombres))
 }
 
@@ -623,8 +622,5 @@ pub fn registrar(registro: &mut RegistroNativos) {
         &format!("{TIPO}.con_multilinea"),
         Box::new(metodo_con_multilinea),
     );
-    registro.registrar_funcion(
-        &format!("{TIPO}.con_unicode"),
-        Box::new(metodo_con_unicode),
-    );
+    registro.registrar_funcion(&format!("{TIPO}.con_unicode"), Box::new(metodo_con_unicode));
 }

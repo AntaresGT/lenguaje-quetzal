@@ -314,6 +314,7 @@ pub fn carga_a_valor(carga: CargaNativa) -> Valor {
     match carga {
         CargaNativa::Nula => Valor::Nulo,
         CargaNativa::Entero(entero) => Valor::Entero(entero),
+        CargaNativa::Log(valor_logico) => Valor::Log(valor_logico),
         CargaNativa::Texto(texto) => Valor::texto(texto),
         CargaNativa::Lista(elementos) => {
             Valor::lista(elementos.into_iter().map(carga_a_valor).collect())
@@ -346,6 +347,7 @@ pub fn valor_a_carga(valor: &Valor) -> CargaNativa {
     match valor {
         Valor::Nulo => CargaNativa::Nula,
         Valor::Entero(entero) => CargaNativa::Entero(*entero),
+        Valor::Log(valor_logico) => CargaNativa::Log(*valor_logico),
         Valor::Texto(texto) => CargaNativa::Texto(texto.to_string()),
         Valor::Lista(lista) => {
             CargaNativa::Lista(lista.borrow().iter().map(valor_a_carga).collect())

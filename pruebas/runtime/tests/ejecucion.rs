@@ -77,7 +77,6 @@ fn esperar_sobre_un_valor_normal_lo_devuelve_sin_cambios() {
     assert_eq!(como_entero(&global(&entorno, "resultado")), 7);
 }
 
-
 #[test]
 fn ejecutar_deberia_sumar_decimales_exactos() {
     // La razón de usar rust_decimal: 0.1 + 0.2 debe ser exactamente 0.3.
@@ -306,7 +305,9 @@ fn llamar_funcion_asincrona_sin_esperar_devuelve_tarea_pendiente() {
                 "llamar sin `esperar` debe producir una tarea pendiente, no {}",
                 tarea.nombre_tipo()
             );
-            let resultado = mapa.get("resultado").expect("debe existir la clave 'resultado'");
+            let resultado = mapa
+                .get("resultado")
+                .expect("debe existir la clave 'resultado'");
             assert_eq!(como_entero(resultado), 42);
         }
         otro => panic!("se esperaba jsn, se obtuvo {otro:?}"),

@@ -81,8 +81,8 @@ impl MotorQuetzal {
             let mut cargador = Cargador::nuevo(Some(&mut vm));
             if let Some(raiz) = &raiz {
                 // Los permisos del quetzal.json aplican a toda la ejecución.
-                let manifiesto = paquetes::Manifiesto::leer_de_directorio(raiz)
-                    .map_err(|error| vec![error])?;
+                let manifiesto =
+                    paquetes::Manifiesto::leer_de_directorio(raiz).map_err(|error| vec![error])?;
                 self.permisos.configurar(manifiesto.permisos, raiz);
                 cargador = cargador.con_proyecto(raiz);
             }

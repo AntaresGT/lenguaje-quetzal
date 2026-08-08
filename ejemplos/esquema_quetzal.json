@@ -159,12 +159,17 @@
                         "enum": [
                             "red",
                             "sistema-archivos",
-                            "ejecución"
+                            "ejecución",
+                            "portapapeles"
                         ]
                     },
                     "habilitado": {
                         "type": "boolean",
                         "description": "Indica si el permiso está activo"
+                    },
+                    "portapapeles": {
+                        "type": "boolean",
+                        "description": "Indica si el permiso de portapapeles está activo"
                     },
                     "ejecutables": {
                         "array": {

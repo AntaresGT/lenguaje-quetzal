@@ -74,7 +74,8 @@ impl RegistroNativos {
     /// prueba ambos registros).
     pub fn existe_funcion(&self, nombre: &str) -> bool {
         let normalizado = normalizar_nombre(nombre);
-        self.funciones.contains_key(&normalizado) || self.funciones_con_vm.contains_key(&normalizado)
+        self.funciones.contains_key(&normalizado)
+            || self.funciones_con_vm.contains_key(&normalizado)
     }
 
     pub fn buscar_constante(&self, nombre: &str) -> Option<&Valor> {

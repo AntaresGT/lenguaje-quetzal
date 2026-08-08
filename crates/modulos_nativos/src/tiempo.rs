@@ -74,7 +74,11 @@ fn zona_de_texto(funcion: &str, nombre: &str) -> Result<Zona, Fallo> {
 }
 
 /// Fecha con desfase fijo a partir de una marca (ms) y su zona.
-fn fecha_con_desfase(funcion: &str, marca: i64, zona: &Zona) -> Result<DateTime<FixedOffset>, Fallo> {
+fn fecha_con_desfase(
+    funcion: &str,
+    marca: i64,
+    zona: &Zona,
+) -> Result<DateTime<FixedOffset>, Fallo> {
     let fecha = match zona {
         Zona::Local => Local
             .timestamp_millis_opt(marca)
@@ -132,6 +136,12 @@ fn instancia(funcion: &str, marca: i64, nombre_zona: &str) -> Result<Valor, Fall
     })))
 }
 
+/// Instancia de `Tiempo` en la zona local desde una marca Unix en ms; la usa
+/// el objeto `Archivo` para sus fechas de creación, modificación y acceso.
+pub(crate) fn instancia_local(funcion: &str, marca: i64) -> Result<Valor, Fallo> {
+    instancia(funcion, marca, "local")
+}
+
 /// Extrae marca y zona de una instancia de `Tiempo` en la posición dada.
 fn arg_tiempo(funcion: &str, argumentos: &[Valor], indice: usize) -> Result<(i64, String), Fallo> {
     match argumentos.get(indice) {
@@ -139,7 +149,12 @@ fn arg_tiempo(funcion: &str, argumentos: &[Valor], indice: usize) -> Result<(i64
             let datos = datos.datos.borrow();
             let marca = match datos.get("marca") {
                 Some(Valor::Entero(marca)) => *marca,
-                _ => return Err(error("E0406", format!("'{funcion}' recibió un Tiempo sin marca interna"))),
+                _ => {
+                    return Err(error(
+                        "E0406",
+                        format!("'{funcion}' recibió un Tiempo sin marca interna"),
+                    ));
+                }
             };
             let zona = match datos.get("zona") {
                 Some(Valor::Texto(zona)) => zona.to_string(),
@@ -163,7 +178,10 @@ fn arg_tiempo(funcion: &str, argumentos: &[Valor], indice: usize) -> Result<(i64
 }
 
 /// Receptor (`esto`) de un método: marca, zona y fecha con desfase.
-fn receptor(funcion: &str, argumentos: &[Valor]) -> Result<(i64, String, DateTime<FixedOffset>), Fallo> {
+fn receptor(
+    funcion: &str,
+    argumentos: &[Valor],
+) -> Result<(i64, String, DateTime<FixedOffset>), Fallo> {
     let (marca, nombre_zona) = arg_tiempo(funcion, argumentos, 0)?;
     let zona = zona_de_texto(funcion, &nombre_zona)?;
     let fecha = fecha_con_desfase(funcion, marca, &zona)?;
@@ -220,7 +238,9 @@ fn naive_de_componentes(
         .ok_or_else(|| {
             error(
                 "E0406",
-                format!("'{funcion}' recibió una hora inválida ({hora:02}:{minuto:02}:{segundo:02})"),
+                format!(
+                    "'{funcion}' recibió una hora inválida ({hora:02}:{minuto:02}:{segundo:02})"
+                ),
             )
         })
 }
@@ -332,7 +352,11 @@ fn analizar_texto_comun(funcion: &str, texto: &str) -> Result<Valor, Fallo> {
     if let Ok(fecha) = DateTime::parse_from_rfc3339(texto) {
         return instancia(funcion, fecha.timestamp_millis(), "local");
     }
-    for patron in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%d/%m/%Y %H:%M:%S"] {
+    for patron in [
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+        "%d/%m/%Y %H:%M:%S",
+    ] {
         if let Ok(naive) = NaiveDateTime::parse_from_str(texto, patron) {
             let marca = marca_de_naive(funcion, naive, &Zona::Local)?;
             return instancia(funcion, marca, "local");
@@ -340,14 +364,18 @@ fn analizar_texto_comun(funcion: &str, texto: &str) -> Result<Valor, Fallo> {
     }
     for patron in ["%Y-%m-%d", "%d/%m/%Y"] {
         if let Ok(fecha) = NaiveDate::parse_from_str(texto, patron) {
-            let naive = fecha.and_hms_opt(0, 0, 0).expect("medianoche siempre es válida");
+            let naive = fecha
+                .and_hms_opt(0, 0, 0)
+                .expect("medianoche siempre es válida");
             let marca = marca_de_naive(funcion, naive, &Zona::Local)?;
             return instancia(funcion, marca, "local");
         }
     }
     Err(error(
         "E0406",
-        format!("'{funcion}' no pudo interpretar '{texto}' como fecha; usa 'AAAA-MM-DD', 'AAAA-MM-DD HH:MM:SS' o ISO 8601"),
+        format!(
+            "'{funcion}' no pudo interpretar '{texto}' como fecha; usa 'AAAA-MM-DD', 'AAAA-MM-DD HH:MM:SS' o ISO 8601"
+        ),
     ))
 }
 
@@ -406,7 +434,9 @@ fn libre_analizar(argumentos: &[Valor]) -> Result<Valor, Fallo> {
         return instancia(F, marca, "local");
     }
     if let Ok(fecha) = NaiveDate::parse_from_str(texto, patron) {
-        let naive = fecha.and_hms_opt(0, 0, 0).expect("medianoche siempre es válida");
+        let naive = fecha
+            .and_hms_opt(0, 0, 0)
+            .expect("medianoche siempre es válida");
         let marca = marca_de_naive(F, naive, &Zona::Local)?;
         return instancia(F, marca, "local");
     }
@@ -426,7 +456,12 @@ fn libre_zonas(argumentos: &[Valor]) -> Result<Valor, Fallo> {
     let filtro = match argumentos.len() {
         0 => None,
         1 => Some(arg_texto(F, argumentos, 0)?.to_lowercase()),
-        otros => return Err(error("E0210", format!("'{F}' acepta 0 o 1 argumentos, pero recibió {otros}"))),
+        otros => {
+            return Err(error(
+                "E0210",
+                format!("'{F}' acepta 0 o 1 argumentos, pero recibió {otros}"),
+            ));
+        }
     };
     let zonas: Vec<Valor> = chrono_tz::TZ_VARIANTS
         .iter()
@@ -457,9 +492,8 @@ fn libre_dias_en_mes(argumentos: &[Valor]) -> Result<Valor, Fallo> {
     exigir_aridad(F, argumentos, 2)?;
     let año = componente_i32(F, arg_entero(F, argumentos, 0)?, "año")?;
     let mes = componente_u32(F, arg_entero(F, argumentos, 1)?, "mes")?;
-    let inicio = NaiveDate::from_ymd_opt(año, mes, 1).ok_or_else(|| {
-        error("E0406", format!("'{F}' recibió un mes inválido ({mes})"))
-    })?;
+    let inicio = NaiveDate::from_ymd_opt(año, mes, 1)
+        .ok_or_else(|| error("E0406", format!("'{F}' recibió un mes inválido ({mes})")))?;
     let siguiente = if mes == 12 {
         NaiveDate::from_ymd_opt(año + 1, 1, 1)
     } else {
@@ -571,9 +605,9 @@ fn metodo_agregar_años(argumentos: &[Valor]) -> Result<Valor, Fallo> {
     exigir_aridad(F, &argumentos[1..], 1)?;
     let (marca, zona) = arg_tiempo(F, argumentos, 0)?;
     let años = arg_entero(F, argumentos, 1)?;
-    let meses = años.checked_mul(12).ok_or_else(|| {
-        error("E0406", format!("'{F}' produjo una fecha fuera de rango"))
-    })?;
+    let meses = años
+        .checked_mul(12)
+        .ok_or_else(|| error("E0406", format!("'{F}' produjo una fecha fuera de rango")))?;
     sumar_meses(F, marca, &zona, meses)
 }
 

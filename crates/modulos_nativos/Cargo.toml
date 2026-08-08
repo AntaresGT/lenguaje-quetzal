@@ -36,6 +36,9 @@ rand = { workspace = true }
 # Expresiones regulares para el objeto ExpresiónRegular de quetzal/motor.
 regex = { workspace = true }
 
+# Notificaciones del sistema de archivos (objeto Observador).
+notify = { workspace = true }
+
 # Peticiones HTTP del módulo red (bloqueante, con rustls).
 reqwest = { workspace = true }
 

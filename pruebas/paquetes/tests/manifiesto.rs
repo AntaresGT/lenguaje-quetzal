@@ -77,9 +77,6 @@ fn permisos_deberian_leer_objeto_y_lista() {
     )
     .expect("permisos en objeto");
     assert!(objeto.permisos.red.habilitado);
-    // Forma simple (sin "cliente"/"servidor"): habilita ambos.
-    assert!(objeto.permisos.red.cliente);
-    assert!(objeto.permisos.red.servidor);
     assert!(objeto.permisos.sistema_archivos.habilitado);
     assert_eq!(objeto.permisos.sistema_archivos.directorios.len(), 1);
 

@@ -72,6 +72,20 @@ impl GuardianPermisos {
         estado.raiz = Some(absoluta(raiz));
     }
 
+    /// Verifica que el programa pueda usar la red (conectarse o escuchar).
+    ///
+    /// `operacion` describe lo que se intentaba hacer para que el mensaje de
+    /// error diga exactamente qué quedó bloqueado.
+    pub fn verificar_red(&self, operacion: &str) -> Result<(), String> {
+        if self.estado.borrow().permisos.red.habilitado {
+            return Ok(());
+        }
+        Err(format!(
+            "el programa no tiene permiso de red para {operacion}; habilítalo en quetzal.json: \
+             \"permisos\": [{{\"tipo\": \"red\", \"habilitado\": true}}]"
+        ))
+    }
+
     /// Verifica que un ejecutable esté en la lista blanca de `ejecucion`.
     pub fn verificar_ejecucion(&self, programa: &str) -> Result<(), String> {
         let estado = self.estado.borrow();

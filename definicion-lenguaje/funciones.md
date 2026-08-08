@@ -162,12 +162,59 @@ asíncrono, o en el archivo de entrada:
 número resultado = esperar tarea(3)   // a nivel de módulo
 ```
 
-## 6. Funciones como valores
+## 6. Funciones como valores (callbacks)
 
-No se observa sintaxis explícita de "función como tipo" (tipo función).
-Sin embargo, los métodos de los objetos pueden ser referenciados a
-través de la notación de punto: `obj.metodo` devuelve el método, que
-puede invocarse con `(args)`.
+Toda función declarada es un **valor de primera clase**: su nombre, sin
+paréntesis, es una referencia a la función y puede pasarse como
+argumento. Quetzal **no tiene funciones anónimas**: un callback siempre
+se declara fuera y se pasa por su nombre.
+
+### 6.1 El tipo `funcion`
+
+El tipo `funcion` declara un parámetro (o variable) que recibe otra
+función. No fija la firma: la cantidad y el tipo de los argumentos se
+verifican al invocarla.
+
+```quetzal
+entero doble(entero valor) {
+    retornar valor * 2
+}
+
+entero aplicar(funcion accion, entero valor) {
+    retornar accion(valor)
+}
+
+entero resultado = aplicar(doble, 21)   // 42
+```
+
+### 6.2 Callbacks con tipos de módulos nativos
+
+Los parámetros del callback pueden ser tipos que exporta un módulo
+nativo. Es la forma en que se registran manejadores e interceptores en
+`quetzal/red`:
+
+```quetzal
+importar { ServidorHttp, PeticiónEntrante, RespuestaSaliente } desde "quetzal/red"
+
+asincrono vacio saludar(PeticiónEntrante petición, RespuestaSaliente respuesta) {
+    respuesta.jsn({ mensaje: "hola" })
+}
+
+ServidorHttp servidor = nuevo ServidorHttp()
+servidor.obtener("/saludo", saludar)
+```
+
+### 6.3 Callbacks asíncronos
+
+Un callback declarado `asincrono` puede usar `esperar` dentro de su
+cuerpo. Quien lo invoca (el módulo nativo o `esperar`) resuelve la tarea
+antes de continuar.
+
+### 6.4 Métodos como valores
+
+Los métodos `libre` de un objeto también pueden referenciarse con la
+notación de punto: `Objeto.metodo` devuelve la función, que puede
+pasarse como callback o invocarse con `(args)`.
 
 ## 7. Resumen
 
@@ -178,3 +225,4 @@ puede invocarse con `(args)`.
 | Retorno | `retornar [<expresión>] ;` |
 | Función asíncrona | anteponer `asincrono` / `asincróno` |
 | Esperar resultado | `esperar <expresión_llamada>` |
+| Callback | `funcion <nombre>` como tipo de parámetro |

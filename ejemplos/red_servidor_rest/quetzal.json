@@ -1,0 +1,14 @@
+{
+    "versión": "0.1.0",
+    "aplicación": "red_servidor_rest",
+    "entrada": "principal.qz",
+    "tipo": "aplicación",
+    "quetzal": "0.0.2",
+    "dependencias": {},
+    "permisos": [
+        {
+            "tipo": "red",
+            "habilitado": true
+        }
+    ]
+}

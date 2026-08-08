@@ -56,6 +56,8 @@ pub fn crear_registro_con_permisos(guardian: &Rc<GuardianPermisos>) -> RegistroN
 pub fn modulo_de_tipo_exportado(modulo: &str, simbolo_normalizado: &str) -> Option<&'static str> {
     match (modulo, simbolo_normalizado) {
         ("motor", "expresionregular") => Some("motor"),
+        // `quetzal/red` exporta los objetos del servidor y del cliente HTTP.
+        ("red", simbolo) => red::tipo_exportado(simbolo),
         // `quetzal/sistema_archivos` exporta además los objetos `Archivo`,
         // `Bits`, `Flujo`, `Observador` y `EventoArchivo`.
         ("sistema_archivos", "archivo") => Some("archivo"),

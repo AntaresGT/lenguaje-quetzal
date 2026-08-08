@@ -16,23 +16,13 @@ pub struct Permisos {
     pub ejecucion: PermisoEjecucion,
 }
 
-/// Acceso a la red, con granularidad opcional de cliente/servidor,
-/// anfitriones y puertos.
+/// Acceso a la red: un único interruptor.
 ///
-/// - `{"habilitado": true}` habilita todo (cliente y servidor, cualquier
-///   anfitrión y puerto): forma simple, retrocompatible.
-/// - `{"habilitado": true, "cliente": true}` habilita solo conexiones
-///   salientes (cliente HTTP, sockets, ...); sin `"servidor": true` no se
-///   puede escuchar en ningún puerto.
-/// - `"anfitriones"` y `"puertos"` son listas blancas; una lista vacía
-///   significa "sin restricción" (se permite cualquiera).
+/// `{"habilitado": true}` autoriza todas las operaciones de red del
+/// programa (conectarse como cliente y escuchar como servidor).
 #[derive(Debug, Clone, Default)]
 pub struct PermisoRed {
     pub habilitado: bool,
-    pub cliente: bool,
-    pub servidor: bool,
-    pub anfitriones: Vec<String>,
-    pub puertos: Vec<u16>,
 }
 
 /// Acceso al sistema de archivos por directorio.
@@ -101,43 +91,6 @@ impl Permisos {
         match tipo {
             "red" => {
                 self.red.habilitado = habilitado;
-                // Si no se especifican "cliente" ni "servidor", la forma
-                // simple `{"habilitado": true}` habilita ambos (retrocompatible).
-                let declara_cliente = valor.get("cliente").is_some();
-                let declara_servidor = valor.get("servidor").is_some();
-                if !declara_cliente && !declara_servidor {
-                    self.red.cliente = habilitado;
-                    self.red.servidor = habilitado;
-                } else {
-                    self.red.cliente = valor
-                        .get("cliente")
-                        .and_then(|valor| valor.as_bool())
-                        .unwrap_or(false);
-                    self.red.servidor = valor
-                        .get("servidor")
-                        .and_then(|valor| valor.as_bool())
-                        .unwrap_or(false);
-                }
-                if let Some(serde_json::Value::Array(anfitriones)) = valor.get("anfitriones") {
-                    for anfitrion in anfitriones {
-                        if let Some(texto) = anfitrion.as_str() {
-                            self.red.anfitriones.push(texto.to_string());
-                        }
-                    }
-                }
-                if let Some(serde_json::Value::Array(puertos)) = valor.get("puertos") {
-                    for puerto in puertos {
-                        let numero = puerto.as_u64().ok_or_else(|| {
-                            error_permisos("cada puerto en 'puertos' debe ser un número")
-                        })?;
-                        let puerto16 = u16::try_from(numero).map_err(|_| {
-                            error_permisos(format!(
-                                "el puerto {numero} está fuera de rango (0-65535)"
-                            ))
-                        })?;
-                        self.red.puertos.push(puerto16);
-                    }
-                }
             }
             "sistema_archivos" => {
                 self.sistema_archivos.habilitado = habilitado;

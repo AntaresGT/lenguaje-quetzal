@@ -18,7 +18,7 @@ y de los manifiestos `quetzal.json` del repositorio.
 | `poo.md` | `objeto`, `prototipo`, herencia, modificadores de visibilidad, miembros `libre`. |
 | `modulos.md` | `importar`, `exportar`, alias `como`, rutas relativas y nativas. |
 | `metodos-nativos.md` | API de cadenas, listas, JSON, booleanos y números. |
-| `modulos-nativos.md` | Módulos `consola`, `quetzal/matemática`, `quetzal/tiempo`, `quetzal/motor`, `quetzal/sistema_archivos`. |
+| `modulos-nativos.md` | Módulos `consola`, `quetzal/matemática`, `quetzal/tiempo`, `quetzal/motor`, `quetzal/sistema_archivos`, `quetzal/red`. |
 | `manifiesto.md` | Formato del archivo `quetzal.json` (manifiesto de proyecto). |
 | `esquema_quetzal.json` | JSON Schema canónico (Draft-07) del manifiesto, con campos con tildes. |
 | `anomalias.md` | Inconsistencias, ambigüedades y observaciones sobre la sintaxis. |
@@ -35,7 +35,7 @@ Quetzal es un lenguaje de programación:
 - **Con manejo de excepciones** — `intentar / capturar / finalmente` con variable `excepcion`.
 - **Con módulos** — `importar` / `exportar` y alias `como`.
 - **Con interpolación de cadenas** — prefijo `t"..."` similar a f-strings.
-- **Con biblioteca estándar en español** — `consola`, `Matemática`, `Tiempo`, `ExpresiónRegular`, `SistemaArchivos` (incluye `Flujo` con cursor y `Observador` de cambios).
+- **Con biblioteca estándar en español** — `consola`, `Matemática`, `Tiempo`, `ExpresiónRegular`, `SistemaArchivos` (incluye `Flujo` con cursor y `Observador` de cambios) y `quetzal/red` (`ServidorHttp`, `ClienteHttp`, `Formulario`, `HttpCodigos`).
 - **Seguro por defecto** — el acceso al filesystem, la red y la ejecución de procesos requiere permisos declarados en `quetzal.json`.
 
 ## Cómo usar esta documentación

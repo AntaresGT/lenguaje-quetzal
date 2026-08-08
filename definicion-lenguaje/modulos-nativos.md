@@ -10,6 +10,7 @@
 3. [`quetzal/tiempo`](#3-quetzaltiempo) — fechas, horas, zonas
 4. [`quetzal/motor`](#4-quetzalmotor) — expresiones regulares
 5. [`quetzal/sistema_archivos`](#5-quetzalsistema_archivos) — archivos, directorios, datos binarios, flujos y observadores
+6. [`quetzal/red`](#6-quetzalred) — servidores HTTP, cliente HTTP y códigos de estado
 
 ---
 
@@ -697,4 +698,402 @@ Flujo bitacora = SistemaArchivos.abrir_flujo("./salida/bitacora.log", "lectura")
 bitacora.ir_a(7)
 consola.mostrar(bitacora.leer_todo())
 bitacora.cerrar()
+```
+
+---
+
+## 6. `quetzal/red`
+
+```quetzal
+importar {
+    ServidorHttp, Enrutador, Ruta,
+    PeticionEntrante, RespuestaSaliente, Continuacion, ErrorHttp,
+    ClienteHttp, RespuestaHttp, ProgresoPeticion,
+    Formulario, ParteArchivo,
+    HttpCodigos
+} desde "quetzal/red"
+```
+
+> Provee dos mitades y dos utilidades:
+>
+> - **Servidor** — `ServidorHttp` (la aplicación), `Enrutador` (rutas
+>   montables), `Ruta` (varios métodos sobre un mismo camino),
+>   `PeticionEntrante`, `RespuestaSaliente`, `Continuacion` (el paso al
+>   siguiente eslabón de la cadena) y `ErrorHttp`. El modelo es el de
+>   Express 5 adaptado a Quetzal, con el término **interceptor** en lugar
+>   de *middleware*.
+> - **Cliente** — `ClienteHttp` (instancia con configuración por omisión,
+>   al estilo de Axios), `RespuestaHttp` y `ProgresoPeticion`.
+> - **`Formulario` y `ParteArchivo`** — formularios `multipart/form-data`
+>   (RFC 7578) para enviar y recibir campos y archivos en la misma
+>   petición (ver §6.11).
+> - **`HttpCodigos`** — descripciones en español de los códigos de estado
+>   según MDN.
+
+### 6.1 Métodos HTTP en español
+
+La API se escribe en español; por el cable siempre viajan los verbos
+estándar. `consultar` es el método **QUERY** del
+[RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html): seguro e
+idempotente como `obtener`, pero con la consulta en el **cuerpo**.
+
+| Español | Verbo | Seguro | Idempotente | Lleva cuerpo |
+|---|---|---|---|---|
+| `obtener` | `GET` | sí | sí | no |
+| `publicar` | `POST` | no | no | sí |
+| `poner` | `PUT` | no | sí | sí |
+| `parchear` | `PATCH` | no | no | sí |
+| `borrar` | `DELETE` | no | sí | sí |
+| `cabecera` | `HEAD` | sí | sí | no |
+| `opciones` | `OPTIONS` | sí | sí | no |
+| `consultar` | `QUERY` | sí | sí | sí |
+| `rastrear` | `TRACE` | sí | sí | no |
+| `conectar` | `CONNECT` | no | no | no |
+
+Todos existen tanto en el enrutador (`servidor.publicar(...)`) como en el
+cliente (`cliente.publicar(...)`), y en el cliente además con la forma
+`_asincrono`.
+
+### 6.2 Permisos requeridos
+
+El módulo exige el permiso `red` en `quetzal.json`
+(ver [`manifiesto.md`](./manifiesto.md) §6):
+
+```json
+{
+  "permisos": [
+    {
+      "tipo": "red",
+      "habilitado": true
+    }
+  ]
+}
+```
+
+Es un único interruptor: con `"habilitado": true` el programa puede tanto
+conectarse (`ClienteHttp`) como escuchar puertos (`ServidorHttp.escuchar`).
+Sin él, cada operación lanza una excepción capturable con un mensaje que
+dice qué se intentaba hacer y cómo habilitarlo.
+
+### 6.3 Callbacks: solo funciones nombradas
+
+Quetzal no tiene funciones anónimas. Manejadores, interceptores y avisos
+de progreso se declaran fuera y se pasan por su nombre
+(ver [`funciones.md`](./funciones.md) §6):
+
+| Rol | Firma |
+|---|---|
+| Manejador de ruta | `(PeticionEntrante, RespuestaSaliente)` |
+| Interceptor | `(PeticionEntrante, RespuestaSaliente, Continuacion)` |
+| Manejador de errores | `(ErrorHttp, PeticionEntrante, RespuestaSaliente, Continuacion)` |
+| Manejador de parámetro | `(PeticionEntrante, RespuestaSaliente, Continuacion, texto)` |
+| Interceptor de petición (cliente) | `(jsn var configuracion) -> jsn` |
+| Interceptor de respuesta (cliente) | `(RespuestaHttp) -> RespuestaHttp` |
+| Progreso | `(ProgresoPeticion)` |
+
+Un manejador o interceptor puede ser `asincrono` y usar `esperar` dentro.
+
+### 6.4 `ServidorHttp` y `Enrutador`
+
+`ServidorHttp` es la aplicación; `Enrutador` es un grupo de rutas que se
+monta bajo un prefijo. Ambos comparten los mismos métodos de enrutado.
+
+| Método | Descripción |
+|---|---|
+| `obtener(camino, ...manejadores)` … `consultar(...)` | registra la cadena para ese método |
+| `todos(camino, ...manejadores)` | cualquier método sobre ese camino |
+| `usar([camino], interceptor \| Enrutador)` | interceptor global o montaje de un enrutador |
+| `ruta(camino)` | devuelve una `Ruta` para encadenar métodos sobre el mismo camino |
+| `parametro(nombre, manejador)` | se ejecuta cuando la ruta trae ese parámetro |
+| `estaticos([camino], directorio)` | sirve archivos del directorio (requiere permiso de lectura) |
+
+Solo en `ServidorHttp`:
+
+| Método | Retorna | Descripción |
+|---|---|---|
+| `escuchar(puerto[, alArrancar])` | `ServidorHttp` | empieza a aceptar conexiones; `0` deja que el sistema elija el puerto |
+| `puerto()` | `entero` | puerto real en el que quedó escuchando |
+| `esta_escuchando()` | `log` | si el servidor está activo |
+| `cerrar()` | `log` | deja de escuchar y libera el bucle de eventos |
+| `manejar_errores(manejador)` | `ServidorHttp` | registra un manejador de errores (va al final) |
+| `enrutador()` | `Enrutador` | el enrutador raíz de la aplicación |
+| `configurar(clave, valor)` / `configuracion(clave)` | | ajustes propios de la aplicación |
+| `habilitar(clave)` / `deshabilitar(clave)` | | ajustes booleanos |
+| `esta_habilitado(clave)` / `esta_deshabilitado(clave)` | `log` | consulta de esos ajustes |
+
+Los caminos aceptan segmentos literales, parámetros (`/usuarios/:id`),
+parámetros opcionales (`/informes/:año?`) y comodín final (`/archivos/*`).
+
+### 6.5 `PeticionEntrante`
+
+| Método | Retorna | Descripción |
+|---|---|---|
+| `metodo()` | `texto` | verbo HTTP (`"QUERY"`) |
+| `metodo_espanol()` | `texto` | nombre en español (`"consultar"`) |
+| `url()` / `url_original()` | `texto` | camino con consulta, relativo al montaje y completo |
+| `ruta()` / `ruta_base()` | `texto` | camino sin consulta y prefijo donde se montó |
+| `parametros()` / `parametro(nombre)` | `jsn` / `texto` | parámetros del camino |
+| `consulta()` / `consulta_valor(nombre)` | `jsn` / `texto` | cadena de consulta ya decodificada |
+| `cabeceras()` / `cabecera(nombre)` | `jsn` / `texto` | cabeceras (búsqueda sin distinguir mayúsculas) |
+| `galletas()` / `galleta(nombre)` | `jsn` / `texto` | cookies de la petición |
+| `cuerpo()` | `jsn` \| `texto` \| `Bits` \| `Formulario` | cuerpo ya interpretado según `Content-Type` |
+| `cuerpo_texto()` / `cuerpo_bits()` | `texto` / `Bits` | cuerpo crudo |
+| `tipo_contenido()` | `texto` | `Content-Type` tal como llegó |
+| `nombre_archivo()` | `texto`? | `filename` del `Content-Disposition` (`nulo` si no viene) |
+| `tipo_es(tipo)` / `acepta(tipo)` | `log` | negociación de contenido |
+| `protocolo()` / `ip()` / `anfitrion()` / `version()` | `texto` | datos de la conexión |
+| `es_seguro()` / `es_idempotente()` | `log` | semántica del método (RFC 9110 y RFC 10008) |
+| `locales()` | `jsn` | datos que los interceptores dejan para la cadena |
+
+### 6.6 `RespuestaSaliente`
+
+Todos los métodos devuelven la propia respuesta, así que se encadenan.
+
+| Método | Descripción |
+|---|---|
+| `estado(codigo)` | fija el código de estado |
+| `jsn(valor)` | responde JSON (`application/json`) |
+| `texto(valor)` | responde texto plano |
+| `enviar(valor[, opciones])` | responde adivinando el tipo (`jsn`, `texto`, `Bits`, `Archivo` o `Formulario`); las `opciones` son el jsn de §6.11 |
+| `enviar_estado(codigo)` | responde solo con el código y su frase |
+| `cabecera(nombre[, valor])` / `establecer(...)` | lee o fija una cabecera |
+| `agregar(nombre, valor)` | añade un valor a una cabecera existente |
+| `tipo(extension_o_mime)` | fija `Content-Type` |
+| `ubicacion(destino)` / `redirigir([codigo,] destino)` | fija `Location` / redirige (302 por omisión) |
+| `galleta(nombre, valor[, opciones])` / `borrar_galleta(nombre)` | cookies (`ruta`, `dominio`, `expira`, `edad_maxima`, `solo_http`, `segura`, `mismo_sitio`) |
+| `variar(cabecera)` | añade a `Vary` |
+| `local(nombre[, valor])` / `locales()` | datos por petición |
+| `terminar()` / `esta_terminada()` | cierra la respuesta sin cuerpo / si ya se respondió |
+
+### 6.7 `Continuacion` y `ErrorHttp`
+
+| Método | Descripción |
+|---|---|
+| `siguiente()` | pasa al siguiente interceptor o manejador |
+| `siguiente_ruta()` | abandona la ruta actual y sigue buscando |
+| `siguiente_con_error(mensaje)` | salta a los manejadores de errores |
+| `ErrorHttp.mensaje()` / `ErrorHttp.estado()` | qué falló y con qué código |
+
+Si un interceptor responde y **no** llama a `siguiente()`, la cadena
+termina ahí. Lo que lance un manejador llega como `ErrorHttp` al
+manejador de errores; si no hay ninguno, el servidor responde `500`.
+
+### 6.8 `ClienteHttp`
+
+```quetzal
+ClienteHttp cliente = nuevo ClienteHttp({
+    base_url: "https://api.ejemplo.com",
+    cabeceras: { "Accept": "application/json" },
+    tiempo_limite: 5000
+})
+```
+
+| Método | Descripción |
+|---|---|
+| `obtener(url[, configuracion])` | métodos sin cuerpo: `obtener`, `cabecera`, `opciones`, `rastrear`, `conectar` |
+| `publicar(url[, datos[, configuracion]])` | métodos con cuerpo: `publicar`, `poner`, `parchear`, `borrar`, `consultar` |
+| `solicitar(configuracion)` | petición armada por completo desde un `jsn` |
+| `<método>_asincrono(...)` | la misma petición sobre el bucle de eventos (se usa con `esperar`) |
+| `configuracion()` / `configurar(clave, valor)` | valores por omisión de la instancia |
+| `interceptar_peticion(funcion)` / `interceptar_respuesta(funcion)` | cadenas de interceptores |
+
+Claves de `ConfiguracionPeticion`:
+
+| Clave | Tipo | Descripción |
+|---|---|---|
+| `base_url` | `texto` | prefijo de las urls relativas |
+| `parametros` | `jsn` | cadena de consulta (se codifica sola) |
+| `cabeceras` | `jsn` | se combinan con las de la instancia |
+| `datos` | `jsn` \| `lista` \| `texto` \| `Bits` \| `Archivo` \| `Formulario` | cuerpo; cada forma fija su `Content-Type` (ver §6.11) |
+| `tiempo_limite` | `entero` | milisegundos |
+| `maximo_redirecciones` | `entero` | `0` desactiva el seguimiento |
+| `validar_estado` | `log` | `falso` devuelve la respuesta en vez de lanzar fuera de 2xx/3xx |
+| `tipo_respuesta` | `texto` | fuerza `"jsn"`, `"texto"`, `"bits"` o `"formulario"` |
+| `autenticacion` | `jsn` | `{ usuario, clave }` para HTTP Basic |
+| `al_progreso_subida` / `al_progreso_descarga` | `funcion` | avisos de progreso |
+| `tipo_contenido` | `texto` | fuerza el `Content-Type` de un cuerpo binario |
+| `nombre_archivo` | `texto` | fuerza el `filename` del `Content-Disposition` |
+| `disposicion` | `texto` | `"adjunto"` o `"inline"` |
+
+> La forma síncrona bloquea el programa hasta recibir la respuesta. Si el
+> mismo programa además atiende un `ServidorHttp`, hay que usar la forma
+> `_asincrono`: es la que deja al bucle de eventos seguir trabajando.
+
+### 6.9 `RespuestaHttp` y `ProgresoPeticion`
+
+| `RespuestaHttp` | Retorna | Descripción |
+|---|---|---|
+| `estado()` / `razon()` / `descripcion()` | `entero` / `texto` / `texto` | código, frase estándar y descripción en español |
+| `ok()` | `log` | si el estado está en 2xx |
+| `datos()` | `jsn` \| `texto` \| `Bits` \| `Formulario` | cuerpo ya interpretado |
+| `cuerpo_texto()` / `bits()` | `texto` / `Bits` | cuerpo crudo |
+| `cabeceras()` / `cabecera(nombre)` | `jsn` / `texto` | cabeceras de la respuesta |
+| `tipo_contenido()` | `texto` | `Content-Type` de la respuesta |
+| `nombre_archivo()` | `texto`? | `filename` del `Content-Disposition` (`nulo` si no viene) |
+| `url()` / `metodo()` | `texto` | url final (tras redirecciones) y verbo usado |
+
+| `ProgresoPeticion` | Retorna | Descripción |
+|---|---|---|
+| `direccion()` / `es_subida()` | `texto` / `log` | `"subida"` o `"descarga"` |
+| `cargado()` / `total()` | `entero` / `entero?` | bytes transferidos y esperados (`nulo` si no se anuncian) |
+| `bytes()` | `entero` | bytes de este aviso |
+| `progreso()` / `porcentaje()` | `número?` | avance en 0..1 y en 0..100 |
+
+### 6.10 `HttpCodigos`
+
+| Función | Retorna | Descripción |
+|---|---|---|
+| `descripcion(codigo)` | `texto` | descripción en español (MDN) |
+| `razon(codigo)` | `texto` | frase de razón estándar (`"Not Found"`) |
+| `categoria(codigo)` | `texto` | `informativo`, `exitoso`, `redirección`, `error del cliente`, `error del servidor` |
+| `existe(codigo)` | `log` | si el código está en la tabla |
+| `es_informativo` / `es_exitoso` / `es_redireccion` / `es_error_cliente` / `es_error_servidor` / `es_error` | `log` | clasificación por rango |
+| `todos()` | `lista<jsn>` | tabla completa (`{codigo, razon, descripcion}`) |
+
+Constantes: `OK`, `CREADO`, `ACEPTADO`, `SIN_CONTENIDO`,
+`MOVIDO_PERMANENTEMENTE`, `NO_MODIFICADO`, `PETICION_INCORRECTA`,
+`NO_AUTENTICADO`, `PROHIBIDO`, `NO_ENCONTRADO`, `METODO_NO_PERMITIDO`,
+`CONFLICTO`, `CONTENIDO_NO_PROCESABLE`, `DEMASIADAS_PETICIONES`,
+`ERROR_INTERNO`, `SERVICIO_NO_DISPONIBLE`, entre otras.
+
+### 6.11 Archivos y datos binarios
+
+Los archivos viajan por los **mismos verbos** (`publicar`, `poner`, … y
+sus formas `_asincrono`): no hay funciones aparte para subir o bajar. Lo
+que cambia es el valor que se pasa como cuerpo.
+
+| Cuerpo | Qué viaja por el cable |
+|---|---|
+| `Bits` | bytes con `Content-Type: application/octet-stream` |
+| `Archivo` | los bytes del archivo, MIME por extensión y `Content-Disposition` con su nombre |
+| `Formulario` | `multipart/form-data; boundary=…` (RFC 7578) |
+| `jsn` / `lista` / `texto` | JSON o texto, como siempre |
+
+Un `Archivo` se lee a memoria antes de transmitirse, así que además del
+permiso `red` hace falta `sistema-archivos` de lectura sobre esa ruta.
+
+Las opciones del cuerpo binario van en el **jsn de configuración** del
+cliente (`tipo_contenido`, `nombre_archivo`, `disposicion`) o en el jsn
+opcional de `RespuestaSaliente.enviar`:
+
+```quetzal
+Bits marca = Bits.desde_lista([137, 80, 78, 71])
+esperar cliente.publicar_asincrono("/documentos", marca, {
+    nombre_archivo: "marca.png",
+    tipo_contenido: "image/png"
+})
+```
+
+Del otro lado, el cuerpo binario se lee con `peticion.cuerpo_bits()` (o
+`respuesta.bits()` en el cliente) y sus metadatos con `tipo_contenido()`
+y `nombre_archivo()`.
+
+#### 6.11.1 `Formulario` y `ParteArchivo`
+
+`Formulario` es la única forma de armar o leer un multipart: no existe
+una versión con `jsn`. Sirve para las dos direcciones —se construye en el
+cliente y llega ya analizado en `peticion.cuerpo()` del servidor.
+
+| Método de `Formulario` | Retorna | Descripción |
+|---|---|---|
+| `campo(nombre, valor)` | `Formulario` | agrega un campo de texto |
+| `archivo(nombre, Archivo \| Bits[, opciones])` | `Formulario` | agrega un archivo; opciones: `nombre`, `tipo` |
+| `campo_texto(nombre)` | `texto`? | valor de un campo (`nulo` si falta) |
+| `tiene(nombre)` | `log` | si existe un campo o archivo con ese nombre |
+| `campos()` | `jsn` | todos los campos de texto |
+| `archivo_parte(nombre)` | `ParteArchivo`? | archivo de ese campo |
+| `archivos()` | `lista<ParteArchivo>` | todos los archivos |
+
+| Método de `ParteArchivo` | Retorna | Descripción |
+|---|---|---|
+| `campo()` | `texto` | nombre del campo del formulario |
+| `nombre()` | `texto` | nombre del archivo (`filename`) |
+| `tipo()` | `texto` | `Content-Type` de esa parte |
+| `bits()` | `Bits` | contenido |
+
+```quetzal
+// Cliente: armar y enviar.
+Formulario expediente = nuevo Formulario()
+expediente.campo("titulo", "informe trimestral")
+expediente.archivo("documento", SistemaArchivos.abrir("./informe.txt"))
+expediente.archivo("miniatura", miniatura, { nombre: "mini.png", tipo: "image/png" })
+
+RespuestaHttp creado = esperar cliente.publicar_asincrono("/expedientes", expediente)
+
+// Servidor: leer.
+vacio recibir(PeticionEntrante peticion, RespuestaSaliente respuesta) {
+    Formulario formulario = peticion.cuerpo()
+    texto titulo = formulario.campo_texto("titulo")
+    ParteArchivo documento = formulario.archivo_parte("documento")
+    respuesta.jsn({ titulo: titulo, bytes: documento.bits().longitud() })
+}
+```
+
+Por el cable solo hay HTTP estándar: el multipart que produce el cliente
+lo entienden `curl`, `fetch` o `multer`, y el servidor acepta el que
+manden ellos.
+
+Ejemplos completos: [`ejemplos/red_archivos_binarios`](../ejemplos/red_archivos_binarios/principal.qz)
+y [`ejemplos/red_formulario_multipart`](../ejemplos/red_formulario_multipart/principal.qz).
+
+### 6.12 Errores
+
+Como en el resto de módulos nativos, todo se reporta como excepción
+capturable: permiso `red` ausente, puerto ocupado, url inválida, host
+inalcanzable, tiempo agotado y estado fuera de rango cuando
+`validar_estado` no está en `falso`. Mandar un `Archivo` sin permiso de
+`sistema-archivos` también lanza, aunque la red esté habilitada.
+
+### 6.13 Ejemplo
+
+```quetzal
+importar {
+    ServidorHttp, Enrutador, PeticionEntrante, RespuestaSaliente,
+    Continuacion, ErrorHttp, HttpCodigos
+} desde "quetzal/red"
+
+vacio bitacora(PeticionEntrante peticion, RespuestaSaliente respuesta, Continuacion siguiente) {
+    consola.mostrar(t"{peticion.metodo_espanol()} {peticion.ruta()}")
+    siguiente.siguiente()
+}
+
+vacio verUsuario(PeticionEntrante peticion, RespuestaSaliente respuesta) {
+    respuesta.jsn({ id: peticion.parametro("id") })
+}
+
+// QUERY: la consulta viaja en el cuerpo.
+vacio buscar(PeticionEntrante peticion, RespuestaSaliente respuesta) {
+    jsn criterio = peticion.cuerpo()
+    respuesta.jsn({ termino: criterio.termino, resultados: ["Ana"] })
+}
+
+vacio atenderError(ErrorHttp fallo, PeticionEntrante peticion, RespuestaSaliente respuesta, Continuacion siguiente) {
+    respuesta.estado(HttpCodigos.ERROR_INTERNO).jsn({ error: fallo.mensaje() })
+}
+
+ServidorHttp servidor = nuevo ServidorHttp()
+Enrutador api = nuevo Enrutador()
+
+api.usar(bitacora)
+api.obtener("/usuarios/:id", verUsuario)
+api.consultar("/usuarios", buscar)
+
+servidor.usar("/api", api)
+servidor.manejar_errores(atenderError)
+servidor.escuchar(3000)
+```
+
+```quetzal
+importar { ClienteHttp, RespuestaHttp, ProgresoPeticion } desde "quetzal/red"
+
+vacio alDescargar(ProgresoPeticion progreso) {
+    consola.mostrar(t"{progreso.porcentaje()}% ({progreso.cargado()} bytes)")
+}
+
+ClienteHttp cliente = nuevo ClienteHttp({ base_url: "http://127.0.0.1:3000" })
+
+RespuestaHttp usuario = esperar cliente.obtener_asincrono("/api/usuarios/42", {
+    al_progreso_descarga: alDescargar
+})
+consola.mostrar(t"{usuario.estado()}: {usuario.datos()}")
 ```

@@ -54,4 +54,4 @@ jobs:
           name: ${{ matrix.artefacto }}
           path: dist/${{ matrix.binario }}
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 5

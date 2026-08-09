@@ -1,8 +1,47 @@
 # Programación Orientada a Objetos
 
-> Sintaxis de `objeto` (clases), `prototipo` (interfaces), herencia,
-> modificadores de visibilidad, miembros estáticos y `libre` en
-> Lenguaje Quetzal.
+> `objeto` = clase · `prototipo` = interfaz · `libre` = static.
+> Formato: **Objetivo** · **Funciones** · **Funciones de la API**.
+
+```yaml
+doc: poo
+keywords: [objeto, prototipo, hereda, implementa, como, nuevo, esto, padre,
+           publico, público, privado, libre, opcional]
+```
+
+---
+
+## `objeto`
+
+### Objetivo
+Clase con secciones de visibilidad, herencia simple/múltiple e interfaces.
+
+### Funciones
+- `objeto Nombre [hereda A, B] [como Alias] [implementa I, J] { … }`
+- Secciones `privado:` / `publico:` (`público`)
+- Constructor = método con **mismo nombre**, sin tipo retorno
+- `esto` (this), `padre.Clase(...)` (super)
+- `libre` = static (atributo o método)
+- Instanciación: `nuevo Nombre(args)` (**obligatorio** `nuevo`)
+
+### Funciones de la API
+Las que declare el objeto. Stdlib expone objetos nativos (`Tiempo`, `ServidorHttp`, …).
+
+---
+
+## `prototipo`
+
+### Objetivo
+Interfaz: firmas sin cuerpo; `opcional` no exige implementación.
+
+### Funciones
+- `prototipo Nombre { publico: … }`
+- Métodos sin cuerpo; atributos tipados
+- `opcional` en miembros; `var` ⇒ implícitamente opcional
+- `objeto X implementa P1, P2`
+
+### Funciones de la API
+Ninguna propia (solo contratos).
 
 ## 1. `objeto` (clase)
 

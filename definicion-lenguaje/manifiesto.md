@@ -1,7 +1,33 @@
 # Manifiesto de proyecto (`quetzal.json`)
 
-> Formato del archivo `quetzal.json` que describe un proyecto Quetzal:
-> metadatos, dependencias, permisos y punto de entrada.
+> Metadatos, entrada, dependencias y permisos.
+> Formato: **Objetivo** · **Funciones** · **Funciones de la API** (schema).
+
+```yaml
+doc: manifiesto
+archivo: quetzal.json
+schema: esquema_quetzal.json
+campos_canónicos: con_tildes   # versión, aplicación, …
+```
+
+---
+
+## manifiesto
+
+### Objetivo
+Describir el proyecto Quetzal y declarar capacidades sensibles (red, FS, ejecución).
+
+### Funciones
+- Ubicación: raíz del proyecto, JSON estricto
+- Requeridos: `versión`, `aplicación`, `entrada`, `tipo`, `quetzal`
+- Opcionales: autor, email, deps, permisos, …
+- `tipo`: `aplicación` | `biblioteca`
+- Permisos: `red` | `sistema-archivos` | `ejecución`
+- Fuente de verdad: [`esquema_quetzal.json`](./esquema_quetzal.json) (Draft-07)
+
+### Funciones de la API
+No es API runtime: es **contrato de proyecto**. Validar con el JSON Schema.
+Consumidores: cargador, tooling, IA.
 
 ## 1. Ubicación y formato
 

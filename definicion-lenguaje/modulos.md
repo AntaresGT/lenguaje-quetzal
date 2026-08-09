@@ -1,7 +1,31 @@
 # Módulos
 
-> Sistema de módulos del Lenguaje Quetzal: `importar`, `exportar`,
-> alias, rutas relativas y módulos nativos.
+> `importar` / `exportar` nombrados. Sin star/default/dinámico.
+> Formato: **Objetivo** · **Funciones** · **Funciones de la API**.
+
+```yaml
+doc: modulos
+keywords: [importar, exportar, desde, como]
+rutas: ["./", "../", "quetzal/"]
+```
+
+---
+
+## módulos
+
+### Objetivo
+Partir código en archivos `.qz` con imports/exports explícitos.
+
+### Funciones
+- `importar { id [, id como alias]… } desde "ruta"`
+- `exportar { id… }` — funciones, objetos, prototipos, instancias, vars
+- Rutas relativas `./` `../` o nativas `quetzal/…`
+- Tildes en rutas nativas: normalizar / aceptar ambas
+- **No:** `import *`, default, dinámico, re-export
+
+### Funciones de la API
+Ninguna (es sintaxis). Stdlib: ver [`modulos-nativos.md`](./modulos-nativos.md).
+Manifiesto multi-archivo: [`manifiesto.md`](./manifiesto.md).
 
 ## 1. `importar`
 

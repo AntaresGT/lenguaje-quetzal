@@ -1,18 +1,41 @@
 # Módulos nativos (biblioteca estándar)
 
-> Módulos que forman parte de la biblioteca estándar de Lenguaje
-> Quetzal. Se importan desde rutas con el prefijo `quetzal/`.
+> Stdlib bajo `quetzal/` (+ `consola` global).
+> Cada módulo: **Objetivo** · **Funciones** · **Funciones de la API**.
+> Catálogo: [`catalogo.json`](./catalogo.json). Permisos: [`manifiesto.md`](./manifiesto.md).
+
+```yaml
+doc: modulos-nativos
+módulos:
+  - consola              # global, sin import
+  - quetzal/matemática
+  - quetzal/tiempo
+  - quetzal/motor
+  - quetzal/sistema_archivos  # permiso: sistema-archivos
+  - quetzal/red               # permiso: red
+```
 
 ## Índice
 
-1. [`consola`](#1-consola) — entrada/salida (no requiere import)
-2. [`quetzal/matemática`](#2-quetzalmatemática) — funciones matemáticas
-3. [`quetzal/tiempo`](#3-quetzaltiempo) — fechas, horas, zonas
-4. [`quetzal/motor`](#4-quetzalmotor) — expresiones regulares
-5. [`quetzal/sistema_archivos`](#5-quetzalsistema_archivos) — archivos, directorios, datos binarios, flujos y observadores
-6. [`quetzal/red`](#6-quetzalred) — servidores HTTP, cliente HTTP y códigos de estado
+1. [`consola`](#api-consola) — E/S (no requiere import)
+2. [`quetzal/matemática`](#api-matemática) — math
+3. [`quetzal/tiempo`](#api-tiempo) — fechas
+4. [`quetzal/motor`](#api-motor) — regex
+5. [`quetzal/sistema_archivos`](#api-sistema-archivos) — FS / Bits / Flujo / Observador
+6. [`quetzal/red`](#api-red) — HTTP
 
 ---
+
+## API `consola`
+
+### Objetivo
+Entrada/salida de terminal disponible en todo programa.
+
+### Funciones
+Salida colorizada; lectura con eco y secreta.
+
+### Funciones de la API
+`mostrar`, `mostrar_error`, `mostrar_advertencia`, `mostrar_exito`, `mostrar_informacion`, `pedir`, `pedir_secreto`.
 
 ## 1. `consola`
 
@@ -40,6 +63,19 @@ texto secreto = consola.pedir_secreto("Contraseña: ")
 | `consola.pedir_secreto(texto)` | lee sin eco (para passwords) |
 
 ---
+
+## API `Matemática`
+
+### Objetivo
+Constantes y funciones matemáticas de propósito general.
+
+### Funciones
+Aritmética, trigo, logs, redondeo, estadística sobre listas, aleatorios.
+
+### Funciones de la API
+Constantes `PI` `TAU` `E`; métodos `libre` listados en §2.
+
+**Import:** `importar { Matemática } desde "quetzal/matemática"`
 
 ## 2. `quetzal/matemática`
 
@@ -123,6 +159,19 @@ entero dado = Matemática.aleatorio_rango(1, 6)
 ```
 
 ---
+
+## API `Tiempo`
+
+### Objetivo
+Instantes, fechas, zonas horarias y aritmética temporal.
+
+### Funciones
+Constructores múltiples; componentes; formateo; comparación; zonas.
+
+### Funciones de la API
+`Tiempo.ahora*`, instancia `año`/`mes`/…, `agregar_*`, `en_zona`, etc. (§3).
+
+**Import:** `importar { Tiempo } desde "quetzal/tiempo"`
 
 ## 3. `quetzal/tiempo`
 
@@ -228,6 +277,19 @@ número diff = hoy.diferencia(mañana)
 
 ---
 
+## API `ExpresiónRegular`
+
+### Objetivo
+Regex inmutables; banderas por copia (`con_*`).
+
+### Funciones
+Match, buscar, reemplazar, dividir, fábricas, introspección, flags.
+
+### Funciones de la API
+Constructor + `libre` fábricas + métodos de instancia (§4).
+
+**Import:** `importar { ExpresiónRegular } desde "quetzal/motor"`
+
 ## 4. `quetzal/motor`
 
 ```quetzal
@@ -322,6 +384,21 @@ lista todos = re.buscar_todo("a1 b22 c333")  // ["1", "22", "333"]
 ```
 
 ---
+
+## API `sistema_archivos`
+
+### Objetivo
+FS tipado con permisos: texto/binario, cursor `Flujo`, watch `Observador`.
+
+### Funciones
+- Objetos: `SistemaArchivos`, `Archivo`, `Bits`, `Flujo`, `Observador`, `EventoArchivo`
+- Cada I/O: forma sync + `_asincrono`
+- Permiso manifiesto `sistema-archivos`: `lectura` | `escritura` | `todo`
+
+### Funciones de la API
+Tablas §5 (leer/escribir/abrir_flujo/observar/…).
+
+**Import:** `importar { SistemaArchivos, Archivo, Bits, Flujo, Observador, EventoArchivo } desde "quetzal/sistema_archivos"`
 
 ## 5. `quetzal/sistema_archivos`
 
@@ -701,6 +778,23 @@ bitacora.cerrar()
 ```
 
 ---
+
+## API `red`
+
+### Objetivo
+HTTP servidor/cliente en español (Express/Axios-like) + multipart + códigos MDN.
+
+### Funciones
+- Server: `ServidorHttp`, `Enrutador`, `Ruta`, interceptores, callbacks **nombrados**
+- Verbos ES → HTTP (`obtener`→GET … `consultar`→QUERY)
+- Client: `ClienteHttp` sync/`_asincrono`
+- `Formulario` / `ParteArchivo` / `HttpCodigos`
+- Permiso manifiesto `red`
+
+### Funciones de la API
+§6 completo (`escuchar`, verbos, `PeticionEntrante`, `RespuestaSaliente`, …).
+
+**Import:** `importar { ServidorHttp, ClienteHttp, Formulario, HttpCodigos, … } desde "quetzal/red"`
 
 ## 6. `quetzal/red`
 

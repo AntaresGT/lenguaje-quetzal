@@ -1,9 +1,27 @@
 # Métodos nativos (built-in)
 
-> Métodos incorporados en los tipos primitivos y compuestos de
-> Lenguaje Quetzal, organizados por tipo receptor.
+> API de extensión por tipo receptor.
+> Formato por tipo: **Objetivo** · **Funciones** · **Funciones de la API**.
+> Inventario: [`catalogo.json`](./catalogo.json).
+
+```yaml
+doc: metodos-nativos
+receptores: [texto, lista, jsn, log, entero, número]
+regla: conversión = método del valor fuente (no cast global)
+```
 
 ---
+
+## API `texto`
+
+### Objetivo
+Manipulación Unicode, validación, codecs y conversiones desde cadena.
+
+### Funciones
+Tamaño, caso, trim, búsqueda, reemplazo, división, subcadena, validación, base64/URL, parseo.
+
+### Funciones de la API
+Ver tablas §1 abajo.
 
 ## 1. Métodos de `texto`
 
@@ -102,6 +120,19 @@
 
 ---
 
+## API `lista`
+
+### Objetivo
+Colecciones ordenadas: acceso, mutación, orden, agregados, serialización.
+
+### Funciones
+Mutación requiere lista `var`. Numéricos solo en listas numéricas. Global `rango`.
+
+### Funciones de la API
+Ver tablas §2 abajo.
+
+---
+
 ## 2. Métodos de `lista` / `lista<T>`
 
 ### 2.1 Tamaño y verificación
@@ -188,6 +219,19 @@ lista r = rango(1, 10)   // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 ---
 
+## API `jsn`
+
+### Objetivo
+Mapa JSON mutable: claves, merge, serialización.
+
+### Funciones
+Consulta/mutación de propiedades; serialización texto.
+
+### Funciones de la API
+Ver tabla §3.
+
+---
+
 ## 3. Métodos de `jsn` (objeto/JSON)
 
 | Método | Descripción |
@@ -201,6 +245,19 @@ lista r = rango(1, 10)   // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 | `texto()` | serializa |
 | `texto_formateado()` | serializa con formato legible |
 | `jsn()` | parsea desde texto |
+
+---
+
+## API `log` / `entero` / `número`
+
+### Objetivo
+Conversión y utilidades numéricas/booleanas sobre literales y valores.
+
+### Funciones
+`.texto()` en todos; numéricos: absoluto y coerciones.
+
+### Funciones de la API
+§4 y §5 abajo. Literales llaman métodos: `1234.texto()`, `(3.14).absoluto()`.
 
 ---
 

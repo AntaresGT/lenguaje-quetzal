@@ -1,7 +1,33 @@
 # Tokens y análisis léxico
 
-> Referencia completa de las unidades léxicas (tokens) reconocidas por
-> el lexer de Lenguaje Quetzal.
+> Unidades léxicas del lexer. Primer eslabón del pipeline.
+> Formato: **Objetivo** · **Funciones** · **Funciones de la API**.
+
+```yaml
+doc: tokens
+pipeline_nodo: lexer
+comentario: "//"   # único estilo observado
+normaliza_tildes: true
+```
+
+---
+
+## léxico
+
+### Objetivo
+Convertir fuente UTF-8 → `Vec<Token>` para el parser.
+
+### Funciones
+- Comentarios de línea `//`
+- Keywords ES (con/sin tilde equivalentes)
+- Operadores arit/asig/comp/lógicos/ternario
+- Literales: número, `"…"`, `t"…"`, `verdadero`/`falso`/`nulo`, listas, jsn
+- Identificadores con tildes y `ñ`
+- **No observado:** `/* */`, `#`, comillas simples, backticks, `**`
+
+### Funciones de la API
+API del runtime de tipos: [`metodos-nativos.md`](./metodos-nativos.md).
+Este doc lista **tokens**, no métodos.
 
 ## 1. Comentarios
 

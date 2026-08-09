@@ -1,7 +1,32 @@
 # Funciones
 
-> Definición, parámetros, retorno, recursividad y funciones asíncronas
-> en Lenguaje Quetzal.
+> Declaración, parámetros, retorno, async y callbacks nombrados.
+> Formato: **Objetivo** · **Funciones** · **Funciones de la API**.
+
+```yaml
+doc: funciones
+keywords: [retornar, asincrono, asincróno, esperar, funcion, var]
+sin: [lambdas, funciones_anónimas, flecha_->]
+```
+
+---
+
+## funciones
+
+### Objetivo
+Procedimientos con tipos explícitos en params y retorno. Primera clase vía nombre.
+
+### Funciones
+- Decl: `[asincrono] <tipo> <nombre>(<params>) { <cuerpo> }`
+- Param: `<tipo> [var] <nombre>`
+- Retorno: `retornar [<expr>]`
+- Recursión nativa
+- Async: `asincrono` + `esperar`
+- Callbacks: tipo `funcion`; métodos `libre` / enlazados
+- **Sin** funciones anónimas
+
+### Funciones de la API
+Ninguna built-in de “Function”; la API es la invocación `(args)` y stdlib que acepta `funcion`.
 
 ## 1. Declaración de función
 

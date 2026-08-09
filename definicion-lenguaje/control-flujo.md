@@ -1,7 +1,30 @@
 # Estructuras de control
 
-> Sintaxis de condicionales, bucles, control de flujo directo y manejo
-> de excepciones en Lenguaje Quetzal.
+> Condicionales, bucles, flujo directo y excepciones.
+> Formato: **Objetivo** · **Funciones** · **Funciones de la API**.
+> Catálogo: [`catalogo.json`](./catalogo.json) · grafo: [`diagramas.md`](./diagramas.md).
+
+```yaml
+doc: control-flujo
+keywords: [si, sino, mientras, hacer, para, en, cada, romper, continuar, retornar,
+           intentar, capturar, finalmente, lanzar, excepcion]
+```
+
+---
+
+## condicional `si`
+
+### Objetivo
+Ramificación condicional. Paréntesis y llaves **obligatorios**.
+
+### Funciones
+- `si (cond) { … }`
+- `sino si (cond) { … }` (keywords concatenadas)
+- `sino { … }`
+- Ternario: `cond ? a : b` (precedencia más baja)
+
+### Funciones de la API
+Ninguna.
 
 ## 1. Condicionales
 
@@ -40,6 +63,23 @@ si (edad > 60) {
 - Las llaves `{ }` del bloque son **obligatorias** (incluso para una
   sola sentencia).
 - `sino si` se construye concatenando las dos keywords.
+
+## bucles
+
+### Objetivo
+Repetición con cuatro formas + `romper` / `continuar`.
+
+### Funciones
+| Forma | Sintaxis |
+|---|---|
+| while | `mientras (cond) { }` |
+| do-while | `hacer { } mientras (cond);` |
+| for C | `para (init; cond; paso) { }` |
+| for-in | `para (tipo var id en\|cada coll) { }` |
+| break/continue | `romper` / `continuar` |
+
+### Funciones de la API
+Ninguna. `en` ≡ `cada`.
 
 ## 2. Bucles
 
@@ -130,6 +170,23 @@ vacio saludar() {
     retornar    // retorno temprano sin valor
 }
 ```
+
+## excepciones
+
+### Objetivo
+Errores capturables con limpieza opcional. Un solo tipo `excepcion`.
+
+### Funciones
+- `intentar { }` (obligatorio)
+- `capturar (excepcion id) { }` (obligatorio)
+- `finalmente { }` (opcional; siempre corre)
+- `lanzar <expresión>` (cualquier valor; típico: texto)
+
+### Funciones de la API
+| Atributo | Tipo | Descripción |
+|---|---|---|
+| `e.mensaje` | `texto` | mensaje |
+| `e.llamadas` | `lista` | call stack |
 
 ## 4. Manejo de excepciones
 

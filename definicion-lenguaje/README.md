@@ -1,56 +1,283 @@
 # Definición del Lenguaje Quetzal
 
-Especificación formal y visual de la sintaxis del lenguaje **Quetzal**,
-derivada del análisis exhaustivo de los 21 archivos `.qz` de ejemplo
-y de los manifiestos `quetzal.json` del repositorio.
+Especificación **humana + IA + máquina** de Quetzal.
+Si el contexto se pierde, restaurar desde: [`identidad.md`](./identidad.md) + [`catalogo.json`](./catalogo.json) + [`gramatica.json`](./gramatica.json).
 
-## Índice de archivos
+| Artefacto | Rol |
+|---|---|
+| [`identidad.md`](./identidad.md) | Qué es Quetzal (canónico) |
+| [`catalogo.json`](./catalogo.json) | Inventario features/API (machine-readable) |
+| [`arquitectura.md`](./arquitectura.md) | Crates + pipeline del intérprete (Rust) |
+| [`gramatica.json`](./gramatica.json) | Gramática para parsers/IA |
+| [`gramatica.ebnf.md`](./gramatica.ebnf.md) | Gramática EBNF legible |
+| [`esquema_quetzal.json`](./esquema_quetzal.json) | Schema de `quetzal.json` |
+| Docs `.md` | Detalle por característica |
+| [`anomalias.md`](./anomalias.md) | Inconsistencias conocidas |
+
+---
+
+## 0. Grafo: cómo se mueve la sintaxis
+
+```mermaid
+flowchart TB
+    subgraph ENTRADA["Entrada"]
+        QZ["archivo.qz\nUTF-8"]
+        MAN["quetzal.json\nmanifiesto + permisos"]
+    end
+
+    subgraph LEX["Léxico"]
+        LEXER["tokenizar()\nkeywords ES · tildes · literales"]
+        TOK["Vec&lt;Token&gt;"]
+    end
+
+    subgraph SYN["Sintaxis"]
+        PARSER["parser\nproducciones EBNF"]
+        AST["AST\nprograma / sentencia / expr"]
+    end
+
+    subgraph SEM["Semántica"]
+        TIPOS["chequeo tipos\nexplícito · var · nulo"]
+        MODS["resolver importar/exportar"]
+        PERM["validar permisos"]
+    end
+
+    subgraph RUN["Runtime"]
+        LOAD["cargador módulos"]
+        EVAL["evaluador"]
+        STD["stdlib\nconsola · Matemática · Tiempo\nmotor · FS · red"]
+    end
+
+    QZ --> LEXER
+    MAN --> PERM
+    LEXER --> TOK --> PARSER --> AST
+    AST --> TIPOS --> MODS --> PERM
+    PERM --> LOAD --> EVAL
+    EVAL <--> STD
+```
+
+Detalle railroad por producción: [`diagramas.md`](./diagramas.md).
+
+### Grafo de decisión de sentencia
+
+```mermaid
+flowchart LR
+    S((sentencia)) --> D{forma}
+    D -->|tipo var? id =| DECL[declaración]
+    D -->|lvalue op=| ASIG[asignación]
+    D -->|si mientras para intentar| CTRL[control]
+    D -->|objeto prototipo| POO[definición]
+    D -->|importar exportar| MOD[módulo]
+    D -->|tipo nombre(| FN[función]
+    D -->|expr| EXP[expresión]
+```
+
+---
+
+## 1. Resumen ejecutivo
+
+Quetzal =
+
+- **Español** — keywords y API naturales
+- **Tipado estático explícito** — sin inferencia
+- **Inmutable por defecto** — `var` muta
+- **POO** — `objeto` / `prototipo` / `hereda` / `libre`
+- **Async** — `asincrono` / `esperar`
+- **Excepciones** — `intentar` / `capturar` / `finalmente` / `lanzar`
+- **Módulos** — `importar` / `exportar`
+- **Templates** — `t"hola {nombre}"`
+- **Stdlib ES** — consola, matemática, tiempo, regex, FS, red
+- **Seguro por defecto** — permisos en manifiesto
+
+---
+
+## 2. Catálogo de características
+
+Formato fijo por feature:
+
+- **Objetivo** — para qué existe
+- **Funciones** — capacidades / keywords
+- **Funciones de la API** — métodos/símbolos públicos
+
+### 2.1 Tipos
+
+#### tipo `entero`
+- **Objetivo:** i64 con signo; conteos, índices, aritmética exacta.
+- **Funciones:** literales `42`, ops `+ - * / %`, comparación, `nulo`.
+- **Funciones de la API:** `texto()`, `logico()`, `absoluto()`, `entero()`, `numero()` / `número()`.
+
+#### tipo `número` / `numero`
+- **Objetivo:** IEEE 754 double.
+- **Funciones:** literales `3.14`, mismas ops numéricas.
+- **Funciones de la API:** `texto()`, `logico()`, `absoluto()`, `entero()`, `numero()` / `número()`.
+
+#### tipo `texto`
+- **Objetivo:** Unicode UTF-8; interpolación `t"…"`.
+- **Funciones:** `"…"`, `t"{expr}"`, `+`, índice `[i]` / `[-1]`.
+- **Funciones de la API:** ver [`metodos-nativos.md`](./metodos-nativos.md) §1 (`longitud`, `reemplazar`, `dividir`, conversiones, base64, URL, …).
+
+#### tipo `log`
+- **Objetivo:** booleano.
+- **Funciones:** `verdadero` / `falso`; `&&` `||` `!` (también `y` `o` `no` en lexer).
+- **Funciones de la API:** `texto()`.
+
+#### tipo `vacío` / `vacio`
+- **Objetivo:** retorno sin valor.
+- **Funciones:** anotación de función; `retornar` vacío.
+- **Funciones de la API:** — (ninguna).
+
+#### tipo `lista` / `lista<T>`
+- **Objetivo:** arreglo ordenado; tipado o heterogéneo.
+- **Funciones:** `[…]`, índice, `para … en|cada`, mutación si `var`.
+- **Funciones de la API:** §2 de [`metodos-nativos.md`](./metodos-nativos.md); global `rango(a, b)`.
+
+#### tipo `jsn`
+- **Objetivo:** objeto JSON nativo.
+- **Funciones:** `{ k: v }`, acceso `.` / `[]`.
+- **Funciones de la API:** `contiene_clave`, `claves`, `valores`, `establecer`, `eliminar`, `fusionar`, `texto`, `texto_formateado`, `jsn`.
+
+#### tipo `funcion`
+- **Objetivo:** callbacks de primera clase (solo nombres; sin lambdas).
+- **Funciones:** parámetro `funcion`, `Objeto.metodo`, `instancia.metodo` enlazado.
+- **Funciones de la API:** invocación `(args)`.
+
+#### valor `nulo`
+- **Objetivo:** ausencia polimórfica.
+- **Funciones:** asignable a cualquier tipo.
+- **Funciones de la API:** — .
+
+#### mutabilidad `var`
+- **Objetivo:** reasignación explícita.
+- **Funciones:** `tipo var nombre = expr`; parámetros `var`.
+- **Funciones de la API:** — .
+
+Detalle: [`tipos.md`](./tipos.md).
+
+### 2.2 Control de flujo
+
+#### `si` / `sino si` / `sino`
+- **Objetivo:** ramificación; `()` y `{}` obligatorios.
+- **Funciones:** cadena `si` → `sino si` → `sino`; ternario `? :`.
+- **Funciones de la API:** — .
+
+#### bucles
+- **Objetivo:** repetición.
+- **Funciones:** `mientras`, `hacer…mientras`, `para(;;)`, `para (T var x en|cada coll)`, `romper`, `continuar`.
+- **Funciones de la API:** — .
+
+#### excepciones
+- **Objetivo:** errores capturables.
+- **Funciones:** `intentar` / `capturar (excepcion e)` / `finalmente` / `lanzar`.
+- **Funciones de la API:** `e.mensaje`, `e.llamadas`.
+
+Detalle: [`control-flujo.md`](./control-flujo.md).
+
+### 2.3 Funciones
+
+#### funciones
+- **Objetivo:** procedimientos tipados.
+- **Funciones:** `[asincrono] tipo nombre(params) {…}`, `retornar`, recursión, `esperar`.
+- **Funciones de la API:** — (callbacks vía tipo `funcion`).
+
+Detalle: [`funciones.md`](./funciones.md).
+
+### 2.4 POO
+
+#### `objeto`
+- **Objetivo:** clase con visibilidad y herencia.
+- **Funciones:** `hereda`, `como`, `implementa`, `nuevo`, `esto`, `padre`, `publico`/`privado`, `libre`, constructor = nombre de clase.
+- **Funciones de la API:** métodos/atributos definidos por el usuario.
+
+#### `prototipo`
+- **Objetivo:** interfaz; `opcional` no exige impl.
+- **Funciones:** firmas sin cuerpo; `implementa`.
+- **Funciones de la API:** — .
+
+Detalle: [`poo.md`](./poo.md).
+
+### 2.5 Módulos
+
+#### módulos de usuario
+- **Objetivo:** partir código.
+- **Funciones:** `importar { id [como alias] } desde "ruta"`, `exportar {…}`.
+- **Funciones de la API:** — .
+
+Detalle: [`modulos.md`](./modulos.md).
+
+### 2.6 Biblioteca estándar
+
+#### `consola` (global)
+- **Objetivo:** E/S terminal.
+- **Funciones:** salida colorizada; entrada con/sin eco.
+- **Funciones de la API:** `mostrar`, `mostrar_error`, `mostrar_advertencia`, `mostrar_exito`, `mostrar_informacion`, `pedir`, `pedir_secreto`.
+
+#### `Matemática` — `quetzal/matemática`
+- **Objetivo:** math stdlib.
+- **Funciones:** constantes, aritmética, trigo, logs, stats, RNG.
+- **Funciones de la API:** `PI`, `potencia`, `seno`, `aleatorio_rango`, … (ver doc).
+
+#### `Tiempo` — `quetzal/tiempo`
+- **Objetivo:** fechas/horas/zonas.
+- **Funciones:** constructores, componentes, aritmética, comparación.
+- **Funciones de la API:** `ahora`, `hoy`, `formatear`, `agregar_dias`, … .
+
+#### `ExpresiónRegular` — `quetzal/motor`
+- **Objetivo:** regex inmutables.
+- **Funciones:** match/buscar/reemplazar; flags por copia.
+- **Funciones de la API:** `coincide`, `buscar_todo`, `con_ignorar_mayúsculas`, … .
+
+#### `sistema_archivos` — `quetzal/sistema_archivos` · permiso `sistema-archivos`
+- **Objetivo:** FS tipado + Bits + Flujo + Observador.
+- **Funciones:** sync / `_asincrono`; niveles lectura|escritura|todo.
+- **Funciones de la API:** `SistemaArchivos.*`, `Archivo.*`, `Bits.*`, `Flujo.*`, `Observador.*`, `EventoArchivo.*`.
+
+#### `red` — `quetzal/red` · permiso `red`
+- **Objetivo:** HTTP server/client ES + multipart.
+- **Funciones:** verbos `obtener`…`consultar`; interceptores; `Formulario`.
+- **Funciones de la API:** `ServidorHttp`, `ClienteHttp`, `PeticionEntrante`, `RespuestaSaliente`, `HttpCodigos`, … .
+
+Detalle: [`modulos-nativos.md`](./modulos-nativos.md), [`metodos-nativos.md`](./metodos-nativos.md).
+
+### 2.7 Proyecto
+
+#### manifiesto `quetzal.json`
+- **Objetivo:** metadatos, entrada, deps, permisos.
+- **Funciones:** campos canónicos **con tildes** (`versión`, `aplicación`, …).
+- **Funciones de la API:** schema [`esquema_quetzal.json`](./esquema_quetzal.json).
+
+Detalle: [`manifiesto.md`](./manifiesto.md).
+
+---
+
+## 3. Índice de archivos
 
 | Archivo | Contenido |
 |---|---|
-| **`gramatica.ebnf.md`** | Gramática formal en notación EBNF (Extended Backus–Naur Form). |
-| **`gramatica.json`** | Gramática en JSON estructurado, optimizada para que un modelo de IA la parsee y genere parsers/highlighters. |
-| **`diagramas.md`** | 25 diagramas de sintaxis en Mermaid (estilo railroad) cubriendo cada producción de la gramática. |
-| `tokens.md` | Referencia léxica: palabras reservadas, operadores, delimitadores, literales y comentarios. |
-| `tipos.md` | Tipos de datos primitivos y compuestos, mutabilidad, conversiones y el valor `nulo`. |
-| `control-flujo.md` | Condicionales, bucles, control de flujo directo y manejo de excepciones. |
-| `funciones.md` | Declaración, parámetros, retorno, recursividad, funciones asíncronas. |
-| `poo.md` | `objeto`, `prototipo`, herencia, modificadores de visibilidad, miembros `libre`. |
-| `modulos.md` | `importar`, `exportar`, alias `como`, rutas relativas y nativas. |
-| `metodos-nativos.md` | API de cadenas, listas, JSON, booleanos y números. |
-| `modulos-nativos.md` | Módulos `consola`, `quetzal/matemática`, `quetzal/tiempo`, `quetzal/motor`, `quetzal/sistema_archivos`, `quetzal/red`. |
-| `manifiesto.md` | Formato del archivo `quetzal.json` (manifiesto de proyecto). |
-| `esquema_quetzal.json` | JSON Schema canónico (Draft-07) del manifiesto, con campos con tildes. |
-| `anomalias.md` | Inconsistencias, ambigüedades y observaciones sobre la sintaxis. |
+| [`identidad.md`](./identidad.md) | Identidad canónica |
+| [`catalogo.json`](./catalogo.json) | Catálogo machine-readable |
+| [`arquitectura.md`](./arquitectura.md) | Arquitectura del intérprete |
+| [`gramatica.ebnf.md`](./gramatica.ebnf.md) | EBNF |
+| [`gramatica.json`](./gramatica.json) | Gramática JSON |
+| [`diagramas.md`](./diagramas.md) | Railroad + grafo pipeline |
+| [`tokens.md`](./tokens.md) | Léxico |
+| [`tipos.md`](./tipos.md) | Tipos |
+| [`control-flujo.md`](./control-flujo.md) | Control / excepciones |
+| [`funciones.md`](./funciones.md) | Funciones |
+| [`poo.md`](./poo.md) | POO |
+| [`modulos.md`](./modulos.md) | Módulos |
+| [`metodos-nativos.md`](./metodos-nativos.md) | Métodos por tipo |
+| [`modulos-nativos.md`](./modulos-nativos.md) | Stdlib |
+| [`manifiesto.md`](./manifiesto.md) | `quetzal.json` |
+| [`esquema_quetzal.json`](./esquema_quetzal.json) | JSON Schema |
+| [`anomalias.md`](./anomalias.md) | Anomalías |
 
-## Resumen ejecutivo
+---
 
-Quetzal es un lenguaje de programación:
+## 4. Cómo usar (por audiencia)
 
-- **En español** — keywords y API en español natural (`entero`, `texto`, `lista`, `objeto`).
-- **Tipado estático y explícito** — sin inferencia; todo tipo se declara.
-- **Inmutable por defecto** — `var` introduce mutabilidad.
-- **Orientado a objetos clásico** — clases (`objeto`) con herencia simple/múltiple e interfaces (`prototipo`).
-- **Con asincronía** — `asincrono` / `esperar`.
-- **Con manejo de excepciones** — `intentar / capturar / finalmente` con variable `excepcion`.
-- **Con módulos** — `importar` / `exportar` y alias `como`.
-- **Con interpolación de cadenas** — prefijo `t"..."` similar a f-strings.
-- **Con biblioteca estándar en español** — `consola`, `Matemática`, `Tiempo`, `ExpresiónRegular`, `SistemaArchivos` (incluye `Flujo` con cursor y `Observador` de cambios) y `quetzal/red` (`ServidorHttp`, `ClienteHttp`, `Formulario`, `HttpCodigos`).
-- **Seguro por defecto** — el acceso al filesystem, la red y la ejecución de procesos requiere permisos declarados en `quetzal.json`.
+1. **Humano:** `identidad.md` → este README → `tipos.md` → feature docs → `diagramas.md`.
+2. **IA:** cargar `catalogo.json` + `gramatica.json` + `identidad.md` en el prompt.
+3. **Máquina / tooling:** validar manifiesto con `esquema_quetzal.json`; generar parser/highlighter desde `gramatica.json`.
 
-## Cómo usar esta documentación
+## 5. Fuentes
 
-1. **Para entender el lenguaje**: empezar por `tokens.md` → `tipos.md` → `diagramas.md` → secciones por característica.
-2. **Para implementar un parser**: usar `gramatica.ebnf.md` o `gramatica.json` directamente.
-3. **Para que una IA entienda la sintaxis**: darle `gramatica.json` en el prompt (es JSON nativo, no requiere pre-procesamiento).
-4. **Para visualizar la sintaxis**: abrir `diagramas.md` en cualquier visor con soporte Mermaid (GitHub, GitLab, VS Code, Obsidian, etc.).
-
-## Fuentes
-
-Esta especificación fue generada a partir de:
-
-- `ejemplos/*.qz` (21 archivos de código fuente Quetzal)
-- `ejemplos/hola_mundo/quetzal.json`
-- `ejemplos/modulos/quetzal.json`
-- El JSON Schema canónico del manifiesto (guardado como
-  `esquema_quetzal.json` en esta carpeta, con campos con tildes).
+Derivado de `ejemplos/**/*.qz`, manifiestos de ejemplo, implementación en `crates/`, y esta carpeta como spec viva.

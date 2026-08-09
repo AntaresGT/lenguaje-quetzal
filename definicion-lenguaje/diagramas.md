@@ -1,8 +1,76 @@
 # Diagramas de Sintaxis — Lenguaje Quetzal
 
-> Diagramas estilo *railroad* representados con **Mermaid `flowchart LR`**.
-> Cada diagrama corresponde a una producción de la gramática EBNF/JSON
-> y muestra la sintaxis visualmente.
+> Diagramas estilo *railroad* (Mermaid) + **grafo de pipeline**.
+> Machine/IA: nodos = producciones; aristas = flujo de tokens/AST.
+> Canónico: [`identidad.md`](./identidad.md) · [`catalogo.json`](./catalogo.json).
+
+---
+
+## 0. Grafo maestro: pipeline
+
+Cómo se mueve un programa Quetzal (fuente → valor):
+
+```mermaid
+flowchart TB
+    SRC[".qz UTF-8"] --> LEX["Lexer\ntokenizar"]
+    MAN["quetzal.json"] --> PERM["Permisos"]
+    LEX --> TOK["Tokens"]
+    TOK --> PAR["Parser\nEBNF"]
+    PAR --> AST["AST"]
+    AST --> TIP["Tipos\nexplícitos"]
+    TIP --> IMP["Resolver\nimportar/exportar"]
+    IMP --> PERM
+    PERM --> LOAD["Cargador"]
+    LOAD --> EVAL["Evaluador"]
+    EVAL -->|"llamada"| STD["Stdlib"]
+    STD -->|"valor / excepción"| EVAL
+    EVAL --> OUT["Efectos\nconsola · FS · red"]
+```
+
+### 0.1 Grafo de categorías sintácticas
+
+```mermaid
+flowchart LR
+    PROG[programa] --> SENT[sentencia*]
+    SENT --> DECL[declaración]
+    SENT --> ASIG[asignación]
+    SENT --> CTRL[control]
+    SENT --> DEF[definición]
+    SENT --> MOD[módulo]
+    SENT --> EXPR[expresión;]
+
+    DECL --> TIPO[tipo]
+    TIPO --> PRIM[entero número texto log vacío]
+    TIPO --> COMP[lista jsn funcion]
+
+    CTRL --> SI[si]
+    CTRL --> LOOP[mientras para hacer]
+    CTRL --> EX[intentar capturar]
+
+    DEF --> FN[función asincrono]
+    DEF --> OBJ[objeto]
+    DEF --> PROT[prototipo]
+
+    MOD --> IMP[importar desde]
+    MOD --> EXP[exportar]
+
+    EXPR --> OPS[ops · ternario · llamar · nuevo]
+```
+
+### 0.2 Flujo de una expresión (precedencia)
+
+```mermaid
+flowchart BT
+    PRIM[primario · literal · id · lista · jsn] --> POST[postfijo . [] call ++ --]
+    POST --> UN[unario ! - ++ --]
+    UN --> MUL[* / %]
+    MUL --> SUM[+ -]
+    SUM --> CMP[< <= > >=]
+    CMP --> EQ[== !=]
+    EQ --> AND[&&]
+    AND --> OR[||]
+    OR --> TER[? :]
+```
 
 ---
 
@@ -458,9 +526,8 @@ flowchart TB
 
 ## Cómo usar estos diagramas
 
-- En **GitHub / GitLab / VS Code con extensión Mermaid**, los bloques
-  ```mermaid se renderizan automáticamente.
-- En **Markdown genérico** se ven como código; usar el plugin
-  *Mermaid Preview* o exportarlos a SVG con `mmdc`.
-- Para **anotar un parser**, la lectura de izquierda a derecha equivale
-  a la del flujo de tokens; las bifurcaciones son puntos de decisión.
+- **Pipeline / grafo:** §0 — flujo fuente→runtime y categorías sintácticas.
+- **Railroad:** §1–§25 — una producción por diagrama.
+- Render: GitHub / GitLab / VS Code Mermaid / Obsidian.
+- IA/máquina: emparejar con `gramatica.json` + `catalogo.json`.
+- Parser: LR del railroad = orden de tokens; rombos = decisiones.

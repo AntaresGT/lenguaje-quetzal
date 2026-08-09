@@ -1,9 +1,22 @@
 # Gramática Formal de Lenguaje Quetzal (EBNF)
 
-> Definición formal completa de la sintaxis del lenguaje Quetzal,
-> basada en el análisis exhaustivo de los 21 archivos `.qz` de ejemplo,
-> el esquema `esquema_quetzal.json` y los archivos de manifiesto
-> `quetzal.json` del repositorio.
+> Sintaxis formal. Pareja machine-readable: [`gramatica.json`](./gramatica.json).
+> Identidad: [`identidad.md`](./identidad.md) · catálogo: [`catalogo.json`](./catalogo.json).
+
+```yaml
+doc: gramatica.ebnf
+start: programa
+normaliza_tildes: true
+```
+
+### Objetivo
+Definir producciones para implementar parsers y validar programas.
+
+### Funciones
+Programa → sentencias → declaraciones / control / expresiones / POO / módulos.
+
+### Funciones de la API
+Ninguna — gramática, no runtime.
 
 ## Notación
 

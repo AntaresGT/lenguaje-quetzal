@@ -1,146 +1,302 @@
 # Tipos de datos
 
-> Tipos primitivos y compuestos del Lenguaje Quetzal, con su sintaxis
-> de declaración, mutabilidad, conversiones y manejo del valor `nulo`.
+> Tipos primitivos y compuestos de Lenguaje Quetzal.
+> Formato por feature: **Objetivo** · **Funciones** · **Funciones de la API**.
+> Catálogo machine-readable: [`catalogo.json`](./catalogo.json).
 
-## 1. Tipos primitivos
-
-| Tipo | Keyword | Tamaño/representación | Ejemplo |
-|---|---|---|---|
-| Entero | `entero` | 64 bits con signo (i64) | `42` |
-| Decimal | `número` | IEEE 754 double | `3.1416` |
-| Texto | `texto` | Unicode (UTF-8) | `"hola"` |
-| Booleano | `log` | 1 bit (`verdadero`/`falso`) | `verdadero` |
-| Vacío | `vacío` | Tipo unitario (solo retornos) | (no produce valor) |
-
-> **Variantes sin tilde**: `numero` ≡ `número`, `vacio` ≡ `vacío`.
-
-## 2. Tipos compuestos
-
-### 2.1 Lista
-
-```quetzal
-lista vacia = []                           // sin tipo (en contexto)
-lista<entero> numeros = [1, 2, 3]          // tipada
-lista mixta = [1, "texto", verdadero]      // heterogénea
+```yaml
+doc: tipos
+pipeline: lexer → parser → semántica(tipos) → evaluador
+keywords_tipo: [entero, número, numero, texto, log, vacío, vacio, lista, jsn, funcion]
 ```
 
-- Admite **genérico opcional** `<T>`.
-- Si se especifica, los elementos se verifican estáticamente.
-- Si no se especifica, la lista es heterogénea.
+---
 
-### 2.2 JSON (objeto)
+## tipo `entero`
+
+### Objetivo
+Entero con signo de 64 bits (`i64`) para conteos, índices y aritmética exacta.
+
+### Funciones
+- Declaración: `entero nombre = expr`
+- Literales: `42`, negativos unarios `-10`
+- Ops: `+ - * / % ++ --` y comparación
+- Asignable a `nulo`
+
+### Funciones de la API
+| Método | Retorna | Descripción |
+|---|---|---|
+| `texto()` | `texto` | conversión a cadena |
+| `logico()` | `log` | `0` → falso, ≠0 → verdadero |
+| `absoluto()` | `entero` | valor absoluto |
+| `entero()` | `entero` | identidad |
+| `numero()` / `número()` | `número` | a decimal |
+
+```quetzal
+entero edad = 41
+entero var contador = 0
+consola.mostrar(edad.texto())
+```
+
+---
+
+## tipo `número` / `numero`
+
+### Objetivo
+Decimal IEEE 754 double para cálculo real.
+
+### Funciones
+- Declaración: `número x = 3.14` (o `numero`)
+- Literales decimales `3.1416`
+- Mismas ops aritméticas/comparación que `entero`
+- Equivalencia de tilde: `número` ≡ `numero` (lexer)
+
+### Funciones de la API
+| Método | Retorna | Descripción |
+|---|---|---|
+| `texto()` | `texto` | a cadena |
+| `logico()` | `log` | `0.0` → falso |
+| `absoluto()` | `número` | \|x\| |
+| `entero()` | `entero` | truncación |
+| `numero()` / `número()` | `número` | identidad |
+
+```quetzal
+número pi = 3.1416
+número area = pi * 5.0 * 5.0
+```
+
+---
+
+## tipo `texto`
+
+### Objetivo
+Cadena Unicode UTF-8. Única forma de literal observada: comillas dobles.
+Interpolación con prefijo `t`.
+
+### Funciones
+- Literal: `"hola"`
+- Template: `t"hola {nombre}!"` con escapes `\n \t \" \\ \{ \}`
+- Concatenación: `+`
+- Índice: `s[0]`, `s[-1]` (desde el final)
+- Sin comillas simples ni backticks
+
+### Funciones de la API
+Resumen (detalle completo: [`metodos-nativos.md`](./metodos-nativos.md) §1):
+
+| Grupo | Métodos |
+|---|---|
+| Tamaño | `longitud()`, `esta_vacia()` |
+| Caso | `mayusculas()`, `minusculas()`, `capitalizar()`, `titulo()` |
+| Trim | `recortar()`, `recortar_inicio()`, `recortar_final()` |
+| Búsqueda | `contiene`, `empieza_con`, `termina_con`, `encontrar`, `buscar_ultimo`, `contar` |
+| Reemplazo | `reemplazar`, `reemplazar_primero` |
+| División | `dividir`, `partir_lineas` |
+| Subcadena | `subtexto`, `izquierda`, `derecha` |
+| Transform | `repetir`, `invertir` |
+| Validación | `es_numero`, `es_entero`, `es_alfanumerico`, `igual_sin_caso` |
+| Codec | `a_base64`, `decodificar_base64`, `a_enlace`, `decodificar_enlace` |
+| Conversión | `entero()`, `numero()`/`número()`, `logico()`, `texto()`, `lista()`, `jsn()` |
+
+```quetzal
+texto saludo = "hola"
+texto msg = t"{saludo}, mundo"
+texto may = saludo.mayusculas()
+```
+
+---
+
+## tipo `log`
+
+### Objetivo
+Booleano de un bit.
+
+### Funciones
+- Literales: `verdadero`, `falso`
+- Ops: `&&`, `||`, `!` (lexer también: `y`, `o`, `no`)
+- Condiciones de `si` / bucles
+
+### Funciones de la API
+| Método | Retorna | Descripción |
+|---|---|---|
+| `texto()` | `texto` | `"verdadero"` / `"falso"` |
+
+```quetzal
+log activo = verdadero
+si (activo && !falso) {
+    consola.mostrar("ok")
+}
+```
+
+---
+
+## tipo `vacío` / `vacio`
+
+### Objetivo
+Tipo unitario: solo como retorno de función sin valor.
+
+### Funciones
+- Anotación: `vacio saludar() { … }`
+- `retornar` sin expresión (opcional al final)
+- No produce valor asignable útil
+
+### Funciones de la API
+Ninguna.
+
+```quetzal
+vacio saludar() {
+    consola.mostrar("hola")
+}
+```
+
+---
+
+## tipo `lista` / `lista<T>`
+
+### Objetivo
+Arreglo ordenado. Genérico opcional: tipado estático o heterogéneo.
+
+### Funciones
+- Literales: `[1, 2, 3]`, `[]`
+- Tipado: `lista<entero> xs = [1, 2]`
+- Heterogéneo: `lista mixta = [1, "a", verdadero]`
+- Índice: `xs[0]`, `xs[-1]`
+- Iteración: `para (entero var n en xs)` / `cada`
+- Mutación de contenido si la variable es `var`
+
+### Funciones de la API
+Detalle: [`metodos-nativos.md`](./metodos-nativos.md) §2.
+
+| Grupo | Métodos |
+|---|---|
+| Tamaño | `longitud()`, `esta_vacia()`, `primero()`, `ultimo()` |
+| Mutación | `agregar`, `insertar`, `remover`, `quitar_en`, `limpiar` |
+| Búsqueda | `contiene`, `buscar`, `buscar_ultimo`, `contar` |
+| Orden | `ordenar`, `ordenar_descendente`, `ordenado`, `invertir` |
+| Slice | `tomar`, `saltar`, `sublista` |
+| Agregado | `concatenar`, `extender` |
+| Numérico | `sumar`, `promedio`, `maximo`, `minimo` |
+| Texto | `unir`, `texto`, `json`, `logico` |
+
+**Global:** `rango(inicio, fin)` → `lista` de enteros inclusiva.
+
+```quetzal
+lista<entero> var nums = [1, 2, 3]
+nums.agregar(4)
+lista r = rango(1, 5)   // [1,2,3,4,5]
+```
+
+---
+
+## tipo `jsn`
+
+### Objetivo
+Objeto JSON nativo (mapa clave → valor).
+
+### Funciones
+- Literal: `{ nombre: "Ana", edad: 30 }`
+- Claves con o sin comillas (ver [`tokens.md`](./tokens.md) §5.6)
+- Acceso: `obj.nombre` / `obj["clave con espacio"]`
+
+### Funciones de la API
+| Método | Descripción |
+|---|---|
+| `contiene_clave(clave)` | existencia |
+| `claves()` / `valores()` | listas |
+| `establecer(clave, valor)` | upsert |
+| `eliminar(clave)` | borra |
+| `fusionar(otro)` | merge in-place |
+| `texto()` / `texto_formateado()` | serializa |
+| `jsn()` | parsea desde texto (en receptor texto) |
 
 ```quetzal
 jsn persona = { nombre: "Ana", edad: 30 }
+persona.establecer("ciudad", "GT")
 ```
 
-Las claves pueden ir con o sin comillas (ver `tokens.md` §5.6).
+---
 
-## 3. Declaración y mutabilidad
+## tipo `funcion`
 
-**Sintaxis**: `<tipo> [var] <nombre> = <expresión>`
+### Objetivo
+Referencia a función de primera clase para callbacks. **Sin lambdas.**
+
+### Funciones
+- Parámetro/variable: `funcion accion`
+- Pasar nombre sin `()`: `aplicar(doble, 21)`
+- `Objeto.metodo` = método `libre`
+- `instancia.metodo` = método enlazado (conserva `esto`)
+- Firma no fijada en el tipo; se verifica al invocar
+
+### Funciones de la API
+Invocación: `accion(args…)`. Ver [`funciones.md`](./funciones.md) §6.
 
 ```quetzal
-entero contador = 0              // inmutable (por defecto)
-entero var total = 0             // mutable (por palabra 'var')
-
-texto saludo = "hola"            // inmutable
-texto var buffer = ""            // mutable
-
-lista var items = []             // lista mutable (se puede agregar/quitar)
-lista items_constantes = [1,2,3] // la lista en sí no se puede reasignar
-                                 //   (pero los items podrían ser var)
+entero doble(entero v) { retornar v * 2 }
+entero aplicar(funcion f, entero v) { retornar f(v) }
+entero r = aplicar(doble, 21)   // 42
 ```
 
-**Reglas**:
-- `var` se coloca **después del tipo** y **antes del nombre**.
-- Sin `var`, la variable es efectivamente `const`.
-- `var` se puede aplicar también a **parámetros de función** para
-  permitir mutarlos dentro del cuerpo.
+---
 
-## 4. El valor `nulo`
+## valor `nulo`
 
-`nulo` es el valor de ausencia. Es **polimórfico** — puede asignarse a
-cualquier tipo:
+### Objetivo
+Ausencia polimórfica. No existe `null` / `undefined` / `indefinido`.
+
+### Funciones
+- Asignable a **cualquier** tipo sin coerción
+- Comparación con `==` / `!=`
+
+### Funciones de la API
+Ninguna propia.
 
 ```quetzal
-entero  x = nulo
-número  y = nulo
-texto   z = nulo
-log     w = nulo
-lista   l = nulo
-jsn     o = nulo
+entero x = nulo
+texto z = nulo
 ```
 
-> **No se observa** `null` (inglés) ni `indefinido` / `undefined`.
+---
 
-## 5. Conversión de tipos
+## mutabilidad `var`
 
-Quetzal no usa casting estilo `int(x)`. En su lugar, las conversiones
-son **métodos de extensión** disponibles sobre cualquier valor:
+### Objetivo
+Inmutable por defecto. `var` tras el tipo habilita reasignación.
+
+### Funciones
+- Sintaxis: `<tipo> [var] <nombre> = <expresión>`
+- También en parámetros: `texto var palabra`
+- Sin `var` ≡ const efectiva
+
+### Funciones de la API
+Ninguna.
 
 ```quetzal
-// Desde texto
-entero  i = "1234".entero()              // 1234
-número  n = "1234.56".número()          // 1234.56
-log     b = "verdadero".log()            // verdadero
-jsn     j = "{\"a\":1}".jsn()            // {a: 1}
-lista<entero> l = "1,2,3".lista()       // [1, 2, 3]
-
-// Desde número/otros a texto
-texto t1 = 1234.texto()                  // "1234"
-texto t2 = 3.14.texto()                  // "3.14"
-texto t3 = verdadero.texto()             // "verdadero"
-texto t4 = mi_lista.texto()              // "[1, 2, 3]"
-texto t5 = mi_json.texto()               // serialización JSON
+entero contador = 0        // inmutable
+entero var total = 0       // mutable
+total = total + 1
 ```
 
-> Ver `metodos-nativos.md` para la lista completa de conversiones
-> por tipo (cadenas, números, listas, JSON, booleanos).
+---
 
-## 6. Inferencia de tipos
+## Conversiones cruzadas
 
-**No se observa inferencia de tipos**. Todas las declaraciones llevan
-anotación de tipo explícita:
+Regla: conversión = **método del valor fuente** (no cast global).
 
-```quetzal
-entero x = 5            // tipo explícito
-número y = 3.14         // tipo explícito
-texto  s = "hola"       // tipo explícito
+```
+texto → entero/número/log/jsn/lista : .entero() .número() .log() .jsn() .lista()
+*     → texto                       : .texto()
 ```
 
-## 7. Anotación de tipos en parámetros y retornos
+## Inferencia
 
-Siempre obligatorias en signaturas:
+**No existe.** Toda declaración lleva tipo explícito.
 
-```quetzal
-número sumar(número a, número b) {       // tipo en parámetros y retorno
-    retornar a + b
-}
+## Equivalencias de tilde
 
-vacio saludar() {                        // void
-    consola.mostrar("hola")
-}
-
-texto formatear(entero id) -> texto {    // (sintaxis -> no observada;
-    retornar t"id={id}"                  //  en la práctica solo se usa
-}                                        //  la sintaxis sin flecha)
-```
-
-> **Observación**: en los ejemplos revisados, la sintaxis siempre es
-> `<tipo> nombre(params) { ... }` con el tipo antes del nombre.
-> Una sintaxis con `->` no se observa.
-
-## 8. Resumen: equivalencias importantes
-
-| Forma canónica | Formas alternativas (todas válidas) |
+| Canónico | Alternativa |
 |---|---|
 | `número` | `numero` |
 | `vacío` | `vacio` |
 | `público` | `publico` |
 | `asincróno` | `asincrono` |
 | `excepción` | `excepcion` |
-
-Esta equivalencia se debe a la **normalización Unicode** que el lexer
-aplica a identificadores y keywords.

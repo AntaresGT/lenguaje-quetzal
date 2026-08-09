@@ -1,0 +1,16 @@
+[package]
+name = "repl"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "REPL interactivo del Lenguaje Quetzal."
+
+[dependencies]
+nucleo = { workspace = true }
+motor = { workspace = true }
+diagnosticos = { workspace = true }
+
+# Editor de línea con historial y multilínea.
+reedline = { workspace = true }

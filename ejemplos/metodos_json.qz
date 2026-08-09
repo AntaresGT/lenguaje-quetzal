@@ -1,0 +1,69 @@
+// Todos los metodos de JSON
+// Para que el JSON no sea constante, se debe agregar la palabra reservada "var"
+jsn var persona = {
+    nombre: "Ana",
+    datos_personales: {
+        fecha_nacimiento: "1998-05-15",
+        dpi: "1234567890101",
+        peso: 65.5,
+        altura: 1.70,
+        genero: "Femenino",
+        nacionalidad: "Guatemalteca",
+        estado_civil: "Soltera"
+    },
+    direcciones: [
+        {
+            tipo: "casa",
+            direccion: "123 Calle Principal, Ciudad"
+        },
+        {
+            tipo: "trabajo",
+            direccion: "456 Avenida Secundaria, Ciudad"
+        }
+    ],
+    telefonos: ["555-1234", "555-5678"],
+    activo: verdadero
+}
+
+// Acceso directo a propiedades
+texto nombre_persona = persona.nombre  // "Ana"
+// También otro acceso a propiedades
+número peso = persona["datos_personales"].peso  // 65.5
+// Acceso a propiedades anidadas
+texto direccion_casa = persona.direcciones[0].direccion  // "123 Calle Principal, Ciudad"
+// Acceso a un elemento de una lista dentro del JSON
+texto telefono_trabajo = persona.telefonos[1]  // "555-5678"
+
+// Verificar si una propiedad existe
+log tiene_dpi = persona.datos_personales.contiene_clave("dpi")  // verdadero
+
+// Obtener una lista de claves
+lista<texto> claves_persona = persona.claves()  // ["nombre", "datos_personales", "direcciones", "telefonos", "activo"]
+
+// Obtener una lista de valores
+lista valores_persona = persona.valores()  // ["Ana", {...}, ["casa", "trabajo"], ["555-1234", "555-5678"], verdadero]
+
+// Modificar una propiedad
+persona.nombre = "María"  // Cambia el nombre a "María"
+persona.establecer("nombre", "María")  // Alternativa para cambiar el nombre
+
+// Eliminar una propiedad
+persona.eliminar("activo")  // Elimina la propiedad "activo"
+
+// Fusionar o combinar dos JSON
+jsn var otra_persona = {
+    apellido: "Gómez",
+    edad: 30,
+    activo: falso
+}
+
+persona.fusionar(otra_persona)  // Combina los dos JSON, ahora persona tiene "apellido" y "edad"
+
+// Convertir JSON a texto
+texto persona_a_texto = persona.texto()  // '{"nombre":"María","datos_personales":{"fecha_nacimiento":"1998-05-15","dpi":"1234567890101","peso":65.5,"altura":1.7,"genero":"Femenino","nacionalidad":"Guatemalteca","estado_civil":"Soltera"},"direcciones":[{"tipo":"casa","direccion":"123 Calle Principal, Ciudad"},{"tipo":"trabajo","direccion":"456 Avenida Secundaria, Ciudad"}],"telefonos":["555-1234","555-5678"],"apellido":"Gómez","edad":30}'
+
+// Convertir JSON a un texto formateado
+texto persona_a_texto_formateado = persona.texto_formateado()  // Formato legible para humanos
+
+// Convertir texto a JSON
+jsn var json_desde_texto = "{\"nombre\":\"Ana\",\"edad\":25}".jsn()

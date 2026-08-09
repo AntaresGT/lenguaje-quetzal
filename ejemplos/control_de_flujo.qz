@@ -1,0 +1,31 @@
+// Controles de flujo
+
+entero edad = 41
+
+// Condicionales
+si (edad > 60) {
+    consola.mostrar("La persona es de la tercera edad")
+} sino si (edad > 18) {
+    consola.mostrar("La persona es mayor de edad")
+} sino {
+    consola.mostrar("La persona es menor de edad")
+}
+
+// Palabra reservada 'continuar', continua con la siguiente iteración del ciclo
+para (entero var i = 0; i < 10; i++) {
+    si (i % 2 == 0) {
+        // Si el número es par, se salta la impresión y se continua con la siguiente iteración
+        continuar
+    }
+    consola.mostrar(i)
+}
+
+// Palabra reservada 'romper', se sale o rompe el búcle
+para (entero var i = 0; i < 10; i++) {
+    si (i == 5) {
+        // Romper o salirse del búcle
+        romper
+    }
+    consola.mostrar(i)
+} 
+

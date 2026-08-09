@@ -1,0 +1,155 @@
+// Módulo nativo quetzal/tiempo — el objeto Tiempo
+//
+// Al importar se expone el objeto Tiempo, que permite manipular fechas,
+// horas, fechas con hora y zonas horarias. No requiere permisos especiales
+// en quetzal.json (a diferencia de red y sistema_archivos).
+//
+// Importación:
+//   importar { Tiempo } desde "quetzal/tiempo"
+//
+// Cada instancia de Tiempo es inmutable: guarda un instante (marca Unix en
+// milisegundos) y una zona horaria ("local", "UTC" o un nombre IANA como
+// "America/Guatemala"). Toda operación devuelve una instancia nueva.
+//
+// ── Constructores: nuevo Tiempo(...) ─────────────────────────────────────
+//   nuevo Tiempo()                                  -> instante actual, zona local
+//   nuevo Tiempo(marca_ms)                          -> desde marca Unix en ms
+//   nuevo Tiempo("2026-06-11 14:30:00")             -> desde texto común
+//   nuevo Tiempo(año, mes, dia)                     -> fecha a las 00:00:00, zona local
+//   nuevo Tiempo(año, mes, dia, hora, min, seg)     -> fecha y hora, zona local
+//   nuevo Tiempo(año, mes, dia, hora, min, seg, zona) -> con zona IANA
+//
+// ── Funciones libres (no necesitan instanciar) ───────────────────────────
+//   Tiempo.ahora()                  -> Tiempo  — instante actual, zona local
+//   Tiempo.ahora_utc()              -> Tiempo  — instante actual en UTC
+//   Tiempo.ahora_en(zona)           -> Tiempo  — instante actual en otra zona
+//   Tiempo.hoy()                    -> Tiempo  — hoy a las 00:00:00
+//   Tiempo.marca()                  -> entero  — ms desde la época Unix
+//   Tiempo.desde_marca(ms)          -> Tiempo  — desde una marca Unix
+//   Tiempo.analizar(texto, patron)  -> Tiempo  — parsea con patrón chrono
+//   Tiempo.zona_local()             -> texto   — zona IANA del sistema
+//   Tiempo.zonas()                  -> lista   — todas las zonas IANA
+//   Tiempo.zonas(region)            -> lista   — zonas de una región ("America", ...)
+//   Tiempo.es_bisiesto(año)         -> log
+//   Tiempo.dias_en_mes(año, mes)    -> entero
+//
+// ── Métodos de instancia ─────────────────────────────────────────────────
+//   Componentes (entero):
+//     .año() .mes() .dia() .hora() .minuto() .segundo() .milisegundo()
+//     .dia_semana()  — 1=lunes .. 7=domingo
+//     .dia_año()     — día del año (1..366)
+//     .marca()       — ms desde la época Unix
+//   Texto:
+//     .texto()        — ISO 8601: "2026-06-11T14:30:05-06:00"
+//     .texto_fecha()  — "AAAA-MM-DD"
+//     .texto_hora()   — "HH:MM:SS"
+//     .formatear(patron) — patrón chrono (%Y, %m, %d, %H, %M, %S, ...)
+//     .nombre_dia() .nombre_mes() — en español ("jueves", "junio")
+//   Aritmética (devuelven un Tiempo nuevo, aceptan negativos):
+//     .agregar_años(n) .agregar_meses(n) .agregar_dias(n)
+//     .agregar_horas(n) .agregar_minutos(n) .agregar_segundos(n)
+//     .diferencia(otro) -> jsn {dias, horas, minutos, segundos, milisegundos}
+//   Comparación (log):
+//     .es_antes(otro) .es_despues(otro) .es_mismo_instante(otro) .es_mismo_dia(otro)
+//   Zonas horarias:
+//     .zona()       — nombre de la zona ("UTC", "America/Guatemala", "local")
+//     .desfase()    — desfase UTC ("-06:00")
+//     .en_zona(zona) .en_utc() .en_local() — mismo instante, otra zona
+
+importar { Tiempo } desde "quetzal/tiempo"
+
+// ── Funciones libres ─────────────────────────────────────────────────────
+
+// Instante actual (la interpolación usa el texto ISO 8601 de la instancia).
+Tiempo ahora = Tiempo.ahora()
+consola.mostrar(t"Ahora: {ahora}")
+consola.mostrar(t"Hoy es {ahora.nombre_dia()} {ahora.dia()} de {ahora.nombre_mes()} de {ahora.año()}")
+
+// Marca Unix en milisegundos: útil para medir intervalos.
+entero marca = Tiempo.marca()
+consola.mostrar(t"Marca de tiempo (ms): {marca}")
+
+// Zona horaria del sistema y hora actual en otras zonas.
+consola.mostrar(t"Zona local: {Tiempo.zona_local()}")
+Tiempo en_utc = Tiempo.ahora_utc()
+Tiempo en_japon = Tiempo.ahora_en("Asia/Tokyo")
+consola.mostrar(t"En UTC: {en_utc}")
+consola.mostrar(t"En Tokio: {en_japon}")
+
+// Información del calendario.
+consola.mostrar(t"¿2024 fue bisiesto? {Tiempo.es_bisiesto(2024)}")
+consola.mostrar(t"Días de febrero 2024: {Tiempo.dias_en_mes(2024, 2)}")
+
+// Zonas por región: "America", "Europe", "Asia", "Africa", "Australia", ...
+lista<texto> zonas_america = Tiempo.zonas("America")
+consola.mostrar(t"Zonas en América: {zonas_america.longitud()}")
+
+// ── Instanciación con nuevo Tiempo(...) ──────────────────────────────────
+
+// Fecha y hora concretas en la zona local.
+Tiempo cumpleaños = nuevo Tiempo(2026, 9, 15, 18, 0, 0)
+consola.mostrar(t"Cumpleaños: {cumpleaños}")
+
+// Solo fecha (queda a las 00:00:00) y con zona horaria explícita.
+Tiempo navidad = nuevo Tiempo(2026, 12, 25)
+Tiempo reunion = nuevo Tiempo(2026, 6, 11, 14, 30, 0, "America/Guatemala")
+consola.mostrar(t"Navidad: {navidad.texto_fecha()}")
+consola.mostrar(t"Reunión: {reunion}")
+
+// Desde una marca Unix o desde un texto común.
+Tiempo desde_marca = nuevo Tiempo(marca)
+Tiempo desde_texto = nuevo Tiempo("2026-06-11 14:30:00")
+consola.mostrar(t"Desde marca: {desde_marca}")
+consola.mostrar(t"Desde texto: {desde_texto}")
+
+// Parseo con patrón chrono explícito.
+Tiempo analizado = Tiempo.analizar("11/06/2026 20:15", "%d/%m/%Y %H:%M")
+consola.mostrar(t"Analizado: {analizado}")
+
+// ── Componentes y formato ────────────────────────────────────────────────
+
+consola.mostrar(t"Año: {reunion.año()}, mes: {reunion.mes()}, día: {reunion.dia()}")
+consola.mostrar(t"Hora: {reunion.hora()}:{reunion.minuto()}:{reunion.segundo()}")
+consola.mostrar(t"Día de la semana (1=lunes): {reunion.dia_semana()}")
+consola.mostrar(t"Día del año: {reunion.dia_año()}")
+consola.mostrar(t"Fecha: {reunion.texto_fecha()}, hora: {reunion.texto_hora()}")
+texto legible = reunion.formatear("%d/%m/%Y a las %H:%M")
+consola.mostrar(t"Formateado: {legible}")
+
+// ── Aritmética de fechas ─────────────────────────────────────────────────
+
+// Cada operación devuelve una instancia nueva (la original no cambia).
+Tiempo en_una_semana = reunion.agregar_dias(7)
+Tiempo mes_pasado = reunion.agregar_meses(-1)
+Tiempo proximo_año = reunion.agregar_años(1)
+consola.mostrar(t"En una semana: {en_una_semana.texto_fecha()}")
+consola.mostrar(t"Hace un mes: {mes_pasado.texto_fecha()}")
+consola.mostrar(t"El próximo año: {proximo_año.texto_fecha()}")
+
+// Diferencia entre dos instantes: totales con signo en cada unidad.
+jsn diferencia = reunion.diferencia(en_una_semana)
+consola.mostrar(t"Faltan {diferencia.dias} días ({diferencia.horas} horas)")
+
+// ── Comparación ──────────────────────────────────────────────────────────
+
+consola.mostrar(t"¿La reunión es antes? {reunion.es_antes(en_una_semana)}")
+consola.mostrar(t"¿Es después? {reunion.es_despues(en_una_semana)}")
+consola.mostrar(t"¿Mismo instante? {reunion.es_mismo_instante(reunion)}")
+consola.mostrar(t"¿Mismo día? {reunion.es_mismo_dia(en_una_semana)}")
+
+// ── Zonas horarias ───────────────────────────────────────────────────────
+
+// El instante no cambia, solo la zona desde la que se observa.
+Tiempo reunion_utc = reunion.en_utc()
+Tiempo reunion_madrid = reunion.en_zona("Europe/Madrid")
+consola.mostrar(t"Reunión en {reunion.zona()} ({reunion.desfase()}): {reunion.texto_hora()}")
+consola.mostrar(t"Reunión en UTC: {reunion_utc.texto_hora()}")
+consola.mostrar(t"Reunión en Madrid: {reunion_madrid.texto_hora()}")
+consola.mostrar(t"¿Mismo instante en Madrid? {reunion.es_mismo_instante(reunion_madrid)}")
+
+// ── Medir un intervalo ───────────────────────────────────────────────────
+
+entero inicio = Tiempo.marca()
+// ... operación del programa ...
+entero fin = Tiempo.marca()
+consola.mostrar(t"Duración aproximada: {fin - inicio} ms")

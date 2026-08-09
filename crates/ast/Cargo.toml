@@ -1,0 +1,11 @@
+[package]
+name = "ast"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Árbol de sintaxis abstracta del Lenguaje Quetzal."
+
+[dependencies]
+nucleo = { workspace = true }

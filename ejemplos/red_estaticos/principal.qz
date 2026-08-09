@@ -1,0 +1,65 @@
+// Módulo nativo quetzal/red — archivos estáticos
+//
+// ServidorHttp.estaticos monta un directorio del disco y responde cada GET
+// con el archivo correspondiente: Content-Type según la extensión, index.html
+// cuando la ruta cae en un directorio, y rechazo de ".." para no salir del
+// árbol permitido.
+//
+// Firmas:
+//   servidor.estaticos("./publico")              // montado en /
+//   servidor.estaticos("/activos", "./publico/activos")
+//
+// Permisos: "red" para escuchar y "sistema-archivos" de lectura sobre el
+// directorio servido (ver quetzal.json).
+
+importar {
+    ServidorHttp,
+    ClienteHttp,
+    RespuestaHttp,
+    HttpCodigos
+} desde "quetzal/red"
+
+ServidorHttp servidor = nuevo ServidorHttp()
+
+// Todo lo que cuelga de ./publico queda disponible en la raíz del servidor.
+// Una petición a "/" entrega ./publico/index.html.
+servidor.estaticos("./publico")
+
+// También se puede montar un subárbol bajo un prefijo. Aquí
+// /activos/marca.txt lee ./publico/activos/marca.txt.
+servidor.estaticos("/activos", "./publico/activos")
+
+servidor.escuchar(0)
+entero puerto = servidor.puerto()
+consola.mostrar(t"Estáticos en http://127.0.0.1:{puerto}/")
+
+// Comprobación con el cliente: los mismos verbos de siempre leen lo que
+// acaba de servir el disco. Se usa la forma asincrónica porque el servidor
+// vive en este mismo proceso.
+
+ClienteHttp cliente = nuevo ClienteHttp({
+    base_url: t"http://127.0.0.1:{puerto}",
+    validar_estado: falso
+})
+
+RespuestaHttp inicio = esperar cliente.obtener_asincrono("/")
+consola.mostrar(t"GET /                 -> {inicio.estado()} {inicio.tipo_contenido()}")
+consola.mostrar(t"                       {inicio.cuerpo_texto().subtexto(0, 60)}...")
+
+RespuestaHttp estilo = esperar cliente.obtener_asincrono("/estilo.css")
+consola.mostrar(t"GET /estilo.css       -> {estilo.estado()} {estilo.tipo_contenido()}")
+
+RespuestaHttp datos = esperar cliente.obtener_asincrono("/datos.json")
+consola.mostrar(t"GET /datos.json       -> {datos.estado()} {datos.datos().mensaje}")
+
+RespuestaHttp hola = esperar cliente.obtener_asincrono("/hola.txt")
+consola.mostrar(t"GET /hola.txt         -> {hola.estado()} {hola.cuerpo_texto().recortar()}")
+
+RespuestaHttp marca = esperar cliente.obtener_asincrono("/activos/marca.txt")
+consola.mostrar(t"GET /activos/marca.txt -> {marca.estado()} {marca.cuerpo_texto().recortar()}")
+
+RespuestaHttp faltante = esperar cliente.obtener_asincrono("/no-existe.html")
+consola.mostrar(t"GET /no-existe.html   -> {faltante.estado()} {HttpCodigos.descripcion(faltante.estado())}")
+
+servidor.cerrar()
+consola.mostrar_exito("Servidor de estáticos detenido.")

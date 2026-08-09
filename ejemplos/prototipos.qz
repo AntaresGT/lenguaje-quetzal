@@ -1,0 +1,197 @@
+
+// Ejemplo de prototipo en Quetzal
+prototipo EjemploPrototipo1 {
+    privado:
+        entero atributo1
+        texto atributo2
+        // Atributo opcional
+        log opcional atributoOpcional
+    publico:
+        número atributo3
+        entero suma(entero a, entero b)
+        // Atributo mutable
+        texto var atributoMutable
+}
+
+// Otro prototipo que por defecto tiene público todos sus miembros
+prototipo EjemploPrototipo2 {
+    entero atributoA
+    texto atributoB
+    número atributoC
+    entero multiplicar(entero x, entero factor)
+    // Funcion opcional
+    log opcional funcionOpcional(entero z)
+    // Atributo mutable opcional
+    texto opcional var atributoMutable2
+    // Funcion con valores mutables
+    entero cualquier_funcion(entero var p, entero var q)
+}
+
+// Ejemplo de uso del prototipo
+objeto CualquierObjeto implementa EjemploPrototipo1 {
+    privado:
+        entero atributo1 = 10
+        texto atributo2 = "Hola"
+    publico:
+        número atributo3 = 3.14
+        texto var atributoMutable = "Editable"
+        entero suma(entero a, entero b) {
+            retornar a + b
+        }
+}
+
+objeto OtroObjeto implementa EjemploPrototipo2 {
+    entero atributoA = 5
+    texto atributoB = "Mundo"
+    número atributoC = 2.71
+    entero multiplicar(entero x, entero factor) {
+        retornar x * factor
+    }
+    log funcionOpcional(entero z) {
+        retornar z > 0
+    }
+    entero cualquier_funcion(entero var p, entero var q) {
+        p += 1
+        q += 1
+        retornar p + q
+    }
+}
+
+// ========================================
+// Ejemplos realistas de prototipos
+// ========================================
+
+// Caso 1: Facturación electrónica
+prototipo DocumentoFiscal {
+    privado:
+        entero correlativo
+    publico:
+        texto serie
+        texto nitCliente
+        número subtotal
+        número iva
+        número calcular_total(número subtotalBase, número ivaAplicado)
+        texto generar_resumen(texto serieDoc, entero correlativoDoc, número totalDoc)
+        log opcional validar_nit(texto nit)
+}
+
+objeto FacturaElectronica implementa DocumentoFiscal {
+    privado:
+        entero correlativo = 1001
+    publico:
+        texto serie = "A"
+        texto nitCliente = "CF"
+        número subtotal = 850.00
+        número iva = 0.12
+
+        número calcular_total(número subtotalBase, número ivaAplicado) {
+            retornar subtotalBase + (subtotalBase * ivaAplicado)
+        }
+
+        texto generar_resumen(texto serieDoc, entero correlativoDoc, número totalDoc) {
+            retornar "Factura " + serieDoc + "-" + correlativoDoc.texto() + " total Q" + totalDoc.texto()
+        }
+
+        log validar_nit(texto nit) {
+            retornar nit != ""
+        }
+}
+
+FacturaElectronica factura = nuevo FacturaElectronica()
+número totalFactura = factura.calcular_total(850.00, 0.12)
+texto resumenFactura = factura.generar_resumen("A", 1001, totalFactura)
+consola.mostrar(resumenFactura)
+
+// Caso 2: Contrato para clientes de API + persistencia
+prototipo ClienteApiRest {
+    texto urlBase
+    texto tokenAcceso
+    jsn obtener(texto ruta)
+    jsn opcional enviar(texto ruta, jsn cuerpo)
+}
+
+prototipo Persistible {
+    texto tabla
+    entero id
+    jsn serializar()
+}
+
+objeto UsuarioServicio implementa ClienteApiRest, Persistible {
+    texto urlBase = "https://api.ejemplo.com"
+    texto tokenAcceso = "token-demo"
+    texto tabla = "usuarios"
+    entero id = 42
+
+    jsn obtener(texto ruta) {
+        retornar {
+            metodo: "GET",
+            url: ruta,
+            autorizado: verdadero
+        }
+    }
+
+    jsn enviar(texto ruta, jsn cuerpo) {
+        retornar {
+            metodo: "POST",
+            url: ruta,
+            payload: cuerpo
+        }
+    }
+
+    jsn serializar() {
+        retornar {
+            tabla: esto.tabla,
+            id: esto.id,
+            token: esto.tokenAcceso
+        }
+    }
+}
+
+objeto ServicioSoloLectura implementa ClienteApiRest {
+    texto urlBase = "https://api.ejemplo.com"
+    texto tokenAcceso = "solo-lectura"
+
+    jsn obtener(texto ruta) {
+        retornar {
+            metodo: "GET",
+            url: ruta,
+            soloLectura: verdadero
+        }
+    }
+}
+
+UsuarioServicio servicio = nuevo UsuarioServicio()
+jsn respuestaUsuario = servicio.obtener("/usuarios/42")
+consola.mostrar("Token configurado: " + servicio.tokenAcceso)
+
+ServicioSoloLectura lector = nuevo ServicioSoloLectura()
+jsn respuestaListado = lector.obtener("/usuarios")
+consola.mostrar("Consulta de solo lectura ejecutada")
+
+// Caso 3: Objeto con herencia + implementa (orden: como ... implementa ...)
+prototipo Autenticable {
+    texto usuario
+    texto hashClave
+    log autenticar(texto clave)
+}
+
+objeto EntidadAuditable {
+    texto origen() {
+        retornar "sistema-interno"
+    }
+}
+
+objeto CuentaInterna como EntidadAuditable implementa Autenticable {
+    texto usuario = "admin"
+    texto hashClave = "admin-123"
+
+    log autenticar(texto clave) {
+        retornar clave == "admin-123"
+    }
+}
+
+CuentaInterna cuenta = nuevo CuentaInterna()
+log accesoOk = cuenta.autenticar("admin-123")
+texto origenCuenta = cuenta.origen()
+consola.mostrar("Acceso cuenta interna: " + accesoOk.texto())
+consola.mostrar("Origen de cuenta: " + origenCuenta)

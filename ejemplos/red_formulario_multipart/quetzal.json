@@ -1,0 +1,21 @@
+{
+    "versión": "0.1.0",
+    "aplicación": "red_formulario_multipart",
+    "entrada": "principal.qz",
+    "tipo": "aplicación",
+    "quetzal": "0.0.2",
+    "dependencias": {},
+    "permisos": [
+        {
+            "tipo": "red",
+            "habilitado": true
+        },
+        {
+            "tipo": "sistema-archivos",
+            "habilitado": true,
+            "directorios": [
+                { "ruta": "./salida", "permiso": "todo" }
+            ]
+        }
+    ]
+}

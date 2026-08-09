@@ -1,0 +1,141 @@
+// Funciones
+
+// Función que no devuelve valor
+vacio saludar() {
+    consola.mostrar("¡Hola, Quetzal!")
+}
+
+// Función que devuelve un número
+número sumar(número a, número b) {
+    retornar a + b
+}
+
+// Función que devuelve un entero
+entero multiplicar(entero a, entero b) {
+    retornar a * b
+}
+
+// Función que devuelve un texto
+texto concatenar(texto a, texto b) {
+    retornar a + b
+}
+
+// Función que devuelve un valor lógico
+log es_par(entero valor) {
+    retornar valor % 2 == 0
+}
+
+// Función que devuelve un JSON
+jsn obtener_datos() {
+    retornar {
+        nombre: "Quetzal",
+        version: "0.0.2",
+        tipos_soportados: ["entero", "número", "texto", "log", "lista", "jsn"]
+    }
+}
+
+// Función que devuelve una lista tipada de enteros
+lista<entero> obtener_numeros() {
+    retornar [1, 2, 3, 4, 5]
+}
+
+// Función que devuelve una lista no tipada de diferentes tipos
+lista obtener_datos_lista_no_tipada() {
+    retornar [1, "texto", verdadero, 3.14, [1, 2, 3]]
+}
+
+// Retornar objetos
+
+// Definir un objeto
+objeto DefinicionUsuario {
+    privado:
+        texto nombre
+        entero edad
+    publico:
+        DefinicionUsuario(texto nombre, entero edad){
+            esto.nombre = nombre
+            esto.edad = edad
+        }
+
+        texto obtener_nombre() {
+            retornar esto.nombre
+        }
+
+        entero obtener_edad() {
+            retornar esto.edad
+        }
+}
+
+// Función que retorna un objeto de tipo DefinicionUsuario
+DefinicionUsuario crear_usuario(texto nombre, entero edad) {
+    retornar nuevo DefinicionUsuario(nombre, edad)
+}
+
+// Funciones con tipos mutables
+texto funcion_con_parametros_modificables(texto var palabra){
+    palabra += " texto agregado."
+
+    retornar palabra
+}
+
+// Funciones recursivas
+entero factorial(entero n) {
+    si (n == 0) {
+        retornar 1
+    } sino {
+        retornar n * factorial(n - 1)
+    }
+}
+
+
+// Funciones asincronas
+asincróno entero función_asincrona(entero valor1) {
+    retornar valor1 * 2
+}
+
+// Ejecutar función asincrona dentro de una tarea asincrona
+asincrono vacio tarea_asincrona() {
+    consola.mostrar("Tarea asincrona iniciada")
+    número resultado = esperar función_asincrona(10)
+    consola.mostrar("Resultado de la función asincrona: " + resultado.texto())
+    consola.mostrar("Tarea asincrona finalizada")
+}
+
+// Llamar a la tarea asincrona fuera de un contexto asincrono también es posible
+// pero se debe usar la palabra reservada 'esperar' para obtener el resultado
+número resultado = esperar función_asincrona(3)
+
+// Funciones asincronas en objetos
+objeto DefinicionAsincrona {
+    publico:
+        asincróno número función_asincrona_objeto(número valor) {
+            retornar valor + 5
+        }
+
+        libre asincrono número función_asincrona_libre(número valor) {
+            retornar valor - 2
+        }
+}
+
+// Llamar a la función asincrona dentro de una tarea asincrona
+asincrono vacio tarea_asincrona_objeto() {
+    DefinicionAsincrona obj = nuevo DefinicionAsincrona()
+    número resultado = esperar obj.función_asincrona_objeto(15)
+    consola.mostrar("Resultado de la función asincrona en objeto: " + resultado.texto())
+}
+
+// Llamar a la tarea asincrona fuera de un contexto asincrono también es posible
+// pero se debe usar la palabra reservada 'esperar' para obtener el resultado
+DefinicionAsincrona obj = nuevo DefinicionAsincrona()
+número resultado_objeto = esperar obj.función_asincrona_objeto(20)
+
+// Llamar a la función asincrona libre dentro de una tarea asincrona
+// No necesita instanciar el objeto DefinicionAsincrona
+asincrono vacio tarea_asincrona_libre() {
+    número resultado = esperar DefinicionAsincrona.función_asincrona_libre(10)
+    consola.mostrar("Resultado de la función asincrona libre en objeto: " + resultado.texto())
+}
+// Llamar a la tarea asincrona libre fuera de un contexto asincrono también es posible
+// pero se debe usar la palabra reservada 'esperar' para obtener el resultado
+número resultado_libre = esperar DefinicionAsincrona.función_asincrona_libre(30)
+consola.mostrar("Resultado de la función asincrona libre fuera de un contexto asincrono: " + resultado_libre.texto())

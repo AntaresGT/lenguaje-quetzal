@@ -1,0 +1,57 @@
+name: Compilar
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compilar:
+    name: Compilar (${{ matrix.sistema }})
+    runs-on: ${{ matrix.corredor }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sistema: windows
+            corredor: windows-latest
+            binario: quetzal.exe
+            artefacto: quetzal-windows
+          - sistema: ubuntu
+            corredor: ubuntu-latest
+            binario: quetzal
+            artefacto: quetzal-ubuntu
+
+    steps:
+      - name: Obtener código
+        uses: actions/checkout@v4
+
+      - name: Instalar Rust estable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache de dependencias Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: lnc-${{ matrix.sistema }}
+
+      - name: Compilar quetzal (release)
+        run: cargo build -p lnc --release
+
+      - name: Preparar carpeta del artefacto
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "target/release/${{ matrix.binario }}" "dist/${{ matrix.binario }}"
+
+      - name: Subir ejecutable
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artefacto }}
+          path: dist/${{ matrix.binario }}
+          if-no-files-found: error
+          retention-days: 5

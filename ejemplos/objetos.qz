@@ -1,0 +1,105 @@
+// Declaración de objetos en Quetzal
+
+// Declaración común de un objeto
+objeto Usuario {
+    privado:
+        // Atributos privados del objeto
+        texto var nombre
+        entero var edad
+
+        // Funciones privadas del objeto
+        // Estas funciones solo pueden ser llamadas desde dentro del objeto
+        texto obtener_nombre_privado() {
+            retornar esto.nombre
+        }
+
+    publico:
+        // Constructor del objeto
+        Usuario(texto nombre, entero edad) {
+            // La palabra clave 'ambiente' se usa para referirse a las variables del objeto o funciones del objeto
+            // Se usa unicamente dentro del objeto
+            esto.nombre = nombre
+            esto.edad = edad
+        }
+
+        texto obtener_nombre() {
+            retornar esto.obtener_nombre_privado()
+        }
+
+        entero obtener_edad() {
+            retornar esto.edad
+        }
+}
+
+// Instantia un objeto
+Usuario usuario1 = nuevo Usuario("Juan", 30)
+
+// Los objetos que no se especifican las etiquetas de acceso son públicos por defecto
+objeto DefinicionUsuario {
+    texto var nombre
+    entero var edad
+
+    DefinicionUsuario(texto nombre, entero edad) {
+        esto.nombre = nombre
+        esto.edad = edad
+    }
+
+    texto obtener_nombre() {
+        retornar esto.nombre
+    }
+
+    entero obtener_edad() {
+        retornar esto.edad
+    }
+}
+
+// Instantia un objeto
+DefinicionUsuario usuario2 = nuevo DefinicionUsuario("Juan", 30)
+
+// Objeto con funciones libres y atributos libres
+objeto UsuarioLibre {
+
+    libre texto nombre
+    libre entero edad
+
+    libre entero absoluto(entero valor) {
+        retornar valor < 0 ? -valor : valor
+    }
+}
+
+
+// Los atributos libres y metodos libres se pueden acceder sin instanciar el objeto
+// Los metodos y atributos libres no pueden comunicarse con los atributos y metodos del objeto que si se instancian
+objeto UsuarioLibre2 {
+    privado:
+        // Atributos privados del objeto sin instanciar
+        // Los atributos privados no se pueden acceder desde afuera
+        libre texto var nombre = "Sin nombre"
+        libre entero var edad = 0
+
+        libre texto obtener_nombre() {
+            retornar esto.nombre
+        }
+
+        libre entero obtener_edad() {
+            retornar esto.edad
+        }
+    publico:
+
+        // Metodos que se pueden accerder desde afuera sin instanciar el objeto
+        libre vacio concatenar_apellido(texto nuevo_apellido) {
+            texto actual_nombre = esto.obtener_nombre()
+            esto.nombre = actual_nombre + " " + nuevo_apellido
+        }
+}
+
+// Las funciones libres se pueden llamar sin necesidad de instanciar el objeto
+entero valor_absoluto = UsuarioLibre.absoluto(-10)
+
+// Operar con el objeto libre
+UsuarioLibre2.concatenar_apellido("Pérez")
+// Nota: Todos los atributos libres o no libres sino llevan var se consideran constantes
+// Adicionalmente, si un objeto no se instancia con var se considera una constante y no puede modificarse después de su creación
+// Ejemplo: Usuario usuario_constante = nuevo Usuario("Ana", 25) // No se puede modificar después de su creación
+// usuario_constante.edad = 30 // Esto no genera un error porque edad se declaró como variable y no como constante
+// usuario_constante = nuevo Usuario("Luis", 40) // Esto genera un error

@@ -1,0 +1,18 @@
+[package]
+name = "bytecode"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Bytecode del Lenguaje Quetzal: instrucciones y generador desde el AST."
+
+[dependencies]
+nucleo = { workspace = true }
+ast = { workspace = true }
+
+# Precisión decimal para constantes de tipo número.
+rust_decimal = { workspace = true }
+
+# El bytecode compilado se serializa en la cache (.quetzal/cache).
+serde = { workspace = true }

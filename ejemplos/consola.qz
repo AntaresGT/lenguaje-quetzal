@@ -1,0 +1,23 @@
+// Acá todos los metodos y ejemplos de la consola
+
+// Mostrar un texto en la consola, el texto se mostrará en el color por defecto
+consola.mostrar("¡Hola, Quetzal!")
+
+// Mostrar un texto de error en la consola, el texto se mostrará en rojo
+consola.mostrar_error("¡Error! No se pudo cargar el archivo.")
+
+// Mostrar un texto de advertencia en la consola, el texto se mostrará en amarillo
+consola.mostrar_advertencia("Advertencia: El archivo está corrupto.")
+
+// Mostrar un texto de éxito en la consola, el texto se mostrará en verde
+consola.mostrar_exito("¡Éxito! El archivo se cargó correctamente.")
+
+// Mostrar un texto de información en la consola, el texto se mostrará en azul
+consola.mostrar_informacion("Información: El proceso ha finalizado.")
+
+// Pedir una entrada al usuario por medio de la consola
+texto valor = consola.pedir("Por favor, ingresa tu nombre:")
+
+// Pedir una entrada secreta al usuario por medio de la consola
+texto clave = consola.pedir_secreto("Por favor, ingresa tu contraseña:")
+

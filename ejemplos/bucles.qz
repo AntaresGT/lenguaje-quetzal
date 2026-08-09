@@ -1,0 +1,44 @@
+// Bucle mientras
+entero var iterador_mientras = 0
+mientras (iterador_mientras < 10){
+    consola.mostrar("Iteración: " + iterador_mientras.texto())
+
+    iterador_mientras++
+}
+
+// Bucle para
+para (entero var i = 0; i < 5; i++) {
+    consola.mostrar("Bucle para, iteración: " + i.texto())
+}
+
+// Hacer
+entero var iterador_hacer = 0
+hacer {
+    consola.mostrar("Este mensaje se imprime al menos una vez.")
+    consola.mostrar("Iteración: " + iterador_hacer.texto())
+    iterador_hacer++
+} mientras (iterador_hacer < 3)
+
+// Bucle en
+lista<entero> lista_numeros = [10, 20, 30, 40, 50]
+para (entero var valor_numero en lista_numeros) {
+    consola.mostrar("Valor actual: " + valor_numero.texto())
+}
+
+// Bucle cada
+para (entero var valor_numero cada lista_numeros) {
+    consola.mostrar("Valor actual: " + valor_numero.texto())
+}
+
+// Salir de cualquier bucle, la palabra reservada "romper" nos permite salir de un bucle, no importando si es el bucle mientras, para, hacer o en
+entero var contador = 0
+mientras (contador < 10) {
+    consola.mostrar("Contador: " + contador.texto())
+
+    si (contador == 5) {
+        consola.mostrar("¡Contador alcanzó 5, saliendo del bucle!")
+        romper
+    }
+
+    contador++
+}

@@ -1,0 +1,197 @@
+// Todos los metodos de texto
+
+// Crear un texto de ejemplo
+texto mi_texto = "Hola Mundo"
+
+// Obtener la longitud del texto
+entero tamaño = mi_texto.longitud()
+
+// Conversión a otros tipos
+texto texto_num = "123"
+entero valor_numero = texto_num.entero()
+número decimal = texto_num.numero()
+
+// Caracteres especiales y Unicode
+texto con_acentos = "Programación en español: ñ, á, é, í, ó, ú"
+texto simbolos = "Símbolos especiales: @, #, $, %, &, *, +"
+texto emojis = "Emojis: 😀 🎉 🚀 ⭐"
+texto multilingual = "Español, English, Français, 中文, العربية"
+
+// Concatenación de textos
+texto nombre = "Juan"
+texto apellido = "Pérez"
+texto nombre_completo = nombre + " " + apellido // "Juan Pérez"
+
+// Concatenación con números
+entero edad = 25
+texto presentacion = "Tengo " + edad.texto() + " años" // "Tengo 25 años"
+
+// === INTERPOLACIÓN DE TEXTO ===
+// Nueva funcionalidad: Interpolación de texto con t"..."
+texto nombre_usuario = "María"
+entero puntos = 150
+
+// Interpolación básica
+texto saludo_interpolado = t"¡Hola {nombre_usuario}!"
+texto puntuacion = t"Tienes {puntos} puntos"
+
+// Interpolación con expresiones
+entero valor1 = 10
+entero valor2 = 5
+texto operaciones = t"Suma: {valor1 + valor2}, Multiplicación: {valor1 * valor2}, División: {valor1 / valor2}"
+
+// Interpolación con múltiples tipos
+número precio = 29.99
+log disponible = verdadero
+texto producto_info = t"Precio: ${precio}, Disponible: {disponible}"
+
+// Interpolación con listas
+lista numeros_fav = [7, 13, 21]
+texto lista_texto = t"Mis números favoritos: {numeros_fav}"
+
+// Interpolación multilínea usando escapes
+texto mensaje_completo = t"Estimado/a {nombre_usuario}, 
+Tus {puntos} puntos están disponibles.
+¡Gracias por usar Quetzal!
+Saludos, {nombre_usuario}
+"
+
+// Concatenación con asignación
+texto var saludo = "Hola"
+saludo += ", ¿cómo estás?" // "Hola, ¿cómo estás?"
+
+// Interpolación con expresiones
+entero a = 10
+entero b = 5
+texto calculo = t"La suma de {a} + {b} es {a + b}" // "La suma de 10 + 5 es 15"
+
+// Mayusculas
+texto mayusculas = mi_texto.mayusculas() // "HOLA MUNDO"
+// Minusculas
+texto minusculas = mi_texto.minusculas() // "hola mundo"
+// Capitalizar
+texto capitalizado = mi_texto.capitalizar() // "Hola mundo"
+// Cada letra inicial en mayuscula
+texto titulo = mi_texto.titulo() // "Hola Mundo"
+
+// Eliminar espacios al inicio y final
+texto con_espacios = " Hola Mundo ".recortar() // "Hola Mundo"
+
+// Eliminar espacios al inicio
+texto sin_espacios_inicio = " Hola Mundo ".recortar_inicio() // "Hola Mundo "
+
+// Eliminar espacios al final
+texto sin_espacios_final = " Hola Mundo ".recortar_final() // " Hola Mundo"
+
+// Verificar si un texto contiene otro texto
+log contiene = mi_texto.contiene("Mundo") // verdadero
+
+// Verificar si un texto empieza con otro texto
+log empieza_con = mi_texto.empieza_con("Hola") // verdadero
+
+// Verificar si un texto termina con otro texto
+log termina_con = mi_texto.termina_con("Mundo") // verdadero
+
+// Encontrar la posición de un texto dentro de otro
+entero posicion = mi_texto.encontrar("Mundo") // 5 (posición inicial), no encontrado devuelve -1
+
+// Buscar ultimo texto encontrado coincidente
+entero posicion_ultima = mi_texto.buscar_ultimo("o") // 7 (posición de la última 'o')
+
+// Reemplazar todas las ocurrencias de un texto por otro
+texto reemplazado = mi_texto.reemplazar("Mundo", "Quetzal") // "Hola Quetzal"
+
+// Reemplazar primera ocurrencia
+texto reemplazado_primero = mi_texto.reemplazar_primero("o", "0") // "H0la Mundo"
+
+// Dividir un texto en una lista por un separador
+lista<texto> partes = mi_texto.dividir(" ") // ["Hola", "Mundo"]
+
+// Partir texto en varias lineas o salto de lineas
+lista<texto> lineas = "Línea 1\nLínea 2\nLínea 3".partir_lineas() // ["Línea 1", "Línea 2", "Línea 3"]
+
+// Repetir un texto varias veces
+texto repetido = mi_texto.repetir(3) // "Hola MundoHola MundoHola Mundo"
+
+// Extraer porción de un texto (subtexto)
+texto subtexto = mi_texto.subtexto(0, 4) // "Hola" (desde índice 0 hasta 4, sin incluir el 4)
+
+// Extraer N caracteres desde el inicio
+texto izquierda = mi_texto.izquierda(4) // "Hola"
+
+// Extraer N caracteres desde el final
+texto derecha = mi_texto.derecha(4) // "Mundo"
+
+// Acceso por indice (obtener caracter en posición)
+texto caracter = mi_texto[1] // "o" (índice 1)
+// Acceso por indice con índice negativo (desde el final)
+texto ultimo_caracter = mi_texto[-1] // "o" (último carácter)
+
+// Metodo de validación
+log es_numero = "12345".es_numero() // verdadero
+log es_entero = "12345".es_entero() // verdadero
+
+// Metodo de alfanumerico
+log es_alfanumerico = "abc123".es_alfanumerico() // verdadero
+
+// Codificar a base64
+texto base64 = mi_texto.a_base64() // "SG9sYSBNdW5kbw == "
+
+// Decodificar de base64
+texto decodificado = "SG9sYSBNdW5kbw == ".decodificar_base64() // "Hola Mundo"
+
+// Codificar a URL
+texto url_codificada = "Hola Mundo!".a_enlace() // "Hola%20Mundo!"
+
+// Decodificar de URL
+texto url_decodificada = "Hola%20Mundo!".decodificar_enlace() // "Hola Mundo!"
+
+// Comparación insensible a mayúsculas
+log comparacion = "hola mundo".igual_sin_caso("Hola Mundo") // verdadero
+
+// Unir listas a textos con separador
+lista<texto> lista_textos = ["Hola", "Mundo", "desde", "Quetzal"]
+texto unido = lista_textos.unir(" ") // "Hola Mundo desde Quetzal"
+// Unir listas de enteros a textos con separador
+lista<entero> lista_enteros = [1, 2, 3, 4, 5]
+texto unido_enteros = lista_enteros.unir(", ") // "1, 2, 3, 4, 5"
+
+// Contar ocurrencias de un subtexto
+entero ocurrencias = "Hola Mundo, Hola Quetzal".contar("Hola") // 2
+
+// Invertir el texto
+texto invertido = mi_texto.invertir() // "odnuM aloH"
+
+// === INTERPOLACIÓN DE TEXTO ===
+
+// Interpolacion de texto basica
+entero val_a = 5
+entero val_b = 10
+consola.mostrar(t"La suma de {val_a} + {val_b} es: {val_a + val_b}")
+
+// Interpolacion con diferentes tipos
+texto nombre_lenguaje = "Quetzal"
+consola.mostrar(t"¡Hola desde el lenguaje {nombre_lenguaje}!")
+
+// Interpolacion con operaciones
+número pi = 3.14159
+log verdad = verdadero
+consola.mostrar(t"El valor de PI es {pi} y esto es {verdad}")
+
+// Interpolacion con listas
+lista numeros = [1, 2, 3]
+consola.mostrar(t"Mi lista: {numeros}")
+
+// Interpolacion con objetos JSON
+jsn datos_persona = {"nombre": "Juan", "edad": 30}
+consola.mostrar(t"Datos: {datos_persona}")
+// Interpolacion multilinea usando secuencias de escape
+texto planeta = "Mundo"
+consola.mostrar(t"Hola, 
+{planeta}
+!Este es un
+texto tabulado")
+
+// Interpolacion con escape de llaves
+entero numero_especial = 42
+consola.mostrar(t"El valor es {numero_especial} y esto son llaves literales: \\{valor2}")

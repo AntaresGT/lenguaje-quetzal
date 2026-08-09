@@ -1,0 +1,27 @@
+[package]
+name = "motor"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Motor del Lenguaje Quetzal: orquesta el pipeline completo y expone la API embebible."
+
+[dependencies]
+nucleo = { workspace = true }
+diagnosticos = { workspace = true }
+lexico = { workspace = true }
+sintaxis = { workspace = true }
+ast = { workspace = true }
+semantica = { workspace = true }
+bytecode = { workspace = true }
+maquina_virtual = { workspace = true }
+runtime = { workspace = true }
+modulos_nativos = { workspace = true }
+paquetes = { workspace = true }
+
+# Lectura mínima de quetzal.json (la gestión completa llega con `paquetes`).
+serde_json = { workspace = true }
+
+# Mapa ordenado para las variables importadas de cada módulo.
+indexmap = { workspace = true }

@@ -1,0 +1,109 @@
+// Módulo nativo quetzal/red — archivos y Bits por HTTP (cuerpo binario)
+//
+// Los mismos verbos de siempre (publicar, obtener, ...) aceptan un Bits o un
+// Archivo como cuerpo: viajan como bytes con Content-Type y, si hay nombre,
+// con Content-Disposition. Cualquier cliente o servidor de otro lenguaje lo
+// lee como una descarga normal.
+//
+// Las opciones extra (tipo_contenido, nombre_archivo, disposicion) van en el
+// jsn de configuración; no hay funciones nuevas por archivo.
+//
+// Permisos: "red" para transmitir y "sistema-archivos" para tocar el disco.
+
+importar {
+    ServidorHttp,
+    ClienteHttp,
+    PeticionEntrante,
+    RespuestaSaliente,
+    RespuestaHttp,
+    ProgresoPeticion,
+    HttpCodigos
+} desde "quetzal/red"
+
+importar { SistemaArchivos, Archivo, Bits } desde "quetzal/sistema_archivos"
+
+// ── Manejadores ──────────────────────────────────────────────────────────
+
+// Un cuerpo binario llega completo en cuerpo_bits(); el nombre propuesto por
+// el emisor viaja en Content-Disposition y se lee con nombre_archivo().
+vacio recibirSubida(PeticionEntrante peticion, RespuestaSaliente respuesta) {
+    Bits contenido = peticion.cuerpo_bits()
+    texto nombre = peticion.nombre_archivo()
+
+    SistemaArchivos.escribir_bits(t"./salida/recibido_{nombre}", contenido)
+
+    respuesta.estado(HttpCodigos.CREADO).jsn({
+        archivo: nombre,
+        tipo: peticion.tipo_contenido(),
+        bytes: contenido.longitud()
+    })
+}
+
+// El progreso de subida funciona igual con archivos que con cualquier otro
+// cuerpo: una función nombrada que recibe el ProgresoPeticion.
+vacio alSubir(ProgresoPeticion progreso) {
+    consola.mostrar(t"  subiendo: {progreso.cargado()} bytes")
+}
+
+// enviar() acepta un Archivo: lo lee del disco y responde con sus bytes, su
+// tipo MIME por extensión y Content-Disposition con el nombre real.
+vacio entregarDescarga(PeticionEntrante peticion, RespuestaSaliente respuesta) {
+    Archivo informe = SistemaArchivos.abrir("./salida/informe.txt")
+    respuesta.enviar(informe)
+}
+
+// ── Preparación del disco ────────────────────────────────────────────────
+
+SistemaArchivos.crear_directorios("./salida")
+SistemaArchivos.escribir("./salida/informe.txt", "ventas del trimestre: 120")
+
+// ── Montaje ──────────────────────────────────────────────────────────────
+
+ServidorHttp servidor = nuevo ServidorHttp()
+servidor.publicar("/documentos", recibirSubida)
+servidor.obtener("/documentos/informe", entregarDescarga)
+servidor.escuchar(0)
+
+entero puerto = servidor.puerto()
+consola.mostrar(t"Servidor de archivos en http://127.0.0.1:{puerto}")
+
+ClienteHttp cliente = nuevo ClienteHttp({ base_url: t"http://127.0.0.1:{puerto}" })
+
+// ── 1. Subir Bits crudos ─────────────────────────────────────────────────
+//
+// Sin más datos, un Bits viaja como application/octet-stream. El jsn de
+// configuración le pone nombre y tipo.
+
+Bits marca = Bits.desde_lista([137, 80, 78, 71, 13, 10, 26, 10])
+RespuestaHttp subidaBits = esperar cliente.publicar_asincrono(
+    "/documentos",
+    marca,
+    { nombre_archivo: "marca.png", tipo_contenido: "image/png" }
+)
+consola.mostrar(t"POST Bits    -> {subidaBits.estado()} {subidaBits.cuerpo_texto()}")
+
+// ── 2. Subir un Archivo del disco ────────────────────────────────────────
+//
+// El Archivo se lee a memoria y viaja igual: bytes, MIME por extensión y
+// filename tomado del propio archivo.
+
+Archivo informe = SistemaArchivos.abrir("./salida/informe.txt")
+RespuestaHttp subidaArchivo = esperar cliente.publicar_asincrono(
+    "/documentos",
+    informe,
+    { al_progreso_subida: alSubir }
+)
+consola.mostrar(t"POST Archivo -> {subidaArchivo.estado()} {subidaArchivo.cuerpo_texto()}")
+
+// ── 3. Descargar y guardar ───────────────────────────────────────────────
+
+RespuestaHttp descarga = esperar cliente.obtener_asincrono("/documentos/informe")
+consola.mostrar(t"GET          -> {descarga.estado()} {descarga.tipo_contenido()}")
+consola.mostrar(t"nombre sugerido: {descarga.nombre_archivo()}")
+
+SistemaArchivos.escribir_bits("./salida/descargado.txt", descarga.bits())
+texto guardado = SistemaArchivos.leer("./salida/descargado.txt")
+consola.mostrar(t"guardado: {guardado}")
+
+servidor.cerrar()
+consola.mostrar_exito("Transferencia binaria terminada.")

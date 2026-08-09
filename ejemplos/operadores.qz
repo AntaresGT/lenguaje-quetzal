@@ -1,0 +1,121 @@
+// Operadores
+
+// Operadores aritméticos
+entero suma(entero a, entero b) {
+    retornar a + b
+}
+
+entero resta(entero a, entero b) {
+    retornar a - b
+}
+
+// Operadores lógicos
+log es_verdadero(log valor) {
+    retornar valor
+}
+
+log es_falso(log valor) {
+    retornar !valor
+}
+
+// Operadores de comparación
+log es_igual(entero a, entero b) {
+    retornar a == b
+}
+
+log es_diferente(entero a, entero b) {
+    retornar a != b
+}
+
+log es_mayor(entero a, entero b) {
+    retornar a > b
+}
+
+log es_menor(entero a, entero b) {
+    retornar a < b
+}
+
+log es_mayor_igual(entero a, entero b) {
+    retornar a >= b
+}
+
+log es_menor_igual(entero a, entero b) {
+    retornar a <= b
+}
+
+// Operadores de asignación
+entero asignacion(entero valor) {
+    entero resultado = valor
+    retornar resultado
+}
+
+// Operadores de concatenación
+texto concatenacion(texto var palabra) {
+    palabra += " concatenado"
+    retornar palabra
+}
+
+// Operadores de incremento y decremento
+entero incremento(entero var valor) {
+    valor++
+    retornar valor
+}
+
+entero decremento(entero var valor) {
+    valor--
+    retornar valor
+}
+
+// Operadores compuestos
+entero suma_compuesta(entero var valor, entero incremento) {
+    valor += incremento
+    retornar valor
+}
+
+entero resta_compuesta(entero var valor, entero decremento) {
+    valor -= decremento
+    retornar valor
+}
+
+entero multiplicacion_compuesta(entero var valor, entero factor) {
+    valor *= factor
+    retornar valor
+}
+
+entero division_compuesta(entero var valor, entero divisor) {
+    valor /= divisor
+    retornar valor
+}
+
+entero modulo_compuesta(entero var valor, entero divisor) {
+    valor %= divisor
+    retornar valor
+}
+
+// Operadores de cadena
+texto agregar_texto(texto var palabra, texto agregado) {
+    palabra += agregado
+    retornar palabra
+}
+
+// Ejecutar funciones para comprobar operadores
+entero resultado_suma = suma(5, 10)
+entero resultado_resta = resta(10, 5)
+log resultado_es_verdadero = es_verdadero(verdadero)
+log resultado_es_falso = es_falso(falso)
+log resultado_es_igual = es_igual(5, 5)
+log resultado_es_diferente = es_diferente(5, 10)
+log resultado_es_mayor = es_mayor(10, 5)
+log resultado_es_menor = es_menor(5, 10)
+log resultado_es_mayor_igual = es_mayor_igual(5, 5)
+log resultado_es_menor_igual = es_menor_igual(5, 5)
+entero resultado_asignacion = asignacion(10)
+texto resultado_concatenacion = concatenacion("Hola")
+entero resultado_incremento = incremento(5)
+entero resultado_decremento = decremento(5)
+entero resultado_suma_compuesta = suma_compuesta(5, 10)
+entero resultado_resta_compuesta = resta_compuesta(10, 5)
+entero resultado_multiplicacion_compuesta = multiplicacion_compuesta(5, 10)
+entero resultado_division_compuesta = division_compuesta(10, 5)
+entero resultado_modulo_compuesta = modulo_compuesta(10, 5)
+texto resultado_agregar_texto = agregar_texto("Hola", " Mundo")

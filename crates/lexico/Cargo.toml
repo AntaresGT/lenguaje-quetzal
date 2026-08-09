@@ -1,0 +1,14 @@
+[package]
+name = "lexico"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Analizador léxico del Lenguaje Quetzal: convierte código fuente en tokens."
+
+[dependencies]
+nucleo = { workspace = true }
+
+# Generador de lexers rápido basado en regex.
+logos = { workspace = true }

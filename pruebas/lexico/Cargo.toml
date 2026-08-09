@@ -1,0 +1,15 @@
+[package]
+name = "pruebas_lexico"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+publish = false
+description = "Pruebas de integración del analizador léxico de Quetzal."
+
+[dependencies]
+nucleo = { workspace = true }
+lexico = { workspace = true }
+
+[lib]
+# Paquete solo de pruebas: no expone biblioteca.
+path = "lib.rs"

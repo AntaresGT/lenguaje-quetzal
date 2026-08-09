@@ -1,0 +1,15 @@
+[package]
+name = "pruebas_sintaxis"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+publish = false
+description = "Pruebas de integración del parser de Quetzal."
+
+[dependencies]
+nucleo = { workspace = true }
+ast = { workspace = true }
+sintaxis = { workspace = true }
+
+[lib]
+path = "lib.rs"

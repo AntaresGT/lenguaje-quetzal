@@ -1,0 +1,81 @@
+// Permisos del sistema de archivos y manejo de excepciones
+//
+// Quetzal es seguro por defecto: sin el permiso "sistema-archivos" en
+// quetzal.json, ninguna operación del módulo funciona. El manifiesto de
+// este proyecto declara tres directorios con niveles distintos:
+//
+//   ./datos    -> lectura   (listar, leer, existencia y metadatos)
+//   ./salida   -> escritura (crear, escribir, copiar, mover, renombrar, borrar)
+//   ./trabajo  -> todo      (lectura + escritura)
+//
+// Cualquier ruta fuera de esa lista, o una operación por encima del nivel
+// concedido, lanza una excepción capturable con intentar / capturar.
+
+importar { SistemaArchivos } desde "quetzal/sistema_archivos"
+
+// ── Operaciones permitidas ───────────────────────────────────────────────
+
+// ./trabajo tiene permiso "todo": se puede leer y escribir.
+SistemaArchivos.crear_directorios("./trabajo/borradores")
+SistemaArchivos.escribir("./trabajo/borradores/nota.txt", "borrador inicial")
+consola.mostrar(SistemaArchivos.leer("./trabajo/borradores/nota.txt"))
+
+// ./salida tiene permiso "escritura": crear y escribir sí, leer no.
+SistemaArchivos.crear_directorios("./salida")
+SistemaArchivos.escribir("./salida/resultado.txt", "listo")
+
+// ./datos tiene permiso "lectura": listar y leer sí, escribir no.
+lista<texto> disponibles = SistemaArchivos.listar_archivos("./datos")
+consola.mostrar(t"Archivos de entrada: {disponibles.longitud()}")
+
+// ── Nivel insuficiente ───────────────────────────────────────────────────
+
+// Escribir en un directorio con permiso "lectura" lanza excepción.
+intentar {
+    SistemaArchivos.escribir("./datos/nuevo.txt", "no permitido")
+} capturar (excepcion e) {
+    consola.mostrar_error(t"Sin permiso de escritura: {e.mensaje}")
+}
+
+// Leer en un directorio con permiso "escritura" también lanza excepción.
+intentar {
+    texto resultado = SistemaArchivos.leer("./salida/resultado.txt")
+    consola.mostrar(resultado)
+} capturar (excepcion e) {
+    consola.mostrar_error(t"Sin permiso de lectura: {e.mensaje}")
+}
+
+// ── Ruta fuera de los directorios declarados ─────────────────────────────
+
+intentar {
+    texto secreto = SistemaArchivos.leer("../secreto.txt")
+    consola.mostrar(secreto)
+} capturar (excepcion e) {
+    // El mensaje indica cómo declarar el directorio en quetzal.json.
+    consola.mostrar_error(t"Ruta no autorizada: {e.mensaje}")
+} finalmente {
+    consola.mostrar("Verificación de permisos terminada.")
+}
+
+// ── Errores del sistema operativo ────────────────────────────────────────
+
+// Los fallos de disco (archivo inexistente, sin espacio, contenido que no
+// es UTF-8) también son excepciones capturables.
+intentar {
+    texto faltante = SistemaArchivos.leer("./datos/no_existe.txt")
+    consola.mostrar(faltante)
+} capturar (excepcion e) {
+    consola.mostrar_advertencia(e.mensaje)
+}
+
+// ── Las formas asíncronas comparten el mismo modelo ──────────────────────
+
+asincrono vacio intentar_borrado() {
+    intentar {
+        esperar SistemaArchivos.borrar_recursivo_asincrono("./datos")
+    } capturar (excepcion e) {
+        consola.mostrar_error(t"Borrado rechazado: {e.mensaje}")
+    }
+}
+
+esperar intentar_borrado()

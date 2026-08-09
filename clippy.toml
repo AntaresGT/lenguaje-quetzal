@@ -1,0 +1,4 @@
+# ErrorQuetzal es un error de diagnóstico rico (código, mensaje, ubicación,
+# etiqueta y ayuda) por diseño; supera el umbral por defecto de 128 bytes.
+# Los caminos calientes de la VM usarán errores compactos propios.
+large-error-threshold = 256

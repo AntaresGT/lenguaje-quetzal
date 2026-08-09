@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Quetzal
+GenericName=Lenguaje Quetzal
+Comment=Lenguaje de programación interpretado en español
+Exec=quetzal
+Icon=quetzal
+Terminal=true
+Categories=Development;ComputerScience;Desarrollo;
+StartupNotify=false
+Keywords=quetzal;lenguaje;programacion;antares;antaresgt;

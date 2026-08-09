@@ -1,0 +1,22 @@
+body {
+    margin: 0;
+    font-family: Georgia, "Times New Roman", serif;
+    background: #f4f1e8;
+    color: #1f2a1f;
+}
+
+main {
+    max-width: 40rem;
+    margin: 4rem auto;
+    padding: 0 1.5rem;
+}
+
+h1 {
+    font-size: 2rem;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+}
+
+a {
+    color: #0f5c4c;
+}

@@ -1,0 +1,7 @@
+importar {
+    Matemática
+} desde "quetzal/matemática"
+
+número suma = Matemática.sumar(2, 3)
+consola.mostrar(t"El resultado de 2 + 3 es: {suma}")
+consola.mostrar(t"Valor de PI: {Matemática.PI}")

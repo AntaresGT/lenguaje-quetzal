@@ -1,0 +1,15 @@
+[package]
+name = "nucleo"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Tipos base compartidos del Lenguaje Quetzal: fuente, ubicaciones y errores."
+
+[dependencies]
+# Errores derivables para el error central del lenguaje.
+thiserror = { workspace = true }
+
+# Las ubicaciones se serializan dentro de la cache de bytecode.
+serde = { workspace = true }

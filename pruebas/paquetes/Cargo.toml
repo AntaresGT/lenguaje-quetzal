@@ -1,0 +1,16 @@
+[package]
+name = "pruebas_paquetes"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+publish = false
+description = "Pruebas de integración de proyectos y paquetes de Quetzal."
+
+[dependencies]
+nucleo = { workspace = true }
+paquetes = { workspace = true }
+bytecode = { workspace = true }
+sintaxis = { workspace = true }
+
+[lib]
+path = "lib.rs"

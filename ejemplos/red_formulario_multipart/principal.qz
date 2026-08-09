@@ -1,0 +1,112 @@
+// Módulo nativo quetzal/red — formularios multipart/form-data
+//
+// Formulario arma y lee un multipart/form-data (RFC 7578): varios campos de
+// texto y uno o más archivos en la misma petición. Se pasa como cuerpo a los
+// verbos de siempre; el servidor lo entrega ya analizado en peticion.cuerpo().
+//
+// El cable es multipart estándar: lo entienden curl, fetch, multer y
+// cualquier servidor de otro lenguaje.
+//
+// Permisos: "red" para transmitir y "sistema-archivos" para tocar el disco.
+
+importar {
+    ServidorHttp,
+    ClienteHttp,
+    PeticionEntrante,
+    RespuestaSaliente,
+    RespuestaHttp,
+    Formulario,
+    ParteArchivo,
+    HttpCodigos
+} desde "quetzal/red"
+
+importar { SistemaArchivos, Archivo, Bits } desde "quetzal/sistema_archivos"
+
+// ── Manejador ────────────────────────────────────────────────────────────
+
+// Con Content-Type multipart, cuerpo() devuelve un Formulario: los campos de
+// texto se leen con campo_texto() y cada archivo es una ParteArchivo.
+vacio recibirFormulario(PeticionEntrante peticion, RespuestaSaliente respuesta) {
+    Formulario formulario = peticion.cuerpo()
+
+    texto titulo = formulario.campo_texto("titulo")
+    texto autor = formulario.campo_texto("autor")
+
+    lista adjuntos = formulario.archivos()
+    para (ParteArchivo parte en adjuntos) {
+        Bits contenido = parte.bits()
+        SistemaArchivos.escribir_bits(t"./salida/{parte.nombre()}", contenido)
+        consola.mostrar(t"  {parte.campo()}: {parte.nombre()} ({parte.tipo()}, {contenido.longitud()} bytes)")
+    }
+
+    ParteArchivo documento = formulario.archivo_parte("documento")
+
+    respuesta.estado(HttpCodigos.CREADO).jsn({
+        titulo: titulo,
+        autor: autor,
+        documento: documento.nombre(),
+        adjuntos: adjuntos.longitud()
+    })
+}
+
+// El servidor también puede responder un Formulario: enviar() lo serializa
+// como multipart y el cliente lo recibe ya analizado en datos().
+vacio entregarExpediente(PeticionEntrante peticion, RespuestaSaliente respuesta) {
+    Formulario copia = nuevo Formulario()
+    copia.campo("estado", "archivado")
+    copia.archivo("comprobante", Bits.desde_texto("sello de recepción"), {
+        nombre: "comprobante.txt",
+        tipo: "text/plain"
+    })
+    respuesta.enviar(copia)
+}
+
+// ── Preparación del disco ────────────────────────────────────────────────
+
+SistemaArchivos.crear_directorios("./salida")
+SistemaArchivos.escribir("./salida/informe.txt", "ventas del trimestre: 120")
+
+// ── Montaje ──────────────────────────────────────────────────────────────
+
+ServidorHttp servidor = nuevo ServidorHttp()
+servidor.publicar("/expedientes", recibirFormulario)
+servidor.obtener("/expedientes/ultimo", entregarExpediente)
+servidor.escuchar(0)
+
+entero puerto = servidor.puerto()
+consola.mostrar(t"Servidor de formularios en http://127.0.0.1:{puerto}")
+
+ClienteHttp cliente = nuevo ClienteHttp({ base_url: t"http://127.0.0.1:{puerto}" })
+
+// ── Armar el formulario ──────────────────────────────────────────────────
+//
+// campo() agrega texto; archivo() acepta un Archivo del disco o un Bits en
+// memoria. Con Bits conviene dar nombre y tipo en el jsn de opciones.
+
+Formulario expediente = nuevo Formulario()
+expediente.campo("titulo", "informe trimestral")
+expediente.campo("autor", "Ana")
+
+Archivo informe = SistemaArchivos.abrir("./salida/informe.txt")
+expediente.archivo("documento", informe)
+
+Bits miniatura = Bits.desde_lista([137, 80, 78, 71, 13, 10, 26, 10])
+expediente.archivo("miniatura", miniatura, { nombre: "miniatura.png", tipo: "image/png" })
+
+// El formulario se pasa como cuerpo: no hay verbo ni configuración especial.
+RespuestaHttp creado = esperar cliente.publicar_asincrono("/expedientes", expediente)
+consola.mostrar(t"POST -> {creado.estado()} {creado.cuerpo_texto()}")
+
+// ── Recibir un multipart ─────────────────────────────────────────────────
+//
+// Si la respuesta viene en multipart, datos() ya es un Formulario.
+
+RespuestaHttp devuelto = esperar cliente.obtener_asincrono("/expedientes/ultimo")
+Formulario acuse = devuelto.datos()
+texto estado = acuse.campo_texto("estado")
+ParteArchivo comprobante = acuse.archivo_parte("comprobante")
+consola.mostrar(t"GET  -> estado: {estado}")
+consola.mostrar(t"        {comprobante.nombre()}: {comprobante.bits().texto()}")
+
+servidor.cerrar()
+consola.mostrar_exito("Formulario multipart entregado.")

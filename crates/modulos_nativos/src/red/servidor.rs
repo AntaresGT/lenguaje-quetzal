@@ -51,6 +51,9 @@ const SERVICIO: &str = "servidor_http";
 /// Tiempo máximo que una conexión puede quedarse sin enviar datos.
 const LIMITE_CONEXION: Duration = Duration::from_secs(120);
 
+/// Anfitrión por defecto: todas las interfaces IPv4 (Docker/Dokploy/Traefik).
+const ANFITRION_POR_DEFECTO: &str = "0.0.0.0";
+
 // ----- Estado del enrutado -----
 
 /// A dónde lleva una capa del enrutador.
@@ -85,6 +88,8 @@ struct Servidor {
     configuracion: IndexMap<String, Valor>,
     manejadores_error: Vec<Valor>,
     puerto: u16,
+    /// Dirección en la que se abrió la escucha (`0.0.0.0`, `127.0.0.1`, …).
+    anfitrion: String,
     escuchando: bool,
     detener: Option<Arc<AtomicBool>>,
 }
@@ -135,6 +140,7 @@ impl RegistroRed {
                 configuracion: IndexMap::new(),
                 manejadores_error: Vec::new(),
                 puerto: 0,
+                anfitrion: ANFITRION_POR_DEFECTO.to_string(),
                 escuchando: false,
                 detener: None,
             },
@@ -663,10 +669,13 @@ fn registrar_escucha(registro: &mut RegistroNativos, red: &RegistroRed) {
         &format!("{TIPO_SERVIDOR}.escuchar"),
         Box::new(move |vm: &mut Vm, argumentos: &[Valor]| {
             const F: &str = "ServidorHttp.escuchar";
-            if argumentos.len() < 2 || argumentos.len() > 3 {
+            if !(2..=4).contains(&argumentos.len()) {
                 return Err(error(
                     "E0210",
-                    format!("'{F}' espera (puerto) o (puerto, funcion)"),
+                    format!(
+                        "'{F}' espera (puerto), (puerto, funcion), (puerto, anfitrion) \
+                         o (puerto, anfitrion, funcion)"
+                    ),
                 ));
             }
             let id = id_receptor(F, argumentos, TIPO_SERVIDOR)?;
@@ -680,13 +689,17 @@ fn registrar_escucha(registro: &mut RegistroNativos, red: &RegistroRed) {
                 }
             };
 
+            let (anfitrion, manejador_arranque) = parsear_args_escucha(F, argumentos)?;
+
             red_escuchar
                 .guardian
-                .verificar_red(&format!("escuchar en el puerto {puerto}"))
+                .verificar_red(&format!("escuchar en {anfitrion}:{puerto}"))
                 .map_err(error_permiso)?;
 
-            let escucha = TcpListener::bind(("127.0.0.1", puerto)).map_err(|fallo| {
-                error_red(format!("no se pudo escuchar en el puerto {puerto}: {fallo}"))
+            let escucha = TcpListener::bind((anfitrion.as_str(), puerto)).map_err(|fallo| {
+                error_red(format!(
+                    "no se pudo escuchar en {anfitrion}:{puerto}: {fallo}"
+                ))
             })?;
             let puerto_real = escucha
                 .local_addr()
@@ -707,6 +720,7 @@ fn registrar_escucha(registro: &mut RegistroNativos, red: &RegistroRed) {
                     )));
                 }
                 servidor.puerto = puerto_real;
+                servidor.anfitrion = anfitrion;
                 servidor.escuchando = true;
                 servidor.detener = Some(Arc::clone(&detener));
             }
@@ -749,8 +763,7 @@ fn registrar_escucha(registro: &mut RegistroNativos, red: &RegistroRed) {
             vm.bucle().registrar_trabajo_activo();
 
             // Callback opcional de arranque, al estilo de `app.listen(puerto, fn)`.
-            if let Some(manejador) = argumentos.get(2) {
-                let manejador = exigir_funcion(F, manejador)?;
+            if let Some(manejador) = manejador_arranque {
                 if let Some((funcion, entorno, esto)) = manejador.partes_callable() {
                     vm.llamar_funcion(funcion, entorno, Vec::new(), esto.cloned(), None)?;
                 }
@@ -767,7 +780,7 @@ fn registrar_escucha(registro: &mut RegistroNativos, red: &RegistroRed) {
             const F: &str = "ServidorHttp.cerrar";
             exigir_aridad(F, &argumentos[1..], 0)?;
             let id = id_receptor(F, argumentos, TIPO_SERVIDOR)?;
-            let puerto = {
+            let (puerto, anfitrion) = {
                 let mut servidores = red_cerrar.servidores.borrow_mut();
                 let Some(servidor) = servidores.get_mut(&id) else {
                     return Ok(Valor::Log(false));
@@ -779,15 +792,81 @@ fn registrar_escucha(registro: &mut RegistroNativos, red: &RegistroRed) {
                 if let Some(detener) = servidor.detener.take() {
                     detener.store(true, Ordering::Relaxed);
                 }
-                servidor.puerto
+                (servidor.puerto, servidor.anfitrion.clone())
             };
             // Una conexión de cortesía despierta el hilo que acepta para que
             // vea la bandera de detención y termine.
-            let _ = TcpStream::connect(("127.0.0.1", puerto));
+            let host = host_para_despertar(&anfitrion);
+            let _ = TcpStream::connect((host, puerto));
             vm.bucle().liberar_trabajo_activo();
             Ok(Valor::Log(true))
         }),
     );
+}
+
+/// Interpreta `(puerto[, anfitrion][, alArrancar])` tras el receptor.
+fn parsear_args_escucha(
+    funcion: &str,
+    argumentos: &[Valor],
+) -> Result<(String, Option<Valor>), Fallo> {
+    let mut anfitrion = ANFITRION_POR_DEFECTO.to_string();
+    let mut manejador: Option<Valor> = None;
+
+    match argumentos.len() {
+        2 => {}
+        3 => match &argumentos[2] {
+            valor if valor.partes_callable().is_some() => {
+                manejador = Some(exigir_funcion(funcion, valor)?);
+            }
+            Valor::Texto(texto) if !texto.is_empty() => {
+                anfitrion = texto.to_string();
+            }
+            Valor::Texto(_) => {
+                return Err(error_tipo(format!(
+                    "'{funcion}' esperaba un anfitrión no vacío"
+                )));
+            }
+            otro => {
+                return Err(error_tipo(format!(
+                    "'{funcion}' esperaba un anfitrión (texto) o una función, pero recibió '{}'",
+                    otro.nombre_tipo()
+                )));
+            }
+        },
+        4 => {
+            anfitrion = match &argumentos[2] {
+                Valor::Texto(texto) if !texto.is_empty() => texto.to_string(),
+                Valor::Texto(_) => {
+                    return Err(error_tipo(format!(
+                        "'{funcion}' esperaba un anfitrión no vacío"
+                    )));
+                }
+                otro => {
+                    return Err(error_tipo(format!(
+                        "'{funcion}' esperaba un anfitrión (texto) como segundo argumento, \
+                         pero recibió '{}'",
+                        otro.nombre_tipo()
+                    )));
+                }
+            };
+            manejador = Some(exigir_funcion(funcion, &argumentos[3])?);
+        }
+        _ => unreachable!("aridad ya validada en escuchar"),
+    }
+
+    Ok((anfitrion, manejador))
+}
+
+/// Host al que conectar para despertar el `accept` al cerrar.
+///
+/// Escuchar en `0.0.0.0` / `::` no admite conectar a esa misma dirección;
+/// se usa el loopback correspondiente.
+fn host_para_despertar(anfitrion: &str) -> &str {
+    match anfitrion {
+        "0.0.0.0" => "127.0.0.1",
+        "::" => "::1",
+        otro => otro,
+    }
 }
 
 // ----- Hilo de conexión -----

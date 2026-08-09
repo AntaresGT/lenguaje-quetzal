@@ -890,3 +890,30 @@ fn una_funcion_nombrada_deberia_pasarse_como_callback() {
     );
     assert_eq!(texto_global(&entorno, "resultado"), "42");
 }
+
+// Bind explícito a 127.0.0.1: el cliente local sigue llegando; cerrar despierta.
+#[test]
+fn servidor_deberia_escuchar_en_anfitrion_explicito() {
+    let entorno = ejecutar(
+        "anfitrion_local",
+        &format!(
+            "{IMPORTAR}\
+             vacio hola(PeticionEntrante peticion, RespuestaSaliente respuesta) {{\n\
+                 respuesta.texto(\"ok\")\n\
+             }}\n\
+             ServidorHttp servidor = nuevo ServidorHttp()\n\
+             servidor.obtener(\"/\", hola)\n\
+             servidor.escuchar(0, \"127.0.0.1\")\n\
+             entero puerto = servidor.puerto()\n\
+             ClienteHttp cliente = nuevo ClienteHttp({{ base_url: \"http://127.0.0.1:\" + \
+             puerto.texto() }})\n\
+             RespuestaHttp respuesta = esperar cliente.obtener_asincrono(\"/\")\n\
+             texto cuerpo = respuesta.datos()\n\
+             entero estado = respuesta.estado()\n\
+             log cerrado = servidor.cerrar()\n"
+        ),
+    );
+    assert_eq!(texto_global(&entorno, "cuerpo"), "ok");
+    assert_eq!(texto_global(&entorno, "estado"), "200");
+    assert_eq!(texto_global(&entorno, "cerrado"), "verdadero");
+}

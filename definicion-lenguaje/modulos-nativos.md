@@ -905,7 +905,7 @@ Solo en `ServidorHttp`:
 
 | Método | Retorna | Descripción |
 |---|---|---|
-| `escuchar(puerto[, alArrancar])` | `ServidorHttp` | empieza a aceptar conexiones; `0` deja que el sistema elija el puerto |
+| `escuchar(puerto[, anfitrion][, alArrancar])` | `ServidorHttp` | empieza a aceptar conexiones; por defecto enlaza `0.0.0.0` (todas las interfaces); `anfitrion` opcional (`"127.0.0.1"`, `"0.0.0.0"`, …); `0` como puerto deja que el sistema elija uno libre |
 | `puerto()` | `entero` | puerto real en el que quedó escuchando |
 | `esta_escuchando()` | `log` | si el servidor está activo |
 | `cerrar()` | `log` | deja de escuchar y libera el bucle de eventos |
@@ -1193,6 +1193,8 @@ api.consultar("/usuarios", buscar)
 servidor.usar("/api", api)
 servidor.manejar_errores(atenderError)
 servidor.escuchar(3000)
+// Por defecto enlaza 0.0.0.0 (accesible fuera del proceso / contenedor).
+// Para solo local: servidor.escuchar(3000, "127.0.0.1")
 ```
 
 ```quetzal

@@ -647,8 +647,12 @@ impl Analizador {
             );
         }
 
-        // Verificar que los tipos nombrados existan (objetos, prototipos o imports).
+        let tipo_declarado = TipoSemantico::desde_ast(tipo);
+
+        // Verificar que los tipos nombrados existan (objetos, prototipos o
+        // imports). `funcion` es un tipo del lenguaje, no un nombre a resolver.
         if let Tipo::Nombrado(nombre_tipo) = tipo
+            && tipo_declarado != TipoSemantico::FuncionDinamica
             && !self.objetos.contains_key(nombre_tipo)
             && !self.prototipos.contains_key(nombre_tipo)
             && !self.tabla.existe(nombre_tipo)
@@ -665,7 +669,6 @@ impl Analizador {
             );
         }
 
-        let tipo_declarado = TipoSemantico::desde_ast(tipo);
         if let Some(valor) = valor {
             let tipo_valor = self.inferir_expresion(valor);
             if !tipo_valor.es_asignable_a(&tipo_declarado) {

@@ -416,7 +416,9 @@ fn registrar_usar(registro: &mut RegistroNativos, red: &RegistroRed) {
                         Valor::InstanciaNativa(datos) if &*datos.tipo == TIPO_ENRUTADOR => {
                             Destino::Enrutador(campo_entero(valor, "id"))
                         }
-                        Valor::Funcion(..) => Destino::Manejadores(vec![valor.clone()]),
+                        _ if valor.partes_callable().is_some() => {
+                            Destino::Manejadores(vec![valor.clone()])
+                        }
                         otro => {
                             return Err(error_tipo(format!(
                                 "'{funcion}' esperaba una función o un Enrutador, pero recibió '{}'",
@@ -749,8 +751,8 @@ fn registrar_escucha(registro: &mut RegistroNativos, red: &RegistroRed) {
             // Callback opcional de arranque, al estilo de `app.listen(puerto, fn)`.
             if let Some(manejador) = argumentos.get(2) {
                 let manejador = exigir_funcion(F, manejador)?;
-                if let Valor::Funcion(funcion, entorno) = &manejador {
-                    vm.llamar_funcion(funcion, entorno, Vec::new(), None, None)?;
+                if let Some((funcion, entorno, esto)) = manejador.partes_callable() {
+                    vm.llamar_funcion(funcion, entorno, Vec::new(), esto.cloned(), None)?;
                 }
             }
 
@@ -987,13 +989,13 @@ fn ejecutar_manejadores_error(
             respuesta.clone(),
             continuacion.clone(),
         ];
-        let Valor::Funcion(funcion, entorno) = manejador else {
+        let Some((funcion, entorno, esto)) = manejador.partes_callable() else {
             continue;
         };
         let esperados = funcion.parametros.len();
         let argumentos = argumentos.into_iter().take(esperados.max(1)).collect();
         if vm
-            .llamar_funcion(funcion, entorno, argumentos, None, None)
+            .llamar_funcion(funcion, entorno, argumentos, esto.cloned(), None)
             .is_err()
         {
             continue;
@@ -1153,7 +1155,7 @@ fn ejecutar_manejadores_parametro(
             if esperado != nombre {
                 continue;
             }
-            let Valor::Funcion(funcion, entorno) = manejador else {
+            let Some((funcion, entorno, esto)) = manejador.partes_callable() else {
                 continue;
             };
             let continuacion = instancia_continuacion();
@@ -1165,7 +1167,7 @@ fn ejecutar_manejadores_parametro(
             ];
             let esperados = funcion.parametros.len().min(argumentos.len());
             let argumentos = argumentos.into_iter().take(esperados).collect();
-            vm.llamar_funcion(funcion, entorno, argumentos, None, None)?;
+            vm.llamar_funcion(funcion, entorno, argumentos, esto.cloned(), None)?;
         }
     }
     Ok(())
@@ -1180,7 +1182,7 @@ fn ejecutar_cadena(
     respuesta: &Valor,
 ) -> Result<Control, Fallo> {
     for manejador in manejadores {
-        let Valor::Funcion(funcion, entorno) = manejador else {
+        let Some((funcion, entorno, esto)) = manejador.partes_callable() else {
             return Err(error_tipo(
                 "los manejadores de una ruta deben ser funciones declaradas en Quetzal",
             ));
@@ -1193,7 +1195,7 @@ fn ejecutar_cadena(
             continuacion.clone(),
         ];
         argumentos.truncate(aridad.min(3));
-        vm.llamar_funcion(funcion, entorno, argumentos, None, None)?;
+        vm.llamar_funcion(funcion, entorno, argumentos, esto.cloned(), None)?;
 
         if aridad < 3 {
             // Manejador final: no hay continuación, la ruta queda atendida.
@@ -2066,12 +2068,12 @@ fn manejadores_desde(funcion: &str, argumentos: &[Valor]) -> Result<Vec<Valor>, 
 }
 
 fn exigir_funcion(funcion: &str, valor: &Valor) -> Result<Valor, Fallo> {
-    match valor {
-        Valor::Funcion(..) => Ok(valor.clone()),
-        otro => Err(error_tipo(format!(
+    match valor.partes_callable() {
+        Some(_) => Ok(valor.clone()),
+        None => Err(error_tipo(format!(
             "'{funcion}' esperaba una función declarada en Quetzal, pero recibió '{}'; \
-             declara la función fuera y pásala por su nombre",
-            otro.nombre_tipo()
+             declara la función fuera y pásala por su nombre, o usa un método de una instancia",
+            valor.nombre_tipo()
         ))),
     }
 }

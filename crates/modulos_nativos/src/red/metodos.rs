@@ -64,12 +64,3 @@ pub(crate) fn es_idempotente(verbo: &str) -> bool {
         "GET" | "HEAD" | "OPTIONS" | "TRACE" | "PUT" | "DELETE" | "QUERY"
     )
 }
-
-/// Métodos que llevan contenido en la petición de forma habitual. `QUERY`
-/// lo lleva siempre: es su razón de ser.
-pub(crate) fn admite_cuerpo(verbo: &str) -> bool {
-    matches!(
-        verbo.to_ascii_uppercase().as_str(),
-        "POST" | "PUT" | "PATCH" | "DELETE" | "QUERY"
-    )
-}

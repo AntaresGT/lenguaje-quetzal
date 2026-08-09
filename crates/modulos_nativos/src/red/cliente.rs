@@ -217,25 +217,7 @@ fn registrar_metodos(registro: &mut RegistroNativos, red: &RegistroCliente) {
                 Box::new(move |vm: &mut Vm, argumentos: &[Valor]| {
                     let id = crate::red::objetos::id_receptor(&funcion, argumentos, TIPO_CLIENTE)?;
                     let url = arg_texto(&funcion, argumentos, 1)?.to_string();
-                    let con_cuerpo = metodos::admite_cuerpo(&verbo);
-                    let (datos, configuracion) = if con_cuerpo {
-                        (
-                            argumentos.get(2).cloned(),
-                            argumentos.get(3).cloned(),
-                        )
-                    } else {
-                        (None, argumentos.get(2).cloned())
-                    };
-                    let esperados = if con_cuerpo { 4 } else { 3 };
-                    if argumentos.len() > esperados {
-                        return Err(error(
-                            "E0210",
-                            format!(
-                                "'{funcion}' espera {} argumentos como máximo",
-                                esperados - 1
-                            ),
-                        ));
-                    }
+                    let (datos, configuracion) = partir_args_peticion(&funcion, argumentos)?;
 
                     let peticion = combinar_configuracion(
                         &red,
@@ -313,12 +295,12 @@ fn registrar_ajustes(registro: &mut RegistroNativos, red: &RegistroCliente) {
             Box::new(move |argumentos| {
                 exigir_aridad(&funcion, &argumentos[1..], 1)?;
                 let id = crate::red::objetos::id_receptor(&funcion, argumentos, TIPO_CLIENTE)?;
-                let Valor::Funcion(..) = &argumentos[1] else {
+                if argumentos[1].partes_callable().is_none() {
                     return Err(error_tipo(format!(
                         "'{funcion}' esperaba una función declarada en Quetzal, pero recibió '{}'",
                         argumentos[1].nombre_tipo()
                     )));
-                };
+                }
                 let mut interceptores = red.interceptores.borrow_mut();
                 let entrada = interceptores.entry(id).or_default();
                 if es_peticion {
@@ -333,6 +315,57 @@ fn registrar_ajustes(registro: &mut RegistroNativos, red: &RegistroCliente) {
 }
 
 // ----- Composición de la configuración -----
+
+/// Claves que solo aparecen en una `ConfiguracionPeticion`. Distinguen
+/// `metodo(url, { cabeceras: ... })` de `metodo(url, cuerpoJsn)`.
+const CLAVES_CONFIGURACION: &[&str] = &[
+    "base_url",
+    "url",
+    "metodo",
+    "parametros",
+    "cabeceras",
+    "datos",
+    "tiempo_limite",
+    "maximo_redirecciones",
+    "validar_estado",
+    "tipo_respuesta",
+    "autenticacion",
+    "al_progreso_subida",
+    "al_progreso_descarga",
+    "tipo_contenido",
+    "nombre_archivo",
+    "disposicion",
+];
+
+fn parece_configuracion(valor: &Valor) -> bool {
+    match valor {
+        Valor::Jsn(mapa) => mapa
+            .borrow()
+            .keys()
+            .any(|clave| CLAVES_CONFIGURACION.contains(&clave.as_str())),
+        _ => false,
+    }
+}
+
+/// Reparte los argumentos que siguen a la url entre cuerpo y configuración:
+/// `(url)`, `(url, datos)` o `(url, datos, configuracion)`. Con un solo
+/// argumento, un `jsn` de configuración se toma como tal y cualquier otro
+/// valor (texto, `Formulario`, `Bits`, lista, jsn de datos) es el cuerpo.
+fn partir_args_peticion(
+    funcion: &str,
+    argumentos: &[Valor],
+) -> Result<(Option<Valor>, Option<Valor>), Fallo> {
+    match &argumentos[2..] {
+        [] => Ok((None, None)),
+        [unico] if parece_configuracion(unico) => Ok((None, Some(unico.clone()))),
+        [unico] => Ok((Some(unico.clone()), None)),
+        [datos, configuracion] => Ok((Some(datos.clone()), Some(configuracion.clone()))),
+        _ => Err(error(
+            "E0210",
+            format!("'{funcion}' espera (url), (url, datos) o (url, datos, configuracion)"),
+        )),
+    }
+}
 
 /// Une la configuración de la instancia con la de la llamada.
 fn combinar_configuracion(
@@ -349,7 +382,8 @@ fn combinar_configuracion(
         Some(Valor::Nulo) | None => Valor::jsn(IndexMap::new()),
         Some(otro) => {
             return Err(error_tipo(format!(
-                "la configuración de la petición debe ser un jsn, pero se recibió '{}'",
+                "la configuración de la petición debe ser un jsn, pero se recibió '{}'; \
+                 el cuerpo va en el segundo argumento y la configuración en el tercero",
                 otro.nombre_tipo()
             )));
         }
@@ -594,11 +628,14 @@ fn unir_url(base: &str, relativa: &str) -> String {
     if base.is_empty() || relativa.starts_with("http://") || relativa.starts_with("https://") {
         return relativa.to_string();
     }
-    format!(
-        "{}/{}",
-        base.trim_end_matches('/'),
-        relativa.trim_start_matches('/')
-    )
+    let base = base.trim_end_matches('/');
+    let relativa = relativa.trim_start_matches('/');
+    // Pedir la raíz de la base (`""` o `"/"`) es pedir la base tal cual: un
+    // `/` de más al final cambia el recurso para muchos servidores.
+    if relativa.is_empty() {
+        return base.to_string();
+    }
+    format!("{base}/{relativa}")
 }
 
 // ----- Ejecución -----
@@ -631,9 +668,10 @@ fn ejecutar(
 }
 
 fn funcion_opcional(configuracion: &Valor, clave: &str) -> Result<Option<Valor>, Fallo> {
-    match leer(configuracion, clave) {
+    let valor = leer(configuracion, clave);
+    match &valor {
         Valor::Nulo => Ok(None),
-        valor @ Valor::Funcion(..) => Ok(Some(valor)),
+        _ if valor.partes_callable().is_some() => Ok(Some(valor)),
         otro => Err(error_tipo(format!(
             "'{clave}' debe ser una función declarada en Quetzal, pero se recibió '{}'",
             otro.nombre_tipo()
@@ -679,9 +717,9 @@ fn ejecutar_sincrono(
                     "subida" => al_subir.as_ref(),
                     _ => al_bajar.as_ref(),
                 };
-                if let Some(Valor::Funcion(funcion, entorno)) = manejador {
+                if let Some((funcion, entorno, esto)) = manejador.and_then(Valor::partes_callable) {
                     let valor = instancia_progreso(&progreso.carga());
-                    vm.llamar_funcion(funcion, entorno, vec![valor], None, None)?;
+                    vm.llamar_funcion(funcion, entorno, vec![valor], esto.cloned(), None)?;
                 }
             }
             Ok(Aviso::Fin(Ok(transferencia))) => return Ok(transferencia),
@@ -728,9 +766,10 @@ fn ejecutar_asincrono(
         } else {
             manejadores.1
         };
-        if let Some(Valor::Funcion(funcion, entorno)) = manejador {
+        if let Some((funcion, entorno, esto)) = manejador.as_ref().and_then(Valor::partes_callable)
+        {
             let valor = instancia_progreso(&datos);
-            let _ = vm.llamar_funcion(&funcion, &entorno, vec![valor], None, None);
+            let _ = vm.llamar_funcion(funcion, entorno, vec![valor], esto.cloned(), None);
         }
         CargaNativa::Nula
     });
@@ -967,10 +1006,11 @@ fn aplicar_interceptores_peticion(
         .unwrap_or_default();
     let mut actual = configuracion;
     for interceptor in interceptores {
-        let Valor::Funcion(funcion, entorno) = &interceptor else {
+        let Some((funcion, entorno, esto)) = interceptor.partes_callable() else {
             continue;
         };
-        let resultado = vm.llamar_funcion(funcion, entorno, vec![actual.clone()], None, None)?;
+        let resultado =
+            vm.llamar_funcion(funcion, entorno, vec![actual.clone()], esto.cloned(), None)?;
         if let Valor::Jsn(_) = resultado {
             actual = resultado;
         }
@@ -992,10 +1032,11 @@ fn aplicar_interceptores_respuesta(
         .unwrap_or_default();
     let mut actual = respuesta;
     for interceptor in interceptores {
-        let Valor::Funcion(funcion, entorno) = &interceptor else {
+        let Some((funcion, entorno, esto)) = interceptor.partes_callable() else {
             continue;
         };
-        let resultado = vm.llamar_funcion(funcion, entorno, vec![actual.clone()], None, None)?;
+        let resultado =
+            vm.llamar_funcion(funcion, entorno, vec![actual.clone()], esto.cloned(), None)?;
         if let Valor::InstanciaNativa(datos) = &resultado
             && &*datos.tipo == TIPO_RESPUESTA
         {
@@ -1064,6 +1105,11 @@ fn instancia_respuesta(configuracion: &Valor, transferencia: &Transferencia) -> 
         _ if tipo_contenido.contains("json") => analizar_json(&texto),
         _ if tipo_contenido.contains("x-www-form-urlencoded") => {
             jsn_de_pares(http::analizar_consulta(&texto))
+        }
+        // XML y SOAP (`application/xml`, `application/soap+xml`, ...) son
+        // texto aunque no viajen bajo `text/`.
+        _ if tipo_contenido.contains("xml") || tipo_contenido.contains("soap") => {
+            Valor::texto(&texto)
         }
         _ if tipo_contenido.starts_with("text/") || tipo_contenido.is_empty() => {
             Valor::texto(&texto)
@@ -1230,4 +1276,80 @@ fn lector(registro: &mut RegistroNativos, tipo: &'static str, metodo: &'static s
             Ok(campo(&valor, nombre_campo))
         }),
     );
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    fn jsn(claves: &[&str]) -> Valor {
+        Valor::jsn(
+            claves
+                .iter()
+                .map(|clave| ((*clave).to_string(), Valor::Nulo))
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn la_raiz_de_la_base_no_agrega_barra_final() {
+        let base = "https://host/servicio.asmx";
+        assert_eq!(unir_url(base, "/"), base);
+        assert_eq!(unir_url(base, ""), base);
+        assert_eq!(unir_url("https://host/api/", "/"), "https://host/api");
+    }
+
+    #[test]
+    fn la_ruta_relativa_se_pega_a_la_base() {
+        assert_eq!(
+            unir_url("https://host/api", "usuarios"),
+            "https://host/api/usuarios"
+        );
+        assert_eq!(
+            unir_url("https://host/api/", "/usuarios"),
+            "https://host/api/usuarios"
+        );
+    }
+
+    #[test]
+    fn la_url_absoluta_ignora_la_base() {
+        assert_eq!(
+            unir_url("https://host/api", "https://otro/ruta"),
+            "https://otro/ruta"
+        );
+    }
+
+    #[test]
+    fn solo_es_configuracion_el_jsn_con_claves_conocidas() {
+        assert!(parece_configuracion(&jsn(&["validar_estado"])));
+        assert!(parece_configuracion(&jsn(&["nombre", "cabeceras"])));
+        assert!(!parece_configuracion(&jsn(&["nombre", "edad"])));
+        assert!(!parece_configuracion(&Valor::texto("<xml/>")));
+    }
+
+    #[test]
+    fn el_unico_argumento_tras_la_url_se_reparte_por_forma() {
+        let url = Valor::texto("/ruta");
+        let cuerpo = Valor::texto("<xml/>");
+        let configuracion = jsn(&["cabeceras"]);
+
+        let (datos, config) =
+            partir_args_peticion("prueba", &[Valor::Nulo, url.clone()]).expect("sin cuerpo");
+        assert!(datos.is_none() && config.is_none());
+
+        let (datos, config) =
+            partir_args_peticion("prueba", &[Valor::Nulo, url.clone(), cuerpo.clone()])
+                .expect("solo cuerpo");
+        assert!(datos.is_some() && config.is_none());
+
+        let (datos, config) =
+            partir_args_peticion("prueba", &[Valor::Nulo, url.clone(), configuracion.clone()])
+                .expect("solo configuración");
+        assert!(datos.is_none() && config.is_some());
+
+        let (datos, config) =
+            partir_args_peticion("prueba", &[Valor::Nulo, url, cuerpo, configuracion])
+                .expect("cuerpo y configuración");
+        assert!(datos.is_some() && config.is_some());
+    }
 }

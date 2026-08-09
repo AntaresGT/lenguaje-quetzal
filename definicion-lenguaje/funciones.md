@@ -212,9 +212,53 @@ antes de continuar.
 
 ### 6.4 Métodos como valores
 
-Los métodos `libre` de un objeto también pueden referenciarse con la
-notación de punto: `Objeto.metodo` devuelve la función, que puede
-pasarse como callback o invocarse con `(args)`.
+Los métodos también se referencian con la notación de punto, sin
+paréntesis.
+
+`Objeto.metodo` referencia un método `libre`: se invoca sin instancia.
+
+```quetzal
+objeto Util {
+    libre entero doble(entero valor) {
+        retornar valor * 2
+    }
+}
+
+entero resultado = aplicar(Util.doble, 21)   // 42
+```
+
+`instancia.metodo` produce un **método enlazado**: el valor lleva
+consigo la instancia, así que `esto` sigue apuntando a ella cuando el
+callback se ejecuta más tarde.
+
+```quetzal
+objeto Contador {
+    privado:
+        entero var total = 0
+    publico:
+        vacio sumar(entero valor) {
+            esto.total = esto.total + valor
+        }
+        entero leer() {
+            retornar esto.total
+        }
+}
+
+Contador contador = nuevo Contador()
+funcion sumar = contador.sumar
+sumar(5)
+entero total = contador.leer()   // 5
+```
+
+Es la forma de registrar manejadores que viven dentro de un objeto:
+
+```quetzal
+esto.m_enrutador.obtener("/tipo-cambio", tipocambioct.obtener_tipo_cambio)
+```
+
+Un método enlazado `asincrono` se comporta igual que una función
+`asincrono`: al invocarlo devuelve una tarea que se resuelve con
+`esperar`.
 
 ## 7. Resumen
 
@@ -226,3 +270,5 @@ pasarse como callback o invocarse con `(args)`.
 | Función asíncrona | anteponer `asincrono` / `asincróno` |
 | Esperar resultado | `esperar <expresión_llamada>` |
 | Callback | `funcion <nombre>` como tipo de parámetro |
+| Método `libre` como valor | `Objeto.metodo` |
+| Método enlazado | `instancia.metodo` |

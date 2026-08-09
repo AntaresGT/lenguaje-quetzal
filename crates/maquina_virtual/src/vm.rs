@@ -13,8 +13,8 @@ use crate::bucle_eventos::{BucleEventos, CargaNativa, Mensaje};
 use crate::errores::{DatosExcepcion, Fallo};
 use crate::nativos::RegistroNativos;
 use crate::valores::{
-    ClaseObjeto, DatosTarea, EntornoModulo, EstadoIterador, Instancia, Valor, Variable,
-    carga_a_valor, texto_de_valor,
+    ClaseObjeto, DatosMetodoEnlazado, DatosTarea, EntornoModulo, EstadoIterador, Instancia, Valor,
+    Variable, carga_a_valor, texto_de_valor,
 };
 
 /// Límite de marcos anidados (recursión).
@@ -1065,6 +1065,13 @@ impl Vm {
                 }
                 self.llamar_funcion(&funcion, &entorno, argumentos, None, Some(ubicacion))
             }
+            Valor::MetodoEnlazado(datos) => self.invocar_metodo(
+                Rc::clone(&datos.funcion),
+                Rc::clone(&datos.entorno),
+                argumentos,
+                datos.receptor.clone(),
+                ubicacion,
+            ),
             Valor::Nativa(nombre) => self.llamar_nativa(&nombre, &argumentos, ubicacion),
             otro => Err(self.excepcion(
                 "E0406",
@@ -1440,6 +1447,15 @@ impl Vm {
                 {
                     return Ok(Valor::Funcion(funcion, entorno));
                 }
+                // Método de instancia como valor: se enlaza con su receptor
+                // para que `esto` siga apuntando a esta instancia.
+                if let Some((funcion, entorno)) = buscar_metodo_en_clase(self, &clase, nombre) {
+                    return Ok(Valor::MetodoEnlazado(Rc::new(DatosMetodoEnlazado {
+                        funcion,
+                        entorno,
+                        receptor: Valor::Instancia(Rc::clone(instancia)),
+                    })));
+                }
                 Err(self.excepcion(
                     "E0201",
                     format!(
@@ -1780,8 +1796,8 @@ fn buscar_metodo_en_clase(
 }
 
 /// Busca un método libre por referencia, incluyendo la cadena de herencia.
-/// Los métodos de instancia no pueden convertirse en función sin capturar
-/// un receptor y por eso quedan excluidos.
+/// Los métodos de instancia se resuelven aparte, como [`Valor::MetodoEnlazado`],
+/// porque necesitan capturar su receptor.
 fn buscar_metodo_libre_en_clase(
     vm: &Vm,
     clase: &Rc<ClaseObjeto>,

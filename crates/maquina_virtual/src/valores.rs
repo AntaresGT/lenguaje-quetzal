@@ -34,6 +34,9 @@ pub enum Valor {
     Jsn(Rc<RefCell<IndexMap<String, Valor>>>),
     /// Función definida en Quetzal, junto a su entorno de módulo.
     Funcion(Rc<FuncionCompilada>, Rc<EntornoModulo>),
+    /// Método de instancia referenciado sin llamarlo (`instancia.metodo`):
+    /// la función junto al `esto` que recibirá al invocarse.
+    MetodoEnlazado(Rc<DatosMetodoEnlazado>),
     /// Función nativa registrada por nombre (`consola.mostrar`, `rango`).
     Nativa(Rc<str>),
     /// Módulo nativo importado (`Matemática` → `matematica`).
@@ -97,6 +100,16 @@ pub struct DatosInstanciaNativa {
     pub datos: RefCell<IndexMap<String, Valor>>,
 }
 
+/// Método de instancia con su receptor capturado (ver
+/// [`Valor::MetodoEnlazado`]).
+#[derive(Debug)]
+pub struct DatosMetodoEnlazado {
+    pub funcion: Rc<FuncionCompilada>,
+    pub entorno: Rc<EntornoModulo>,
+    /// Valor que se pasa como `esto` al invocar el método.
+    pub receptor: Valor,
+}
+
 /// Tarea asincrónica pendiente.
 #[derive(Debug)]
 pub struct DatosTarea {
@@ -146,7 +159,7 @@ impl Valor {
             Valor::Nulo => "nulo",
             Valor::Lista(_) => "lista",
             Valor::Jsn(_) => "jsn",
-            Valor::Funcion(..) | Valor::Nativa(_) => "funcion",
+            Valor::Funcion(..) | Valor::MetodoEnlazado(_) | Valor::Nativa(_) => "funcion",
             Valor::ModuloNativo(_) => "modulo",
             Valor::Clase(_) => "objeto",
             Valor::Instancia(_) | Valor::Padre { .. } => "instancia",
@@ -154,6 +167,24 @@ impl Valor {
             Valor::Tarea(_) | Valor::TareaNativa(_) => "tarea",
             Valor::Excepcion(_) => "excepcion",
             Valor::Iterador(_) => "iterador",
+        }
+    }
+
+    /// Descompone una función de Quetzal invocable (función declarada o
+    /// método enlazado) en su cuerpo, su entorno y el `esto` con el que debe
+    /// llamarse. Devuelve `None` para el resto de valores.
+    ///
+    /// Lo usan los módulos nativos que reciben callbacks: necesitan la aridad
+    /// de la función antes de invocarla con [`crate::Vm::llamar_funcion`].
+    pub fn partes_callable(
+        &self,
+    ) -> Option<(&Rc<FuncionCompilada>, &Rc<EntornoModulo>, Option<&Valor>)> {
+        match self {
+            Valor::Funcion(funcion, entorno) => Some((funcion, entorno, None)),
+            Valor::MetodoEnlazado(datos) => {
+                Some((&datos.funcion, &datos.entorno, Some(&datos.receptor)))
+            }
+            _ => None,
         }
     }
 
@@ -223,6 +254,7 @@ pub fn texto_de_valor(valor: &Valor) -> String {
         }
         Valor::Jsn(_) => jsn_a_texto(valor, false),
         Valor::Funcion(funcion, _) => format!("<función {}>", funcion.nombre),
+        Valor::MetodoEnlazado(datos) => format!("<método {}>", datos.funcion.nombre),
         Valor::Nativa(nombre) => format!("<función nativa {nombre}>"),
         Valor::ModuloNativo(nombre) => format!("<módulo {nombre}>"),
         Valor::Clase(clase) => format!("<objeto {}>", clase.compilado.nombre),

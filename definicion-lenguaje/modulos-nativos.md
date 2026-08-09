@@ -890,12 +890,30 @@ ClienteHttp cliente = nuevo ClienteHttp({
 
 | Método | Descripción |
 |---|---|
-| `obtener(url[, configuracion])` | métodos sin cuerpo: `obtener`, `cabecera`, `opciones`, `rastrear`, `conectar` |
-| `publicar(url[, datos[, configuracion]])` | métodos con cuerpo: `publicar`, `poner`, `parchear`, `borrar`, `consultar` |
+| `<verbo>(url[, datos[, configuracion]])` | un método por verbo: `obtener`, `publicar`, `poner`, `parchear`, `borrar`, `cabecera`, `opciones`, `consultar`, `rastrear`, `conectar` |
 | `solicitar(configuracion)` | petición armada por completo desde un `jsn` |
 | `<método>_asincrono(...)` | la misma petición sobre el bucle de eventos (se usa con `esperar`) |
 | `configuracion()` / `configurar(clave, valor)` | valores por omisión de la instancia |
 | `interceptar_peticion(funcion)` / `interceptar_respuesta(funcion)` | cadenas de interceptores |
+
+Todos los verbos comparten la misma firma: el segundo argumento es el
+**cuerpo** (`texto`, `jsn`, `lista`, `Formulario`, `Bits` o `Archivo`) y el
+tercero, la **configuración** de esa petición.
+
+```quetzal
+cliente.obtener("/usuarios/42")
+cliente.publicar("/usuarios", { nombre: "Ana" })
+cliente.publicar("/documentos", formulario, { tiempo_limite: 10000 })
+cliente.publicar("/soap", cuerpoXml, { cabeceras: { "SOAPAction": "\"...\"" } })
+```
+
+> Con un solo argumento después de la url, un `jsn` que traiga alguna clave
+> de `ConfiguracionPeticion` (`cabeceras`, `parametros`, `validar_estado`,
+> ...) se toma como configuración; cualquier otro valor es el cuerpo. Para
+> enviar un `jsn` con esos nombres como cuerpo, pásalo en la clave `datos`.
+
+> Al unir `base_url` con una url relativa vacía o `"/"` el resultado es la
+> `base_url` tal cual: no se agrega una barra final que cambiaría el recurso.
 
 Claves de `ConfiguracionPeticion`:
 
@@ -925,7 +943,7 @@ Claves de `ConfiguracionPeticion`:
 |---|---|---|
 | `estado()` / `razon()` / `descripcion()` | `entero` / `texto` / `texto` | código, frase estándar y descripción en español |
 | `ok()` | `log` | si el estado está en 2xx |
-| `datos()` | `jsn` \| `texto` \| `Bits` \| `Formulario` | cuerpo ya interpretado |
+| `datos()` | `jsn` \| `texto` \| `Bits` \| `Formulario` | cuerpo ya interpretado: JSON como `jsn`; texto, XML y SOAP como `texto`; multipart como `Formulario`; el resto como `Bits` |
 | `cuerpo_texto()` / `bits()` | `texto` / `Bits` | cuerpo crudo |
 | `cabeceras()` / `cabecera(nombre)` | `jsn` / `texto` | cabeceras de la respuesta |
 | `tipo_contenido()` | `texto` | `Content-Type` de la respuesta |

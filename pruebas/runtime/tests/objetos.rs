@@ -204,6 +204,90 @@ fn instancia_constante_deberia_permitir_mutar_atributos_var() {
 }
 
 #[test]
+fn un_metodo_de_instancia_deberia_referenciarse_como_valor() {
+    let entorno = ejecutar(
+        "objeto Contador {\n\
+             privado:\n\
+                 entero var total = 0\n\
+             publico:\n\
+                 vacio sumar(entero valor) {\n\
+                     esto.total = esto.total + valor\n\
+                 }\n\
+                 entero leer() {\n\
+                     retornar esto.total\n\
+                 }\n\
+         }\n\
+         Contador contador = nuevo Contador()\n\
+         funcion sumar = contador.sumar\n\
+         sumar(5)\n\
+         sumar(7)\n\
+         entero total = contador.leer()\n",
+    );
+    assert_eq!(global(&entorno, "total"), "12");
+}
+
+#[test]
+fn un_metodo_de_instancia_deberia_pasarse_como_callback() {
+    let entorno = ejecutar(
+        "objeto Saludo {\n\
+             privado:\n\
+                 texto tratamiento = \"Hola\"\n\
+             publico:\n\
+                 texto saludar(texto nombre) {\n\
+                     retornar esto.tratamiento + \", \" + nombre\n\
+                 }\n\
+         }\n\
+         texto aplicar(funcion accion, texto nombre) {\n\
+             retornar accion(nombre)\n\
+         }\n\
+         Saludo saludo = nuevo Saludo()\n\
+         texto mensaje = aplicar(saludo.saludar, \"Ana\")\n",
+    );
+    assert_eq!(global(&entorno, "mensaje"), "Hola, Ana");
+}
+
+#[test]
+fn un_metodo_heredado_deberia_enlazarse_con_la_instancia() {
+    let entorno = ejecutar(
+        "objeto Animal {\n\
+             publico:\n\
+                 texto var nombre = \"sin nombre\"\n\
+                 texto describir() {\n\
+                     retornar \"soy \" + esto.nombre\n\
+                 }\n\
+         }\n\
+         objeto Perro hereda Animal {\n\
+             publico:\n\
+                 Perro(texto nombre) {\n\
+                     esto.nombre = nombre\n\
+                 }\n\
+         }\n\
+         Perro perro = nuevo Perro(\"Fido\")\n\
+         funcion describir = perro.describir\n\
+         texto descripcion = describir()\n",
+    );
+    assert_eq!(global(&entorno, "descripcion"), "soy Fido");
+}
+
+#[test]
+fn un_metodo_asincrono_enlazado_deberia_resolverse_con_esperar() {
+    let entorno = ejecutar(
+        "objeto Servicio {\n\
+             privado:\n\
+                 entero factor = 3\n\
+             publico:\n\
+                 asincrono entero calcular(entero valor) {\n\
+                     retornar valor * esto.factor\n\
+                 }\n\
+         }\n\
+         Servicio servicio = nuevo Servicio()\n\
+         funcion calcular = servicio.calcular\n\
+         entero resultado = esperar calcular(7)\n",
+    );
+    assert_eq!(global(&entorno, "resultado"), "21");
+}
+
+#[test]
 fn los_ejemplos_de_objetos_deberian_ejecutar() {
     for nombre in ["objetos.qz", "objetos_herencia.qz", "prototipos.qz"] {
         let ruta = format!("{}/../../ejemplos/{nombre}", env!("CARGO_MANIFEST_DIR"));

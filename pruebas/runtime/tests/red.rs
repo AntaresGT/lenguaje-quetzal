@@ -154,6 +154,15 @@ fn servidor_de_prueba(cuerpo: &'static str) -> u16 {
 /// Servidor crudo que guarda la petición completa y responde un JSON fijo.
 /// Sirve para comprobar qué escribe el cliente en el cable.
 fn servidor_capturador() -> (u16, std::sync::mpsc::Receiver<Vec<u8>>) {
+    servidor_capturador_con("application/json", "{\"ok\":true}")
+}
+
+/// Igual que `servidor_capturador`, pero eligiendo el `Content-Type` y el
+/// cuerpo de la respuesta.
+fn servidor_capturador_con(
+    tipo: &'static str,
+    cuerpo: &'static str,
+) -> (u16, std::sync::mpsc::Receiver<Vec<u8>>) {
     let escucha = TcpListener::bind(("127.0.0.1", 0)).expect("se puede abrir un puerto libre");
     let puerto = escucha.local_addr().expect("dirección local").port();
     let (emisor, receptor) = std::sync::mpsc::channel();
@@ -175,9 +184,8 @@ fn servidor_capturador() -> (u16, std::sync::mpsc::Receiver<Vec<u8>>) {
                 }
             }
             let _ = emisor.send(peticion);
-            let cuerpo = "{\"ok\":true}";
             let respuesta = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\
+                "HTTP/1.1 200 OK\r\nContent-Type: {tipo}\r\nContent-Length: {}\r\n\
                  Connection: close\r\n\r\n{cuerpo}",
                 cuerpo.len()
             );
@@ -742,6 +750,132 @@ fn subir_un_archivo_sin_permiso_de_disco_deberia_fallar() {
         texto_global(&entorno, "motivo")
     );
     let _ = std::fs::remove_dir_all(&raiz);
+}
+
+// Un manejador puede vivir dentro de un objeto: `instancia.metodo` se pasa
+// como callback y conserva su `esto` al atender la petición.
+#[test]
+fn un_metodo_de_instancia_deberia_atender_una_ruta() {
+    let entorno = ejecutar(
+        "manejador_metodo",
+        &format!(
+            "{IMPORTAR}\
+             objeto TipoCambio {{\n\
+                 privado:\n\
+                     numero tasa = 7.72\n\
+                 publico:\n\
+                     asincrono vacio consultar(PeticionEntrante peticion, \
+                     RespuestaSaliente respuesta) {{\n\
+                         respuesta.estado(200).jsn({{ tipo_cambio: esto.tasa }})\n\
+                     }}\n\
+             }}\n\
+             objeto Rutas {{\n\
+                 privado:\n\
+                     Enrutador m_enrutador = nuevo Enrutador()\n\
+                     TipoCambio m_controlador = nuevo TipoCambio()\n\
+                 publico:\n\
+                     Rutas() {{\n\
+                         esto.m_enrutador.obtener(\"/tipo-cambio\", \
+                         esto.m_controlador.consultar)\n\
+                     }}\n\
+                     Enrutador obtener_enrutador() {{\n\
+                         retornar esto.m_enrutador\n\
+                     }}\n\
+             }}\n\
+             Rutas rutas = nuevo Rutas()\n\
+             ServidorHttp servidor = nuevo ServidorHttp()\n\
+             servidor.usar(\"/api\", rutas.obtener_enrutador())\n\
+             servidor.escuchar(0)\n\
+             entero puerto = servidor.puerto()\n\
+             ClienteHttp cliente = nuevo ClienteHttp({{ base_url: \"http://127.0.0.1:\" + \
+             puerto.texto() }})\n\
+             RespuestaHttp respuesta = esperar cliente.obtener_asincrono(\"/api/tipo-cambio\")\n\
+             entero estado = respuesta.estado()\n\
+             numero tasa = respuesta.datos().tipo_cambio\n\
+             servidor.cerrar()\n"
+        ),
+    );
+    assert_eq!(texto_global(&entorno, "estado"), "200");
+    assert_eq!(texto_global(&entorno, "tasa"), "7.72");
+}
+
+/// Texto de la petición capturada, con el cuerpo incluido.
+fn peticion_recibida(peticiones: &std::sync::mpsc::Receiver<Vec<u8>>) -> String {
+    let bytes = peticiones
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .expect("el servidor debe recibir la petición");
+    String::from_utf8_lossy(&bytes).to_string()
+}
+
+// Un servicio SOAP se consulta con `publicar(url, cuerpoTexto, configuracion)`:
+// el cuerpo viaja tal cual, la url `"/"` no inventa una barra al final de la
+// `base_url` y la respuesta `text/xml` llega como texto.
+#[test]
+fn una_peticion_soap_deberia_conservar_la_url_y_el_cuerpo() {
+    let (puerto, peticiones) = servidor_capturador_con(
+        "text/xml; charset=utf-8",
+        "<?xml version=\"1.0\"?><Respuesta>7.72</Respuesta>",
+    );
+    let entorno = ejecutar(
+        "soap",
+        &format!(
+            "{IMPORTAR}\
+             ClienteHttp cliente = nuevo ClienteHttp({{\n\
+                 base_url: \"http://127.0.0.1:{puerto}/servicio.asmx\",\n\
+                 cabeceras: {{ \"Content-Type\": \"text/xml; charset=utf-8\", \
+                 SOAPAction: \"\\\"http://ejemplo/TipoCambio\\\"\" }}\n\
+             }})\n\
+             texto sobre = \"<Sobre><Cuerpo/></Sobre>\"\n\
+             RespuestaHttp respuesta = esperar cliente.publicar_asincrono(\"/\", sobre)\n\
+             texto datos = respuesta.datos()\n"
+        ),
+    );
+
+    let peticion = peticion_recibida(&peticiones);
+    assert!(
+        peticion.starts_with("POST /servicio.asmx HTTP/1.1"),
+        "la url no debe llevar barra final: {peticion}"
+    );
+    assert!(peticion.contains("soapaction: \"http://ejemplo/TipoCambio\""));
+    assert!(peticion.ends_with("<Sobre><Cuerpo/></Sobre>"));
+    assert_eq!(
+        texto_global(&entorno, "datos"),
+        "<?xml version=\"1.0\"?><Respuesta>7.72</Respuesta>"
+    );
+}
+
+// Con un solo argumento tras la url, un `jsn` de configuración configura la
+// petición y cualquier otro valor es el cuerpo, sea cual sea el verbo.
+#[test]
+fn el_argumento_tras_la_url_deberia_repartirse_entre_cuerpo_y_configuracion() {
+    let (puerto, peticiones) = servidor_capturador();
+    ejecutar(
+        "firma_unificada",
+        &format!(
+            "{IMPORTAR}\
+             ClienteHttp cliente = nuevo ClienteHttp({{ base_url: \"http://127.0.0.1:{puerto}\" }})\n\
+             RespuestaHttp con_config = esperar cliente.obtener_asincrono(\"/uno\", \
+             {{ cabeceras: {{ \"X-Marca\": \"config\" }} }})\n\
+             RespuestaHttp con_cuerpo = esperar cliente.obtener_asincrono(\"/dos\", \
+             {{ nombre: \"Ana\" }})\n\
+             RespuestaHttp con_texto = esperar cliente.consultar_asincrono(\"/tres\", \"crudo\")\n"
+        ),
+    );
+
+    let configurada = peticion_recibida(&peticiones);
+    assert!(configurada.contains("x-marca: config"));
+    assert!(
+        !configurada.contains("content-length"),
+        "la configuración no debe viajar como cuerpo: {configurada}"
+    );
+
+    let con_cuerpo = peticion_recibida(&peticiones);
+    assert!(con_cuerpo.contains("content-type: application/json"));
+    assert!(con_cuerpo.ends_with("{\"nombre\":\"Ana\"}"));
+
+    let con_texto = peticion_recibida(&peticiones);
+    assert!(con_texto.starts_with("QUERY /tres HTTP/1.1"));
+    assert!(con_texto.ends_with("crudo"));
 }
 
 // CA-10: los callbacks son funciones nombradas de primera clase; el tipo

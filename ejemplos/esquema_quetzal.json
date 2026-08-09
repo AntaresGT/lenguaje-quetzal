@@ -1,126 +1,270 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://lenguaje-quetzal.antaresgt.com/esquemas/quetzal.json",
-  "title": "Configuración de Proyecto Quetzal",
-  "description": "Esquema para archivos de configuración quetzal.json de proyectos en el lenguaje Quetzal",
-  "type": "object",
-  "properties": {
-    "versión": {
-      "type": "string",
-      "description": "Versión del formato de configuración",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$",
-      "examples": ["0.2.0", "1.0.0"]
-    },
-    "version": {
-      "type": "string",
-      "description": "Versión del formato o del paquete",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$",
-      "examples": ["0.2.0", "1.0.0"]
-    },
-    "aplicación": {
-      "type": "string",
-      "description": "Nombre del proyecto o aplicación",
-      "minLength": 1,
-      "pattern": "^[a-zA-Z0-9_-ñÑáéíóúÁÉÍÓÚ]+$",
-      "examples": ["mi-proyecto-quetzal"]
-    },
-    "nombre": {
-      "type": "string",
-      "description": "Nombre del paquete o librería",
-      "minLength": 1,
-      "pattern": "^[a-zA-Z0-9_-ñÑáéíóúÁÉÍÓÚ]+$",
-      "examples": ["utiles-quetzal"]
-    },
-    "tipo": {
-      "type": "string",
-      "description": "Tipo de proyecto",
-      "enum": ["ejecutable", "aplicacion", "libreria", "biblioteca"],
-      "default": "ejecutable"
-    },
-    "entrada": {
-      "type": "string",
-      "description": "Archivo principal para una aplicación"
-    },
-    "biblioteca": {
-      "type": "string",
-      "description": "Archivo principal para una librería"
-    },
-    "dependencias": {
-      "type": "object",
-      "description": "Dependencias del proyecto con su versión o ruta local",
-      "additionalProperties": {
-        "type": "string",
-        "minLength": 1,
-        "description": "Versión semántica o ruta local de la dependencia"
-      }
-    },
-    "nativos": {
-      "type": "array",
-      "description": "Lista de módulos nativos requeridos por el paquete",
-      "items": {
-        "type": "string"
-      }
-    },
-    "permisos": {
-      "type": "array",
-      "description": "Lista de permisos requeridos por la aplicación",
-      "items": {
-        "type": "object",
-        "required": ["tipo", "habilitado"],
-        "properties": {
-          "tipo": {
+    "type": "object",
+    "required": [
+        "versión",
+        "aplicación",
+        "entrada",
+        "tipo",
+        "quetzal"
+    ],
+    "properties": {
+        "versión": {
             "type": "string",
-            "description": "Tipo de permiso",
-            "enum": ["red", "sistema-archivos"]
-          },
-          "habilitado": {
-            "type": "boolean",
-            "description": "Indica si el permiso está activo"
-          },
-          "alcance": {
-            "description": "Alcance del permiso",
-            "oneOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "enum": ["lectura", "escritura", "ejecucion"]
-                }
-              }
+            "description": "Versión del formato de configuración",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$",
+            "examples": [
+                "0.2.0",
+                "1.0.0"
             ]
-          },
-          "directorios": {
-            "type": "array",
-            "description": "Directorios permitidos para el sistema de archivos",
-            "items": {
-              "type": "string"
-            }
-          }
         },
-        "allOf": [
-          {
-            "if": {
-              "properties": { "tipo": { "const": "sistema-archivos" } }
-            },
-            "then": {
-              "required": ["alcance"]
+        "aplicación": {
+            "type": "string",
+            "description": "Nombre del proyecto o aplicación",
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_-ñÑáéíóúÁÉÍÓÚ]+$",
+            "examples": [
+                "mi-proyecto-quetzal"
+            ]
+        },
+        "entrada": {
+            "type": "string",
+            "description": "Archivo de entrada del proyecto",
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_-ñÑáéíóúÁÉÍÓÚ]+$",
+            "examples": [
+                "principal.qz",
+                "aplicación/principal.qz"
+            ]
+        },
+        "tipo": {
+            "type": "string",
+            "description": "Tipo de proyecto",
+            "enum": [
+                "aplicación",
+                "biblioteca"
+            ],
+            "default": "aplicación"
+        },
+        "quetzal": {
+            "type": "string",
+            "description": "Versión del lenguaje de programación",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$",
+            "examples": [
+                "0.2.0",
+                "1.0.0"
+            ]
+        },
+        "autor": {
+            "type": "string",
+            "description": "Autor del proyecto",
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_-ñÑáéíóúÁÉÍÓÚ]+$",
+            "examples": [
+                "Juan Pérez",
+                "Maria Gómez"
+            ]
+        },
+        "email": {
+            "type": "string",
+            "description": "Email del autor del proyecto",
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
+            "examples": [
+                "juan.perez@ejemplo.com",
+                "maria.gomez@ejemplo.com"
+            ]
+        },
+        "sitioweb": {
+            "type": "string",
+            "description": "Sitio web del autor del proyecto",
+            "minLength": 1,
+            "pattern": "^https?://[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
+            "examples": [
+                "https://ejemplo.com",
+                "https://ejemplo.com/juan-perez"
+            ]
+        },
+        "repositorio": {
+            "type": "string",
+            "description": "Repositorio del proyecto",
+            "minLength": 1,
+            "pattern": "^https?://[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
+            "examples": [
+                "https://github.com/juan-perez/mi-proyecto-quetzal",
+                "https://github.com/maria-gomez/mi-proyecto-quetzal"
+            ]
+        },
+        "licencia": {
+            "type": "string",
+            "description": "Licencia del proyecto",
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_-ñÑáéíóúÁÉÍÓÚ]+$",
+            "examples": [
+                "MIT",
+                "GPL-3.0",
+                "Apache-2.0"
+            ]
+        },
+        "descripcion": {
+            "type": "string",
+            "description": "Descripción del proyecto",
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_-ñÑáéíóúÁÉÍÓÚ]+$",
+            "examples": [
+                "Mi proyecto Quetzal es un lenguaje de programación interpretado en español",
+                "Mi proyecto Quetzal es un lenguaje de programación interpretado en español"
+            ]
+        },
+        "palabras_clave": {
+            "type": "array",
+            "description": "Palabras clave del proyecto",
+            "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-zA-Z0-9_-ñÑáéíóúÁÉÍÓÚ]+$",
+                "examples": [
+                    "lenguaje",
+                    "programación",
+                    "español"
+                ]
             }
-          }
-        ],
-        "additionalProperties": false
-      }
+        },
+        "dependencias": {
+            "type": "object",
+            "description": "Dependencias del proyecto",
+            "additionalProperties": {
+                "type": "string",
+                "description": "Versión semántica o ruta local de la dependencia"
+            },
+            "examples": [
+                {
+                    "libreria_ejemplo": "1.0.0",
+                    "otra_libreria": "git@github.com:juan-perez/otra_libreria.git"
+                }
+            ]
+        },
+        "permisos": {
+            "type": "array",
+            "description": "Permisos del proyecto",
+            "items": {
+                "type": "object",
+                "required": [
+                    "tipo",
+                    "habilitado"
+                ],
+                "properties": {
+                    "tipo": {
+                        "type": "string",
+                        "description": "Tipo de permiso",
+                        "enum": [
+                            "red",
+                            "sistema-archivos",
+                            "ejecución",
+                            "portapapeles"
+                        ]
+                    },
+                    "habilitado": {
+                        "type": "boolean",
+                        "description": "Indica si el permiso está activo"
+                    },
+                    "portapapeles": {
+                        "type": "boolean",
+                        "description": "Indica si el permiso de portapapeles está activo"
+                    },
+                    "ejecutables": {
+                        "array": {
+                            "items": {
+                                "type": "string",
+                                "description": "Ruta del ejecutable"
+                            }
+                        },
+                        "examples": [
+                            "C:\\Windows\\System32\\cmd.exe",
+                            "C:\\Windows\\System32\\notepad.exe",
+                            "C:\\Windows\\System32\\calc.exe",
+                            "*"
+                        ]
+                    },
+                    "directorios": {
+                        "type": "array",
+                        "description": "Directorios permitidos para el permiso",
+                        "items": {
+                            "type": "object",
+                            "required": [
+                                "ruta",
+                                "permiso"
+                            ],
+                            "properties": {
+                                "ruta": {
+                                    "type": "string",
+                                    "description": "Ruta del directorio"
+                                },
+                                "permiso": {
+                                    "type": "enum",
+                                    "description": "Permiso del directorio",
+                                    "enum": [
+                                        "lectura",
+                                        "escritura",
+                                        "todo"
+                                    ]
+                                }
+                            }
+                        },
+                        "examples": [
+                            {
+                                "ruta": "./",
+                                "permiso": "lectura"
+                            },
+                            {
+                                "ruta": "/home/usuario/documentos",
+                                "permiso": "escritura"
+                            },
+                            {
+                                "ruta": "C:\\Users\\usuario\\Documents",
+                                "permiso": "todo"
+                            },
+                            {
+                                "ruta": "D:\\proyectos\\quetzal",
+                                "permiso": "todo"
+                            },
+                            {
+                                "ruta": "*",
+                                "permiso": "lectura"
+                            }
+                        ]
+                    }
+                },
+                "allOf": [
+                    {
+                        "if": {
+                            "properties": {
+                                "tipo": {
+                                    "const": "sistema-archivos"
+                                }
+                            }
+                        },
+                        "then": {
+                            "required": [
+                                "directorios"
+                            ]
+                        }
+                    },
+                    {
+                        "if": {
+                            "properties": {
+                                "tipo": {
+                                    "const": "ejecución"
+                                }
+                            }
+                        },
+                        "then": {
+                            "required": [
+                                "ejecutables"
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
     }
-  },
-  "anyOf": [
-    {
-      "required": ["versión", "aplicación"]
-    },
-    {
-      "required": ["version", "nombre"]
-    }
-  ],
-  "additionalProperties": false
 }

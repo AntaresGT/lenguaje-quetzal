@@ -1,0 +1,14 @@
+[package]
+name = "diagnosticos"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Reportes de errores con estilo parecido a Rust para Lenguaje Quetzal."
+
+[dependencies]
+nucleo = { workspace = true }
+
+# Colores en terminal para los reportes.
+owo-colors = { workspace = true }

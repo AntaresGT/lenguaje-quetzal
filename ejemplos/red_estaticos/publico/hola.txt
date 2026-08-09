@@ -1,0 +1,1 @@
+Hola desde un archivo estático de Quetzal.

@@ -1,0 +1,9 @@
+// Proyecto de ejemplo con módulos
+
+importar { sumar, restar } desde "./aplicacion/calculadora.qz"
+
+entero resultado_suma = sumar(15, 27)
+entero resultado_resta = restar(50, 8)
+
+consola.mostrar(t"Suma: {resultado_suma}")
+consola.mostrar(t"Resta: {resultado_resta}")

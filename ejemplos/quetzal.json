@@ -1,7 +1,0 @@
-{
-  "versión": "0.2.0",
-  "aplicación": "mi-proyecto-quetzal",
-  "dependencias": {
-      "libreria_ejemplo": "1.0.0"
-  }
-}

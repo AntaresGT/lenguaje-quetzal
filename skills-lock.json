@@ -1,10 +1,23 @@
 {
   "version": 1,
   "skills": {
+    "caveman": {
+      "source": "juliusbrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman/SKILL.md",
+      "computedHash": "7935e83f9c6a8b7cbb5404d144b0d19e3ba93583f4388301c3dada37cd25adf8"
+    },
     "ccc": {
       "source": "cocoindex-io/cocoindex-code",
       "sourceType": "github",
-      "computedHash": "6d384de1a4b3b90f2ab3115849a269aeea6641486257f9ad72afacbdcb1cbde2"
+      "skillPath": "skills/ccc/SKILL.md",
+      "computedHash": "ad5f1c8501fd81d45e20501cbfa2b13699a6bbb4fd218c1b1034fec7b9659eff"
+    },
+    "rust-best-practices": {
+      "source": "apollographql/skills",
+      "sourceType": "github",
+      "skillPath": "skills/rust-best-practices/SKILL.md",
+      "computedHash": "3f89cd417842ca60bffefea01ee88fc28116b75a8e69329c4d6db446fbfcad02"
     }
   }
 }

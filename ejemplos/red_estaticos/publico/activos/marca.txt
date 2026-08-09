@@ -1,0 +1,1 @@
+Marca bajo /activos, montada con estaticos("/activos", "./publico/activos").

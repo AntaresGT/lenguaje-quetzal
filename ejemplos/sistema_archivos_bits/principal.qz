@@ -1,0 +1,86 @@
+// Módulo nativo quetzal/sistema_archivos — el objeto Bits
+//
+// Bits representa una secuencia de bytes (valores de 0 a 255). Es el tipo
+// que se usa para leer y escribir archivos binarios: imágenes, audio,
+// ejecutables o cualquier formato que no sea texto.
+//
+// Bits vive en memoria: crear, recorrer o combinar secuencias no requiere
+// permisos. El permiso "sistema-archivos" solo hace falta al leer o
+// escribir en disco.
+//
+// ── Funciones libres ─────────────────────────────────────────────────────
+//   Bits.vacío()                  -> Bits   — secuencia de longitud 0
+//   Bits.desde_lista(lista)       -> Bits   — cada entero debe estar en 0..255
+//   Bits.desde_texto(texto)       -> Bits   — codifica el texto en UTF-8
+//   Bits.combinar(lista<Bits>)    -> Bits   — concatena varias secuencias
+//
+// ── Métodos de instancia ─────────────────────────────────────────────────
+//   .longitud() .obtener(i) .establecer(i, byte) .trozo(inicio, fin)
+//   .concatenar(otro) .texto() .lista() .es_igual(otro)
+
+importar { SistemaArchivos, Bits } desde "quetzal/sistema_archivos"
+
+SistemaArchivos.crear_directorios("./salida")
+
+// ── Construir datos binarios ─────────────────────────────────────────────
+
+// Firma de un archivo PNG: 137 80 78 71 (‰PNG).
+Bits firma = Bits.desde_lista([137, 80, 78, 71])
+consola.mostrar(t"Bytes de la firma: {firma.longitud()}")
+consola.mostrar(t"Primer byte: {firma.obtener(0)}")
+
+// Desde texto: la codificación es UTF-8, así que las tildes ocupan 2 bytes.
+Bits saludo = Bits.desde_texto("café")
+consola.mostrar(t"El texto café ocupa {saludo.longitud()} bytes")
+
+// ── Operar en memoria ────────────────────────────────────────────────────
+
+// establecer y concatenar devuelven una secuencia nueva.
+Bits modificada = firma.establecer(0, 138)
+Bits completa = firma.concatenar(saludo)
+Bits encabezado = completa.trozo(0, 4)
+
+consola.mostrar(t"Original intacta: {firma.obtener(0)}")
+consola.mostrar(t"Modificada: {modificada.obtener(0)}")
+consola.mostrar(t"Completa: {completa.longitud()} bytes")
+consola.mostrar(t"¿El encabezado es la firma? {encabezado.es_igual(firma)}")
+
+// combinar concatena varias secuencias de una sola vez.
+Bits documento = Bits.combinar([firma, Bits.desde_texto("\ncontenido"), Bits.vacío()])
+consola.mostrar(t"Documento: {documento.longitud()} bytes")
+
+// ── Escribir y leer binario ──────────────────────────────────────────────
+
+SistemaArchivos.escribir_bits("./salida/marca.bin", documento)
+
+Bits leido = SistemaArchivos.leer_bits("./salida/marca.bin")
+consola.mostrar(t"Leídos {leido.longitud()} bytes")
+consola.mostrar(t"¿Coincide con lo escrito? {leido.es_igual(documento)}")
+
+// lista() expone los bytes como enteros para recorrerlos.
+lista<entero> bytes = leido.trozo(0, 4).lista()
+para (entero var byte en bytes) {
+    consola.mostrar(t"byte: {byte}")
+}
+
+// ── Convertir a texto ────────────────────────────────────────────────────
+
+// texto() decodifica como UTF-8 y lanza excepción si los bytes no son
+// texto válido (por ejemplo, la firma binaria de un PNG).
+consola.mostrar(saludo.texto())
+
+intentar {
+    consola.mostrar(firma.texto())
+} capturar (excepcion e) {
+    consola.mostrar_error(t"No es texto UTF-8: {e.mensaje}")
+}
+
+// ── Formas asíncronas ────────────────────────────────────────────────────
+
+asincrono vacio respaldar() {
+    Bits datos = esperar SistemaArchivos.leer_bits_asincrono("./salida/marca.bin")
+    esperar SistemaArchivos.escribir_bits_asincrono("./salida/marca_respaldo.bin", datos)
+    consola.mostrar_exito("Respaldo binario terminado.")
+}
+
+esperar respaldar()

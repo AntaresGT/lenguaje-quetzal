@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="imagenes/logo_lenguaje_quetzal.png" alt="Lenguaje Quetzal Logo" width="200"/>
+  <img src="recursos/imagenes/logo_lenguaje_quetzal.png" alt="Lenguaje Quetzal Logo" width="200"/>
   
   # Lenguaje Quetzal
   

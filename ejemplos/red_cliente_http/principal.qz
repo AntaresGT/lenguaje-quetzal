@@ -1,0 +1,134 @@
+// Módulo nativo quetzal/red — ClienteHttp
+//
+// ClienteHttp sigue el modelo de Axios con nombres en español: una instancia
+// con configuración por omisión, un método por verbo HTTP (incluido
+// consultar, el QUERY del RFC 10008), interceptores de petición y respuesta,
+// y avisos de progreso con porcentaje.
+//
+// Cada método tiene su forma asincrónica: obtener / obtener_asincrono. La
+// forma síncrona bloquea hasta recibir la respuesta; la asincrónica usa el
+// bucle de eventos, así que es la que hay que usar cuando el programa además
+// atiende otras cosas (como el servidor de este mismo ejemplo).
+//
+// El permiso "red" con "cliente": true es obligatorio (ver quetzal.json).
+
+importar {
+    ServidorHttp,
+    ClienteHttp,
+    PeticionEntrante,
+    RespuestaSaliente,
+    RespuestaHttp,
+    ProgresoPeticion,
+    HttpCodigos
+} desde "quetzal/red"
+
+// ── Un endpoint local contra el que hablar ───────────────────────────────
+
+vacio eco(PeticionEntrante peticion, RespuestaSaliente respuesta) {
+    respuesta.jsn({
+        metodo: peticion.metodo(),
+        clave: peticion.cabecera("X-Clave"),
+        consulta: peticion.consulta(),
+        cuerpo: peticion.cuerpo()
+    })
+}
+
+vacio catalogo(PeticionEntrante peticion, RespuestaSaliente respuesta) {
+    lista var articulos = []
+    entero var i = 0
+    mientras (i < 1000) {
+        articulos.agregar({ codigo: i, nombre: t"artículo {i}" })
+        i += 1
+    }
+    respuesta.jsn({ articulos: articulos })
+}
+
+ServidorHttp servidor = nuevo ServidorHttp()
+servidor.todos("/eco", eco)
+servidor.obtener("/catalogo", catalogo)
+servidor.escuchar(0)
+
+entero puerto = servidor.puerto()
+
+// ── La instancia y sus valores por omisión ───────────────────────────────
+
+ClienteHttp cliente = nuevo ClienteHttp({
+    base_url: t"http://127.0.0.1:{puerto}",
+    cabeceras: { "Accept": "application/json" },
+    tiempo_limite: 5000
+})
+
+// ── Interceptores ────────────────────────────────────────────────────────
+//
+// El de petición recibe la configuración ya combinada y devuelve la que se
+// usará; el de respuesta recibe la RespuestaHttp y devuelve la que verá el
+// resto del programa. Son funciones nombradas, nunca anónimas.
+
+jsn firmar(jsn var configuracion) {
+    configuracion.cabeceras = { "X-Clave": "secreta" }
+    retornar configuracion
+}
+
+RespuestaHttp anotar(RespuestaHttp respuesta) {
+    consola.mostrar(t"   <- {respuesta.estado()} {respuesta.razon()} desde {respuesta.url()}")
+    retornar respuesta
+}
+
+cliente.interceptar_peticion(firmar)
+cliente.interceptar_respuesta(anotar)
+
+// ── Verbos ───────────────────────────────────────────────────────────────
+
+consola.mostrar("GET con parámetros de consulta:")
+RespuestaHttp consulta = esperar cliente.obtener_asincrono("/eco", {
+    parametros: { pagina: 2, orden: "nombre" }
+})
+consola.mostrar(t"   datos: {consulta.datos().consulta}")
+
+consola.mostrar("POST con cuerpo jsn:")
+RespuestaHttp alta = esperar cliente.publicar_asincrono("/eco", { nombre: "Ana", rol: "editor" })
+consola.mostrar(t"   cuerpo recibido: {alta.datos().cuerpo}")
+
+// QUERY: seguro e idempotente, pero con la consulta en el cuerpo.
+consola.mostrar("QUERY con criterio en el cuerpo:")
+RespuestaHttp busqueda = esperar cliente.consultar_asincrono("/eco", { termino: "an", limite: 10 })
+consola.mostrar(t"   método: {busqueda.datos().metodo}, criterio: {busqueda.datos().cuerpo}")
+
+// ── Progreso ─────────────────────────────────────────────────────────────
+//
+// ProgresoPeticion trae cargado, total, bytes, progreso (0..1) y porcentaje
+// (0..100). El total solo se conoce cuando la otra parte anuncia longitud.
+
+entero var avisos = 0
+número var ultimo = 0
+
+vacio alDescargar(ProgresoPeticion progreso) {
+    avisos += 1
+    si (progreso.porcentaje() != nulo) {
+        ultimo = progreso.porcentaje()
+    }
+}
+
+consola.mostrar("Descarga con progreso:")
+RespuestaHttp catalogoDescargado = esperar cliente.obtener_asincrono("/catalogo", {
+    al_progreso_descarga: alDescargar
+})
+consola.mostrar(t"   {avisos} avisos, último {ultimo}%, {catalogoDescargado.bits().longitud()} bytes")
+
+// ── Errores ──────────────────────────────────────────────────────────────
+//
+// Por omisión el cliente lanza cuando el estado sale del rango 2xx/3xx.
+// validar_estado: falso devuelve la respuesta tal cual.
+
+intentar {
+    RespuestaHttp fallida = esperar cliente.obtener_asincrono("/no-existe")
+} capturar (excepcion e) {
+    consola.mostrar_advertencia(e.mensaje)
+}
+
+RespuestaHttp tolerante = esperar cliente.obtener_asincrono("/no-existe", { validar_estado: falso })
+consola.mostrar(t"Estado {tolerante.estado()}: {HttpCodigos.descripcion(tolerante.estado())}")
+consola.mostrar(t"¿es error del cliente? {HttpCodigos.es_error_cliente(tolerante.estado())}")
+
+servidor.cerrar()
+consola.mostrar_exito("Cliente HTTP completado.")

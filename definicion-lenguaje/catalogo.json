@@ -1,0 +1,404 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://lenguaje-quetzal/catalogo.json",
+  "title": "Catálogo canónico de Lenguaje Quetzal",
+  "description": "Inventario machine-readable de identidad, pipeline y características.",
+  "version_especificación": "1.0.0",
+  "versión_lenguaje_documentada": "0.0.2",
+  "idioma": "es",
+  "extensión_fuente": ".qz",
+  "manifiesto_proyecto": "quetzal.json",
+
+  "identidad": {
+    "nombre": "Lenguaje Quetzal",
+    "nombre_corto": "Quetzal",
+    "tipo": "lenguaje de programación interpretado de propósito general",
+    "implementación": "intérprete en Rust",
+    "misión": "Programación en español natural, funcional para aplicaciones reales (no solo enseñanza).",
+    "propiedades": [
+      "keywords y API en español",
+      "tipado estático y explícito (sin inferencia)",
+      "inmutable por defecto; var introduce mutabilidad",
+      "POO clásica: objeto, prototipo, herencia, libre",
+      "asincronía: asincrono / esperar",
+      "excepciones: intentar / capturar / finalmente / lanzar",
+      "módulos: importar / exportar / desde / como",
+      "interpolación: t\"...{expr}...\"",
+      "permisos declarativos en quetzal.json (red, sistema-archivos, ejecución)",
+      "lexer normaliza tildes en keywords e identificadores"
+    ],
+    "no_soporta": [
+      "funciones anónimas / lambdas",
+      "inferencia de tipos",
+      "comentarios de bloque /* */",
+      "import * / import default / import dinámico",
+      "operador ** (usar Matemática.potencia)"
+    ]
+  },
+
+  "pipeline": {
+    "descripción": "Flujo de un programa .qz desde fuente hasta ejecución",
+    "nodos": [
+      { "id": "fuente", "label": "Fuente .qz + quetzal.json", "artefacto": "texto UTF-8" },
+      { "id": "lexer", "label": "Análisis léxico", "artefacto": "Vec<Token>", "crate": "lexico" },
+      { "id": "parser", "label": "Análisis sintáctico", "artefacto": "AST", "crate": "sintaxis" },
+      { "id": "semántica", "label": "Tipos / resolución / permisos", "artefacto": "AST tipado + grafo módulos" },
+      { "id": "cargador", "label": "Carga de módulos", "artefacto": "programa enlazado", "crate": "motor" },
+      { "id": "evaluador", "label": "Evaluación / runtime", "artefacto": "valores + efectos", "crate": "motor" },
+      { "id": "stdlib", "label": "API nativa", "artefacto": "consola, matemática, tiempo, motor, sistema_archivos, red" }
+    ],
+    "aristas": [
+      { "from": "fuente", "to": "lexer", "label": "caracteres" },
+      { "from": "lexer", "to": "parser", "label": "tokens" },
+      { "from": "parser", "to": "semántica", "label": "AST" },
+      { "from": "semántica", "to": "cargador", "label": "imports resueltos" },
+      { "from": "cargador", "to": "evaluador", "label": "entrada" },
+      { "from": "evaluador", "to": "stdlib", "label": "llamadas nativas" },
+      { "from": "stdlib", "to": "evaluador", "label": "valores / excepciones" }
+    ]
+  },
+
+  "características": [
+    {
+      "id": "tipo-entero",
+      "nombre": "tipo entero",
+      "categoría": "tipos",
+      "objetivo": "Enteros con signo de 64 bits (i64) para conteos, índices y aritmética exacta.",
+      "funciones": ["declaración tipada", "literales enteros", "ops aritméticas/comparación", "nulo polimórfico"],
+      "api": ["texto()", "logico()", "absoluto()", "entero()", "numero()", "número()"],
+      "doc": "tipos.md#tipo-entero",
+      "keywords": ["entero"]
+    },
+    {
+      "id": "tipo-numero",
+      "nombre": "tipo número",
+      "categoría": "tipos",
+      "objetivo": "Decimales IEEE 754 double para cálculo real.",
+      "funciones": ["literales decimales", "ops aritméticas", "conversión a/desde texto"],
+      "api": ["texto()", "logico()", "absoluto()", "entero()", "numero()", "número()"],
+      "doc": "tipos.md#tipo-numero",
+      "keywords": ["número", "numero"]
+    },
+    {
+      "id": "tipo-texto",
+      "nombre": "tipo texto",
+      "categoría": "tipos",
+      "objetivo": "Cadenas Unicode UTF-8; interpolación con t\"...\".",
+      "funciones": ["literales \"...\"", "templates t\"{expr}\"", "concatenación +", "índice [i] / [-1]"],
+      "api": [
+        "longitud()", "esta_vacia()", "mayusculas()", "minusculas()", "capitalizar()", "titulo()",
+        "recortar()", "recortar_inicio()", "recortar_final()",
+        "contiene(texto)", "empieza_con(texto)", "termina_con(texto)", "encontrar(texto)", "buscar_ultimo(texto)", "contar(texto)",
+        "reemplazar(viejo, nuevo)", "reemplazar_primero(viejo, nuevo)",
+        "dividir(separador)", "partir_lineas()",
+        "subtexto(inicio, fin)", "izquierda(n)", "derecha(n)",
+        "repetir(n)", "invertir()",
+        "es_numero()", "es_entero()", "es_alfanumerico()", "igual_sin_caso(texto)",
+        "a_base64()", "decodificar_base64()", "a_enlace()", "decodificar_enlace()",
+        "entero()", "numero()", "número()", "logico()", "texto()", "lista()", "jsn()"
+      ],
+      "doc": "tipos.md#tipo-texto",
+      "keywords": ["texto"]
+    },
+    {
+      "id": "tipo-log",
+      "nombre": "tipo log",
+      "categoría": "tipos",
+      "objetivo": "Booleanos con literales verdadero / falso.",
+      "funciones": ["ops lógicas && || !", "condiciones si/mientras/para"],
+      "api": ["texto()"],
+      "doc": "tipos.md#tipo-log",
+      "keywords": ["log", "verdadero", "falso"]
+    },
+    {
+      "id": "tipo-vacio",
+      "nombre": "tipo vacío",
+      "categoría": "tipos",
+      "objetivo": "Tipo unitario para funciones sin valor de retorno.",
+      "funciones": ["anotación de retorno", "retornar sin expresión"],
+      "api": [],
+      "doc": "tipos.md#tipo-vacio",
+      "keywords": ["vacío", "vacio"]
+    },
+    {
+      "id": "tipo-lista",
+      "nombre": "tipo lista",
+      "categoría": "tipos",
+      "objetivo": "Arreglos ordenados; genérico opcional lista<T> o heterogéneos.",
+      "funciones": ["literales []", "índice [i]", "iteración para…en/cada", "mutación si var"],
+      "api": [
+        "longitud()", "esta_vacia()", "primero()", "ultimo()",
+        "agregar(elem)", "insertar(pos, elem)", "remover(elem)", "quitar_en(pos)", "limpiar()",
+        "contiene(elem)", "buscar(elem)", "buscar_ultimo(elem)", "contar(elem)",
+        "ordenar()", "ordenar_descendente()", "ordenado()", "invertir()",
+        "tomar(n)", "saltar(n)", "sublista(inicio, fin)",
+        "concatenar(otra)", "extender(otra)",
+        "sumar()", "promedio()", "maximo()", "minimo()",
+        "unir(separador)", "texto()", "json()", "logico()"
+      ],
+      "doc": "tipos.md#tipo-lista",
+      "keywords": ["lista"],
+      "global": ["rango(inicio, fin)"]
+    },
+    {
+      "id": "tipo-jsn",
+      "nombre": "tipo jsn",
+      "categoría": "tipos",
+      "objetivo": "Objetos JSON nativos con claves id o cadena.",
+      "funciones": ["literales { k: v }", "acceso .clave / [\"clave\"]"],
+      "api": [
+        "contiene_clave(clave)", "claves()", "valores()",
+        "establecer(clave, valor)", "eliminar(clave)", "fusionar(otro)",
+        "texto()", "texto_formateado()", "jsn()"
+      ],
+      "doc": "tipos.md#tipo-jsn",
+      "keywords": ["jsn"]
+    },
+    {
+      "id": "tipo-funcion",
+      "nombre": "tipo funcion",
+      "categoría": "tipos",
+      "objetivo": "Referencias a funciones de primera clase (callbacks nombrados).",
+      "funciones": ["pasar nombre de función", "métodos libre y enlazados", "sin lambdas"],
+      "api": [],
+      "doc": "funciones.md#callbacks",
+      "keywords": ["funcion"]
+    },
+    {
+      "id": "nulo",
+      "nombre": "valor nulo",
+      "categoría": "tipos",
+      "objetivo": "Ausencia polimórfica asignable a cualquier tipo.",
+      "funciones": ["asignación a cualquier tipo", "comparación"],
+      "api": [],
+      "doc": "tipos.md#nulo",
+      "keywords": ["nulo"]
+    },
+    {
+      "id": "mutabilidad",
+      "nombre": "mutabilidad var",
+      "categoría": "declaraciones",
+      "objetivo": "Inmutable por defecto; var tras el tipo habilita reasignación.",
+      "funciones": ["tipo [var] nombre = expr", "parámetros var"],
+      "api": [],
+      "doc": "tipos.md#mutabilidad",
+      "keywords": ["var"]
+    },
+    {
+      "id": "control-si",
+      "nombre": "condicional si",
+      "categoría": "control-flujo",
+      "objetivo": "Ramificación condicional con bloques obligatorios.",
+      "funciones": ["si (cond) {}", "sino si", "sino", "ternario ?: "],
+      "api": [],
+      "doc": "control-flujo.md#condicionales",
+      "keywords": ["si", "sino"]
+    },
+    {
+      "id": "control-bucles",
+      "nombre": "bucles",
+      "categoría": "control-flujo",
+      "objetivo": "Repetición: mientras, hacer-mientras, para C-style, para-en/cada.",
+      "funciones": ["mientras", "hacer…mientras", "para(init;cond;paso)", "para (T var x en|cada coll)", "romper", "continuar"],
+      "api": [],
+      "doc": "control-flujo.md#bucles",
+      "keywords": ["mientras", "hacer", "para", "en", "cada", "romper", "continuar"]
+    },
+    {
+      "id": "excepciones",
+      "nombre": "excepciones",
+      "categoría": "control-flujo",
+      "objetivo": "Errores capturables con pila de llamadas.",
+      "funciones": ["intentar", "capturar (excepcion e)", "finalmente", "lanzar expr"],
+      "api": ["e.mensaje", "e.llamadas"],
+      "doc": "control-flujo.md#excepciones",
+      "keywords": ["intentar", "capturar", "finalmente", "lanzar", "excepcion", "excepción"]
+    },
+    {
+      "id": "funciones",
+      "nombre": "funciones",
+      "categoría": "funciones",
+      "objetivo": "Procedimientos tipados con retorno explícito; opc. asíncronos.",
+      "funciones": ["[asincrono] tipo nombre(params) {}", "retornar", "recursión", "esperar"],
+      "api": [],
+      "doc": "funciones.md",
+      "keywords": ["retornar", "asincrono", "asincróno", "esperar", "funcion"]
+    },
+    {
+      "id": "poo-objeto",
+      "nombre": "objeto",
+      "categoría": "poo",
+      "objetivo": "Clases con visibilidad, herencia e interfaces.",
+      "funciones": ["objeto", "hereda", "como", "implementa", "nuevo", "esto", "padre", "publico/privado", "libre", "constructor = nombre clase"],
+      "api": [],
+      "doc": "poo.md",
+      "keywords": ["objeto", "hereda", "implementa", "como", "nuevo", "esto", "padre", "publico", "público", "privado", "libre"]
+    },
+    {
+      "id": "poo-prototipo",
+      "nombre": "prototipo",
+      "categoría": "poo",
+      "objetivo": "Interfaces con firmas; miembros opcional.",
+      "funciones": ["prototipo", "opcional", "implementa"],
+      "api": [],
+      "doc": "poo.md#prototipo",
+      "keywords": ["prototipo", "opcional"]
+    },
+    {
+      "id": "modulos",
+      "nombre": "módulos",
+      "categoría": "modulos",
+      "objetivo": "Partición de código con import/export nombrados.",
+      "funciones": ["importar { … } desde \"ruta\"", "exportar { … }", "alias como", "rutas ./ y quetzal/"],
+      "api": [],
+      "doc": "modulos.md",
+      "keywords": ["importar", "exportar", "desde", "como"]
+    },
+    {
+      "id": "api-consola",
+      "nombre": "consola",
+      "categoría": "stdlib",
+      "objetivo": "E/S de terminal global (sin import).",
+      "funciones": ["salida colorizada", "entrada con/sin eco"],
+      "api": [
+        "consola.mostrar(texto)",
+        "consola.mostrar_error(texto)",
+        "consola.mostrar_advertencia(texto)",
+        "consola.mostrar_exito(texto)",
+        "consola.mostrar_informacion(texto)",
+        "consola.pedir(texto)",
+        "consola.pedir_secreto(texto)"
+      ],
+      "doc": "modulos-nativos.md#consola",
+      "import": null
+    },
+    {
+      "id": "api-matematica",
+      "nombre": "Matemática",
+      "categoría": "stdlib",
+      "objetivo": "Constantes y funciones matemáticas.",
+      "funciones": ["aritmética", "trigo", "logs", "redondeo", "estadística", "aleatorios"],
+      "api": [
+        "PI", "TAU", "E",
+        "sumar", "restar", "multiplicar", "dividir", "potencia", "absoluto",
+        "seno", "coseno", "tangente", "grados_a_radianes", "radianes_a_grados", "hipotenusa",
+        "logaritmo", "logaritmo_base", "exponencial", "raiz_cuadrada",
+        "redondear", "piso", "techo",
+        "promedio", "maximo", "minimo", "suma_total", "producto_total",
+        "aleatorio", "aleatorio_rango"
+      ],
+      "doc": "modulos-nativos.md#matematica",
+      "import": "importar { Matemática } desde \"quetzal/matemática\""
+    },
+    {
+      "id": "api-tiempo",
+      "nombre": "Tiempo",
+      "categoría": "stdlib",
+      "objetivo": "Fechas, horas, zonas y aritmética temporal.",
+      "funciones": ["constructores", "componentes", "formateo", "comparación", "zonas"],
+      "api": [
+        "ahora", "ahora_utc", "ahora_en", "hoy", "marca", "desde_marca", "analizar",
+        "zona_local", "zonas", "es_bisiesto", "dias_en_mes",
+        "año", "mes", "dia", "hora", "minuto", "segundo", "milisegundo",
+        "dia_semana", "dia_año", "texto", "texto_fecha", "texto_hora", "formatear",
+        "agregar_años", "agregar_meses", "agregar_dias", "agregar_horas", "agregar_minutos", "agregar_segundos",
+        "diferencia", "es_antes", "es_despues", "es_mismo_instante", "es_mismo_dia",
+        "zona", "desfase", "en_zona", "en_utc", "en_local"
+      ],
+      "doc": "modulos-nativos.md#tiempo",
+      "import": "importar { Tiempo } desde \"quetzal/tiempo\""
+    },
+    {
+      "id": "api-motor",
+      "nombre": "ExpresiónRegular",
+      "categoría": "stdlib",
+      "objetivo": "Regex inmutables con banderas por copia.",
+      "funciones": ["match", "buscar", "reemplazar", "dividir", "fábricas", "flags"],
+      "api": [
+        "escapar", "nueva_desde_comodín", "nueva_solo_dígitos", "nueva_solo_letras", "nueva_correo", "nueva_url", "nueva_ipv4",
+        "coincide", "coincide_desde_inicio", "coincide_completo",
+        "buscar", "buscar_posicion", "buscar_todo", "buscar_grupos", "contar",
+        "reemplazar", "reemplazar_todo", "dividir",
+        "es_válida", "diagnosticar", "patrón", "grupos_nombrados",
+        "con_ignorar_mayúsculas", "con_multilínea", "con_punto_total", "con_unicode"
+      ],
+      "doc": "modulos-nativos.md#motor",
+      "import": "importar { ExpresiónRegular } desde \"quetzal/motor\""
+    },
+    {
+      "id": "api-sistema-archivos",
+      "nombre": "sistema_archivos",
+      "categoría": "stdlib",
+      "objetivo": "FS tipado con permisos: archivos, Bits, Flujo, Observador.",
+      "funciones": ["sync/async _asincrono", "lectura/escritura/todo", "cursor Flujo", "watch Observador"],
+      "api": [
+        "SistemaArchivos.leer", "escribir", "anexar", "abrir_flujo", "observar",
+        "crear_directorio", "crear_directorios", "listar_*", "existe", "abrir", "borrar", "copiar", "mover", "renombrar",
+        "Archivo.*", "Bits.*", "Flujo.*", "Observador.*", "EventoArchivo.*"
+      ],
+      "doc": "modulos-nativos.md#sistema-archivos",
+      "import": "importar { SistemaArchivos, Archivo, Bits, Flujo, Observador, EventoArchivo } desde \"quetzal/sistema_archivos\"",
+      "permiso": "sistema-archivos"
+    },
+    {
+      "id": "api-red",
+      "nombre": "red",
+      "categoría": "stdlib",
+      "objetivo": "HTTP servidor/cliente en español (Express/Axios-like) + multipart.",
+      "funciones": [
+        "ServidorHttp / Enrutador / Ruta",
+        "verbos: obtener publicar poner parchear borrar cabecera opciones consultar rastrear conectar",
+        "interceptores y callbacks nombrados",
+        "ClienteHttp sync/async",
+        "Formulario / ParteArchivo",
+        "HttpCodigos"
+      ],
+      "api": [
+        "ServidorHttp.escuchar", "usar", "manejar_errores", "estaticos",
+        "PeticionEntrante.*", "RespuestaSaliente.*", "Continuacion.*",
+        "ClienteHttp.<verbo>", "ClienteHttp.<verbo>_asincrono",
+        "Formulario.campo", "Formulario.archivo", "HttpCodigos.*"
+      ],
+      "doc": "modulos-nativos.md#red",
+      "import": "importar { ServidorHttp, ClienteHttp, Formulario, HttpCodigos, … } desde \"quetzal/red\"",
+      "permiso": "red"
+    },
+    {
+      "id": "manifiesto",
+      "nombre": "manifiesto quetzal.json",
+      "categoría": "proyecto",
+      "objetivo": "Metadatos, entrada, dependencias y permisos del proyecto.",
+      "funciones": ["versión", "aplicación", "entrada", "tipo", "quetzal", "permisos", "dependencias"],
+      "api": [],
+      "doc": "manifiesto.md",
+      "schema": "esquema_quetzal.json"
+    }
+  ],
+
+  "documentos": {
+    "README.md": "Índice humano + grafo pipeline + catálogo",
+    "identidad.md": "Qué es Quetzal (nunca perder)",
+    "catalogo.json": "Este archivo — inventario machine-readable",
+    "arquitectura.md": "Arquitectura del intérprete: crates, capas, pipeline VM",
+    "gramatica.ebnf.md": "Gramática formal EBNF",
+    "gramatica.json": "Gramática JSON para IA/parsers",
+    "diagramas.md": "Railroad Mermaid + grafo de flujo",
+    "tokens.md": "Léxico",
+    "tipos.md": "Tipos y mutabilidad",
+    "control-flujo.md": "Control e excepciones",
+    "funciones.md": "Funciones y callbacks",
+    "poo.md": "Objetos y prototipos",
+    "modulos.md": "Import/export",
+    "metodos-nativos.md": "API por tipo",
+    "modulos-nativos.md": "Biblioteca estándar",
+    "manifiesto.md": "quetzal.json",
+    "esquema_quetzal.json": "JSON Schema manifiesto",
+    "anomalias.md": "Inconsistencias conocidas"
+  },
+
+  "consumo": {
+    "humano": "Empezar por identidad.md → README → tipos → diagramas",
+    "ia": "Cargar catalogo.json + gramatica.json + esquema_quetzal.json; usar docs .md como detalle",
+    "máquina": "Validar quetzal.json con esquema_quetzal.json; parsear con gramatica.json / EBNF"
+  }
+}

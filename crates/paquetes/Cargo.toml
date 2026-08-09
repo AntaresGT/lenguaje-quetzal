@@ -1,0 +1,26 @@
+[package]
+name = "paquetes"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Gestión de proyectos y dependencias del Lenguaje Quetzal: quetzal.json, quetzal.bloquear e instalación."
+
+[dependencies]
+nucleo = { workspace = true }
+bytecode = { workspace = true }
+
+# Lectura y escritura de quetzal.json y quetzal.bloquear.
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Versionado semántico de dependencias.
+semver = { workspace = true }
+
+# Hashes de integridad para el archivo de bloqueo y la cache.
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+# Tablas ordenadas para dependencias.
+indexmap = { workspace = true }

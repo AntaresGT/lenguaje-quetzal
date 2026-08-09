@@ -1,0 +1,15 @@
+[package]
+name = "pruebas_semantica"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+publish = false
+description = "Pruebas de integración del análisis semántico de Quetzal."
+
+[dependencies]
+nucleo = { workspace = true }
+sintaxis = { workspace = true }
+semantica = { workspace = true }
+
+[lib]
+path = "lib.rs"

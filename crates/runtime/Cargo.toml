@@ -1,0 +1,24 @@
+[package]
+name = "runtime"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Runtime del Lenguaje Quetzal: permisos, consola y acceso al sistema."
+
+[dependencies]
+nucleo = { workspace = true }
+
+# Permisos declarados en quetzal.json (el runtime los aplica).
+paquetes = { workspace = true }
+
+# Colores para consola.mostrar_error / advertencia / exito / informacion.
+owo-colors = { workspace = true }
+
+# Entrada secreta en consola (pedir_secreto).
+rpassword = { workspace = true }
+
+# Serialización de la configuración de permisos.
+serde = { workspace = true }
+serde_json = { workspace = true }

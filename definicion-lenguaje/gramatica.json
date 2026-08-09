@@ -1,0 +1,802 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://lenguaje-quetzal/gramatica.json",
+  "title": "Gramática del Lenguaje Quetzal",
+  "description": "Definición formal y machine-readable de la sintaxis de Quetzal. Usar junto a catalogo.json (features/API) e identidad.md (qué es Quetzal). Optimizada para IA, parsers y highlighters.",
+  "version": "0.1.0",
+  "companion_docs": ["identidad.md", "catalogo.json", "esquema_quetzal.json"],
+  "language": "es",
+  "case_sensitive": true,
+  "whitespace_significant": false,
+  "comment_styles": [
+    { "token": "//", "kind": "line", "to": "eol" }
+  ],
+  "tokens": {
+    "identifier": "[A-Za-z_áéíóúÁÉÍÓÚñÑ][A-Za-z0-9_áéíóúÁÉÍÓÚñÑ]*",
+    "integer": "\\d+",
+    "decimal": "\\d+\\.\\d+",
+    "string": "\"(\\\\.|[^\"\\\\])*\"",
+    "template_string": "t\"(\\\\{|\\\\}|[^{}\"\\\\])*\""
+  },
+  "keywords": {
+    "types": ["entero", "numero", "número", "texto", "log", "vacio", "vacío", "lista", "jsn"],
+    "control_flow": ["si", "sino", "mientras", "para", "hacer", "en", "cada", "romper", "continuar", "retornar"],
+    "exceptions": ["intentar", "capturar", "finalmente", "lanzar", "excepcion", "excepción"],
+    "oop": ["objeto", "prototipo", "hereda", "implementa", "como", "nuevo", "esto", "padre", "publico", "público", "privado", "libre", "opcional"],
+    "async": ["asincrono", "asincróno", "esperar"],
+    "modules": ["importar", "exportar", "desde"],
+    "mutability": ["var"],
+    "literals": ["verdadero", "falso", "nulo"]
+  },
+  "operators": {
+    "arithmetic": ["+", "-", "*", "/", "%", "++", "--"],
+    "assignment": ["=", "+=", "-=", "*=", "/=", "%="],
+    "comparison": ["==", "!=", "<", ">", "<=", ">="],
+    "logical": ["!", "&&", "||", "y", "o", "no"],
+    "ternary": ["?", ":"],
+    "member_access": [".", "[", "]"],
+    "other": ["(", ")", "{", "}", ",", ";"]
+  },
+  "start": "programa",
+  "productions": {
+    "programa": {
+      "type": "sequence",
+      "items": [{ "$ref": "#/productions/lista_sentencias" }]
+    },
+    "lista_sentencias": {
+      "type": "zero_or_more",
+      "of": { "$ref": "#/productions/sentencia" }
+    },
+    "sentencia": {
+      "type": "choice",
+      "options": [
+        { "$ref": "#/productions/declaracion" },
+        { "$ref": "#/productions/asignacion" },
+        { "$ref": "#/productions/estructura_control" },
+        { "$ref": "#/productions/sentencia_expresion" }
+      ]
+    },
+    "tipo": {
+      "type": "choice",
+      "options": [
+        { "$ref": "#/productions/tipo_primitivo" },
+        { "$ref": "#/productions/tipo_compuesto" }
+      ]
+    },
+    "tipo_primitivo": {
+      "type": "choice",
+      "options": [
+        { "literal": "entero" },
+        { "literal": "numero" },
+        { "literal": "número" },
+        { "literal": "texto" },
+        { "literal": "log" },
+        { "literal": "vacio" },
+        { "literal": "vacío" }
+      ]
+    },
+    "tipo_compuesto": {
+      "type": "choice",
+      "options": [
+        { "$ref": "#/productions/tipo_lista" },
+        { "literal": "jsn" }
+      ]
+    },
+    "tipo_lista": {
+      "type": "sequence",
+      "items": [
+        { "literal": "lista" },
+        { "type": "optional", "of": {
+          "type": "sequence",
+          "items": [
+            { "literal": "<" },
+            { "$ref": "#/productions/tipo" },
+            { "literal": ">" }
+          ]
+        }}
+      ]
+    },
+    "declaracion": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/productions/tipo" },
+        { "type": "optional", "of": { "literal": "var" } },
+        { "$ref": "#/tokens/identifier" },
+        { "literal": "=" },
+        { "$ref": "#/productions/expresion" }
+      ]
+    },
+    "asignacion": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/productions/asignable" },
+        { "$ref": "#/productions/op_asignacion" },
+        { "$ref": "#/productions/expresion" },
+        { "literal": ";" }
+      ]
+    },
+    "asignable": {
+      "type": "choice",
+      "options": [
+        { "$ref": "#/tokens/identifier" },
+        { "$ref": "#/productions/expresion_miembro" }
+      ]
+    },
+    "op_asignacion": {
+      "type": "choice",
+      "options": [
+        { "literal": "=" },
+        { "literal": "+=" },
+        { "literal": "-=" },
+        { "literal": "*=" },
+        { "literal": "/=" },
+        { "literal": "%=" }
+      ]
+    },
+    "estructura_control": {
+      "type": "choice",
+      "options": [
+        { "$ref": "#/productions/condicional" },
+        { "$ref": "#/productions/bucle" },
+        { "$ref": "#/productions/intentar" },
+        { "$ref": "#/productions/lanzar" },
+        { "$ref": "#/productions/retorno" },
+        { "$ref": "#/productions/romper" },
+        { "$ref": "#/productions/continuar" }
+      ]
+    },
+    "condicional": {
+      "type": "sequence",
+      "items": [
+        { "literal": "si" },
+        { "literal": "(" },
+        { "$ref": "#/productions/expresion" },
+        { "literal": ")" },
+        { "$ref": "#/productions/bloque" },
+        { "type": "zero_or_more", "of": {
+          "type": "sequence",
+          "items": [
+            { "literal": "sino" },
+            { "literal": "si" },
+            { "literal": "(" },
+            { "$ref": "#/productions/expresion" },
+            { "literal": ")" },
+            { "$ref": "#/productions/bloque" }
+          ]
+        }},
+        { "type": "optional", "of": {
+          "type": "sequence",
+          "items": [
+            { "literal": "sino" },
+            { "$ref": "#/productions/bloque" }
+          ]
+        }}
+      ]
+    },
+    "bucle": {
+      "type": "choice",
+      "options": [
+        { "$ref": "#/productions/bucle_mientras" },
+        { "$ref": "#/productions/bucle_hacer" },
+        { "$ref": "#/productions/bucle_para_c" },
+        { "$ref": "#/productions/bucle_para_coleccion" }
+      ]
+    },
+    "bucle_mientras": {
+      "type": "sequence",
+      "items": [
+        { "literal": "mientras" },
+        { "literal": "(" },
+        { "$ref": "#/productions/expresion" },
+        { "literal": ")" },
+        { "$ref": "#/productions/bloque" }
+      ]
+    },
+    "bucle_hacer": {
+      "type": "sequence",
+      "items": [
+        { "literal": "hacer" },
+        { "$ref": "#/productions/bloque" },
+        { "literal": "mientras" },
+        { "literal": "(" },
+        { "$ref": "#/productions/expresion" },
+        { "literal": ")" },
+        { "literal": ";" }
+      ]
+    },
+    "bucle_para_c": {
+      "type": "sequence",
+      "items": [
+        { "literal": "para" },
+        { "literal": "(" },
+        { "$ref": "#/productions/declaracion_for" },
+        { "literal": ";" },
+        { "$ref": "#/productions/expresion" },
+        { "literal": ";" },
+        { "$ref": "#/productions/expresion" },
+        { "literal": ")" },
+        { "$ref": "#/productions/bloque" }
+      ]
+    },
+    "declaracion_for": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/productions/tipo" },
+        { "type": "optional", "of": { "literal": "var" } },
+        { "$ref": "#/tokens/identifier" },
+        { "literal": "=" },
+        { "$ref": "#/productions/expresion" }
+      ]
+    },
+    "bucle_para_coleccion": {
+      "type": "sequence",
+      "items": [
+        { "literal": "para" },
+        { "literal": "(" },
+        { "$ref": "#/productions/tipo" },
+        { "literal": "var" },
+        { "$ref": "#/tokens/identifier" },
+        { "type": "choice", "options": [
+          { "literal": "en" },
+          { "literal": "cada" }
+        ]},
+        { "$ref": "#/productions/expresion" },
+        { "literal": ")" },
+        { "$ref": "#/productions/bloque" }
+      ]
+    },
+    "romper": {
+      "type": "sequence",
+      "items": [
+        { "literal": "romper" },
+        { "literal": ";" }
+      ]
+    },
+    "continuar": {
+      "type": "sequence",
+      "items": [
+        { "literal": "continuar" },
+        { "literal": ";" }
+      ]
+    },
+    "retorno": {
+      "type": "sequence",
+      "items": [
+        { "literal": "retornar" },
+        { "type": "optional", "of": { "$ref": "#/productions/expresion" } },
+        { "literal": ";" }
+      ]
+    },
+    "intentar": {
+      "type": "sequence",
+      "items": [
+        { "literal": "intentar" },
+        { "$ref": "#/productions/bloque" },
+        { "literal": "capturar" },
+        { "literal": "(" },
+        { "type": "choice", "options": [
+          { "literal": "excepcion" },
+          { "literal": "excepción" }
+        ]},
+        { "$ref": "#/tokens/identifier" },
+        { "literal": ")" },
+        { "$ref": "#/productions/bloque" },
+        { "type": "optional", "of": {
+          "type": "sequence",
+          "items": [
+            { "literal": "finalmente" },
+            { "$ref": "#/productions/bloque" }
+          ]
+        }}
+      ]
+    },
+    "lanzar": {
+      "type": "sequence",
+      "items": [
+        { "literal": "lanzar" },
+        { "$ref": "#/productions/expresion" },
+        { "literal": ";" }
+      ]
+    },
+    "bloque": {
+      "type": "sequence",
+      "items": [
+        { "literal": "{" },
+        { "$ref": "#/productions/lista_sentencias" },
+        { "literal": "}" }
+      ]
+    },
+    "funcion": {
+      "type": "sequence",
+      "items": [
+        { "type": "optional", "of": {
+          "type": "choice", "options": [
+            { "literal": "asincrono" },
+            { "literal": "asincróno" }
+          ]
+        }},
+        { "$ref": "#/productions/tipo" },
+        { "$ref": "#/tokens/identifier" },
+        { "literal": "(" },
+        { "type": "optional", "of": { "$ref": "#/productions/parametros" } },
+        { "literal": ")" },
+        { "$ref": "#/productions/bloque" }
+      ]
+    },
+    "parametros": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/productions/parametro" },
+        { "type": "zero_or_more", "of": {
+          "type": "sequence",
+          "items": [
+            { "literal": "," },
+            { "$ref": "#/productions/parametro" }
+          ]
+        }}
+      ]
+    },
+    "parametro": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/productions/tipo" },
+        { "type": "optional", "of": { "literal": "var" } },
+        { "$ref": "#/tokens/identifier" }
+      ]
+    },
+    "objeto": {
+      "type": "sequence",
+      "items": [
+        { "literal": "objeto" },
+        { "$ref": "#/tokens/identifier" },
+        { "type": "optional", "of": {
+          "type": "sequence",
+          "items": [
+            { "literal": "hereda" },
+            { "$ref": "#/productions/lista_identificadores" }
+          ]
+        }},
+        { "type": "optional", "of": {
+          "type": "sequence",
+          "items": [
+            { "literal": "como" },
+            { "$ref": "#/tokens/identifier" }
+          ]
+        }},
+        { "type": "optional", "of": {
+          "type": "sequence",
+          "items": [
+            { "literal": "implementa" },
+            { "$ref": "#/productions/lista_identificadores" }
+          ]
+        }},
+        { "literal": "{" },
+        { "type": "zero_or_more", "of": { "$ref": "#/productions/seccion_miembro" } },
+        { "literal": "}" }
+      ]
+    },
+    "prototipo": {
+      "type": "sequence",
+      "items": [
+        { "literal": "prototipo" },
+        { "$ref": "#/tokens/identifier" },
+        { "literal": "{" },
+        { "type": "zero_or_more", "of": { "$ref": "#/productions/seccion_miembro" } },
+        { "literal": "}" }
+      ]
+    },
+    "lista_identificadores": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/tokens/identifier" },
+        { "type": "zero_or_more", "of": {
+          "type": "sequence",
+          "items": [
+            { "literal": "," },
+            { "$ref": "#/tokens/identifier" }
+          ]
+        }}
+      ]
+    },
+    "seccion_miembro": {
+      "type": "sequence",
+      "items": [
+        { "type": "choice", "options": [
+          { "literal": "privado" },
+          { "type": "choice", "options": [
+            { "literal": "publico" },
+            { "literal": "público" }
+          ]}
+        ]},
+        { "literal": ":" },
+        { "type": "zero_or_more", "of": { "$ref": "#/productions/miembro" } }
+      ]
+    },
+    "miembro": {
+      "type": "choice",
+      "options": [
+        { "$ref": "#/productions/declaracion" },
+        { "$ref": "#/productions/funcion" },
+        { "$ref": "#/productions/declaracion_libre" }
+      ]
+    },
+    "declaracion_libre": {
+      "type": "sequence",
+      "items": [
+        { "literal": "libre" },
+        { "type": "choice", "options": [
+          { "$ref": "#/productions/declaracion" },
+          { "$ref": "#/productions/funcion" }
+        ]}
+      ]
+    },
+    "importar": {
+      "type": "sequence",
+      "items": [
+        { "literal": "importar" },
+        { "literal": "{" },
+        { "$ref": "#/productions/lista_importaciones" },
+        { "literal": "}" },
+        { "literal": "desde" },
+        { "$ref": "#/tokens/string" }
+      ]
+    },
+    "lista_importaciones": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/productions/item_importacion" },
+        { "type": "zero_or_more", "of": {
+          "type": "sequence",
+          "items": [
+            { "literal": "," },
+            { "$ref": "#/productions/item_importacion" }
+          ]
+        }}
+      ]
+    },
+    "item_importacion": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/tokens/identifier" },
+        { "type": "optional", "of": {
+          "type": "sequence",
+          "items": [
+            { "literal": "como" },
+            { "$ref": "#/tokens/identifier" }
+          ]
+        }}
+      ]
+    },
+    "exportar": {
+      "type": "sequence",
+      "items": [
+        { "literal": "exportar" },
+        { "literal": "{" },
+        { "$ref": "#/productions/lista_identificadores" },
+        { "literal": "}" },
+        { "literal": ";" }
+      ]
+    },
+    "expresion": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/productions/expresion_ternaria" }
+      ]
+    },
+    "expresion_ternaria": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/productions/expresion_or" },
+        { "type": "optional", "of": {
+          "type": "sequence",
+          "items": [
+            { "literal": "?" },
+            { "$ref": "#/productions/expresion" },
+            { "literal": ":" },
+            { "$ref": "#/productions/expresion_ternaria" }
+          ]
+        }}
+      ]
+    },
+    "expresion_or": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/productions/expresion_and" },
+        { "type": "zero_or_more", "of": {
+          "type": "sequence",
+          "items": [
+            { "literal": "||" },
+            { "$ref": "#/productions/expresion_and" }
+          ]
+        }}
+      ]
+    },
+    "expresion_and": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/productions/expresion_igualdad" },
+        { "type": "zero_or_more", "of": {
+          "type": "sequence",
+          "items": [
+            { "literal": "&&" },
+            { "$ref": "#/productions/expresion_igualdad" }
+          ]
+        }}
+      ]
+    },
+    "expresion_igualdad": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/productions/expresion_comparacion" },
+        { "type": "zero_or_more", "of": {
+          "type": "sequence",
+          "items": [
+            { "type": "choice", "options": [
+              { "literal": "==" },
+              { "literal": "!=" }
+            ]},
+            { "$ref": "#/productions/expresion_comparacion" }
+          ]
+        }}
+      ]
+    },
+    "expresion_comparacion": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/productions/expresion_suma" },
+        { "type": "zero_or_more", "of": {
+          "type": "sequence",
+          "items": [
+            { "type": "choice", "options": [
+              { "literal": "<" },
+              { "literal": ">" },
+              { "literal": "<=" },
+              { "literal": ">=" }
+            ]},
+            { "$ref": "#/productions/expresion_suma" }
+          ]
+        }}
+      ]
+    },
+    "expresion_suma": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/productions/expresion_mult" },
+        { "type": "zero_or_more", "of": {
+          "type": "sequence",
+          "items": [
+            { "type": "choice", "options": [
+              { "literal": "+" },
+              { "literal": "-" }
+            ]},
+            { "$ref": "#/productions/expresion_mult" }
+          ]
+        }}
+      ]
+    },
+    "expresion_mult": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/productions/expresion_unaria" },
+        { "type": "zero_or_more", "of": {
+          "type": "sequence",
+          "items": [
+            { "type": "choice", "options": [
+              { "literal": "*" },
+              { "literal": "/" },
+              { "literal": "%" }
+            ]},
+            { "$ref": "#/productions/expresion_unaria" }
+          ]
+        }}
+      ]
+    },
+    "expresion_unaria": {
+      "type": "sequence",
+      "items": [
+        { "type": "optional", "of": {
+          "type": "choice", "options": [
+            { "literal": "!" },
+            { "literal": "-" },
+            { "literal": "++" },
+            { "literal": "--" }
+          ]
+        }},
+        { "$ref": "#/productions/expresion_postfija" }
+      ]
+    },
+    "expresion_postfija": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/productions/expresion_primaria" },
+        { "type": "zero_or_more", "of": {
+          "type": "choice", "options": [
+            {
+              "type": "sequence",
+              "items": [
+                { "literal": "." },
+                { "$ref": "#/tokens/identifier" }
+              ]
+            },
+            {
+              "type": "sequence",
+              "items": [
+                { "literal": "[" },
+                { "$ref": "#/productions/expresion" },
+                { "literal": "]" }
+              ]
+            },
+            {
+              "type": "sequence",
+              "items": [
+                { "literal": "(" },
+                { "type": "optional", "of": { "$ref": "#/productions/argumentos" } },
+                { "literal": ")" }
+              ]
+            },
+            { "literal": "++" },
+            { "literal": "--" }
+          ]
+        }}
+      ]
+    },
+    "expresion_primaria": {
+      "type": "choice",
+      "options": [
+        { "$ref": "#/productions/literal" },
+        { "$ref": "#/tokens/identifier" },
+        { "literal": "esto" },
+        { "$ref": "#/productions/acceso_padre" },
+        {
+          "type": "sequence",
+          "items": [
+            { "literal": "(" },
+            { "$ref": "#/productions/expresion" },
+            { "literal": ")" }
+          ]
+        },
+        {
+          "type": "sequence",
+          "items": [
+            { "literal": "nuevo" },
+            { "$ref": "#/tokens/identifier" },
+            { "literal": "(" },
+            { "type": "optional", "of": { "$ref": "#/productions/argumentos" } },
+            { "literal": ")" }
+          ]
+        }
+      ]
+    },
+    "acceso_padre": {
+      "type": "sequence",
+      "items": [
+        { "literal": "padre" },
+        { "type": "one_or_more", "of": {
+          "type": "sequence",
+          "items": [
+            { "literal": "." },
+            { "$ref": "#/tokens/identifier" },
+            { "type": "optional", "of": {
+              "type": "sequence",
+              "items": [
+                { "literal": "(" },
+                { "type": "optional", "of": { "$ref": "#/productions/argumentos" } },
+                { "literal": ")" }
+              ]
+            }}
+          ]
+        }}
+      ]
+    },
+    "literal": {
+      "type": "choice",
+      "options": [
+        { "$ref": "#/productions/literal_numero" },
+        { "$ref": "#/productions/literal_texto" },
+        { "$ref": "#/productions/literal_texto_interpolado" },
+        { "$ref": "#/productions/literal_logico" },
+        { "literal": "nulo" },
+        { "$ref": "#/productions/literal_lista" },
+        { "$ref": "#/productions/literal_objeto" }
+      ]
+    },
+    "literal_numero": {
+      "type": "choice",
+      "options": [
+        { "$ref": "#/tokens/integer" },
+        { "$ref": "#/tokens/decimal" }
+      ]
+    },
+    "literal_texto": { "$ref": "#/tokens/string" },
+    "literal_texto_interpolado": { "$ref": "#/tokens/template_string" },
+    "literal_logico": {
+      "type": "choice",
+      "options": [
+        { "literal": "verdadero" },
+        { "literal": "falso" }
+      ]
+    },
+    "literal_lista": {
+      "type": "sequence",
+      "items": [
+        { "literal": "[" },
+        { "type": "optional", "of": {
+          "type": "sequence",
+          "items": [
+            { "$ref": "#/productions/expresion" },
+            { "type": "zero_or_more", "of": {
+              "type": "sequence",
+              "items": [
+                { "literal": "," },
+                { "$ref": "#/productions/expresion" }
+              ]
+            }}
+          ]
+        }},
+        { "literal": "]" }
+      ]
+    },
+    "literal_objeto": {
+      "type": "sequence",
+      "items": [
+        { "literal": "{" },
+        { "type": "optional", "of": {
+          "type": "sequence",
+          "items": [
+            { "$ref": "#/productions/par" },
+            { "type": "zero_or_more", "of": {
+              "type": "sequence",
+              "items": [
+                { "literal": "," },
+                { "$ref": "#/productions/par" }
+              ]
+            }}
+          ]
+        }},
+        { "literal": "}" }
+      ]
+    },
+    "par": {
+      "type": "sequence",
+      "items": [
+        { "type": "choice", "options": [
+          { "$ref": "#/tokens/string" },
+          { "$ref": "#/tokens/identifier" }
+        ]},
+        { "literal": ":" },
+        { "$ref": "#/productions/expresion" }
+      ]
+    },
+    "argumentos": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/productions/expresion" },
+        { "type": "zero_or_more", "of": {
+          "type": "sequence",
+          "items": [
+            { "literal": "," },
+            { "$ref": "#/productions/expresion" }
+          ]
+        }}
+      ]
+    },
+    "sentencia_expresion": {
+      "type": "sequence",
+      "items": [
+        { "$ref": "#/productions/expresion" },
+        { "literal": ";" }
+      ]
+    }
+  },
+  "precedencia_operadores": [
+    { "nivel": 1, "operadores": ["?:"], "asociatividad": "derecha" },
+    { "nivel": 2, "operadores": ["||"], "asociatividad": "izquierda" },
+    { "nivel": 3, "operadores": ["&&"], "asociatividad": "izquierda" },
+    { "nivel": 4, "operadores": ["==", "!="], "asociatividad": "izquierda" },
+    { "nivel": 5, "operadores": ["<", "<=", ">", ">="], "asociatividad": "izquierda" },
+    { "nivel": 6, "operadores": ["+", "-"], "asociatividad": "izquierda" },
+    { "nivel": 7, "operadores": ["*", "/", "%"], "asociatividad": "izquierda" },
+    { "nivel": 8, "operadores": ["!", "-", "++", "--"], "asociatividad": "prefijo" },
+    { "nivel": 9, "operadores": [".", "()", "[]", "++", "--"], "asociatividad": "postfijo" }
+  ]
+}

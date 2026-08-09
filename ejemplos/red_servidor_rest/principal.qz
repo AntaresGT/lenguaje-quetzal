@@ -1,0 +1,138 @@
+// Módulo nativo quetzal/red — un servicio REST con ServidorHttp
+//
+// ServidorHttp y Enrutador siguen el modelo de Express 5 adaptado a Quetzal:
+// una cadena de interceptores por capa y un manejador final por ruta. Quetzal
+// no tiene funciones anónimas: cada manejador y cada interceptor se declara
+// con nombre y se pasa por referencia.
+//
+// Firmas:
+//   manejador   (PeticionEntrante, RespuestaSaliente)
+//   interceptor (PeticionEntrante, RespuestaSaliente, Continuacion)
+//   errores     (ErrorHttp, PeticionEntrante, RespuestaSaliente, Continuacion)
+//
+// El permiso "red" habilitado es obligatorio para escuchar un puerto
+// (ver quetzal.json).
+
+importar {
+    ServidorHttp,
+    Enrutador,
+    ClienteHttp,
+    PeticionEntrante,
+    RespuestaSaliente,
+    Continuacion,
+    ErrorHttp,
+    RespuestaHttp,
+    HttpCodigos
+} desde "quetzal/red"
+
+// ── Interceptores ────────────────────────────────────────────────────────
+
+// Un interceptor recibe la Continuacion: mientras llame a siguiente(), la
+// petición sigue bajando por la cadena. Si responde y no llama a siguiente(),
+// la cadena se corta ahí.
+vacio bitacora(PeticionEntrante peticion, RespuestaSaliente respuesta, Continuacion siguiente) {
+    consola.mostrar(t"-> {peticion.metodo_espanol()} {peticion.ruta()}")
+    siguiente.siguiente()
+}
+
+vacio exigirClave(PeticionEntrante peticion, RespuestaSaliente respuesta, Continuacion siguiente) {
+    si (peticion.cabecera("X-Clave") == nulo) {
+        respuesta.estado(HttpCodigos.NO_AUTENTICADO).jsn({ error: "falta la cabecera X-Clave" })
+        retornar
+    }
+    siguiente.siguiente()
+}
+
+// ── Manejadores ──────────────────────────────────────────────────────────
+
+vacio verUsuario(PeticionEntrante peticion, RespuestaSaliente respuesta) {
+    respuesta.jsn({
+        id: peticion.parametro("id"),
+        detalle: peticion.consulta_valor("detalle")
+    })
+}
+
+vacio crearUsuario(PeticionEntrante peticion, RespuestaSaliente respuesta) {
+    jsn entrada = peticion.cuerpo()
+    respuesta.estado(HttpCodigos.CREADO).jsn({ creado: entrada.nombre })
+}
+
+// QUERY (RFC 10008): es seguro e idempotente como obtener, pero lleva la
+// consulta en el cuerpo en vez de la URL.
+vacio buscarUsuarios(PeticionEntrante peticion, RespuestaSaliente respuesta) {
+    jsn criterio = peticion.cuerpo()
+    respuesta.jsn({
+        metodo: peticion.metodo(),
+        seguro: peticion.es_seguro(),
+        termino: criterio.termino,
+        resultados: ["Ana", "Beto"]
+    })
+}
+
+vacio simularFalla(PeticionEntrante peticion, RespuestaSaliente respuesta) {
+    lanzar "la base de datos no respondió"
+}
+
+// El manejador de errores va al final: recibe el ErrorHttp que produjo la
+// cadena anterior.
+vacio atenderError(ErrorHttp fallo, PeticionEntrante peticion, RespuestaSaliente respuesta, Continuacion siguiente) {
+    consola.mostrar_advertencia(t"fallo en {peticion.ruta()}: {fallo.mensaje()}")
+    respuesta.estado(HttpCodigos.ERROR_INTERNO).jsn({ error: fallo.mensaje() })
+}
+
+// ── Montaje ──────────────────────────────────────────────────────────────
+
+ServidorHttp servidor = nuevo ServidorHttp()
+Enrutador api = nuevo Enrutador()
+
+// usar sin ruta aplica a todo lo que cuelgue del enrutador.
+api.usar(bitacora)
+
+api.obtener("/usuarios/:id", verUsuario)
+api.publicar("/usuarios", exigirClave, crearUsuario)
+api.consultar("/usuarios", buscarUsuarios)
+api.obtener("/inestable", simularFalla)
+
+servidor.usar("/api", api)
+servidor.manejar_errores(atenderError)
+
+// escuchar(0) deja que el sistema elija un puerto libre; puerto() lo devuelve.
+servidor.escuchar(0)
+entero puerto = servidor.puerto()
+consola.mostrar(t"Servidor escuchando en http://127.0.0.1:{puerto}")
+
+// ── Un cliente contra el propio servidor ─────────────────────────────────
+//
+// El servidor vive en el mismo bucle de eventos, así que las peticiones se
+// hacen con la forma asincrónica: mientras se espera la respuesta, el bucle
+// sigue atendiendo las conexiones entrantes.
+
+ClienteHttp cliente = nuevo ClienteHttp({
+    base_url: t"http://127.0.0.1:{puerto}",
+    validar_estado: falso
+})
+
+RespuestaHttp usuario = esperar cliente.obtener_asincrono("/api/usuarios/42?detalle=completo")
+consola.mostrar(t"GET    -> {usuario.estado()} {usuario.cuerpo_texto()}")
+
+RespuestaHttp sinClave = esperar cliente.publicar_asincrono("/api/usuarios", { nombre: "Ana" })
+consola.mostrar(t"POST   -> {sinClave.estado()} {sinClave.cuerpo_texto()}")
+
+RespuestaHttp creado = esperar cliente.publicar_asincrono(
+    "/api/usuarios",
+    { nombre: "Ana" },
+    { cabeceras: { "X-Clave": "secreta" } }
+)
+consola.mostrar(t"POST   -> {creado.estado()} {creado.cuerpo_texto()}")
+
+RespuestaHttp busqueda = esperar cliente.consultar_asincrono("/api/usuarios", { termino: "an" })
+consola.mostrar(t"QUERY  -> {busqueda.estado()} {busqueda.cuerpo_texto()}")
+
+RespuestaHttp falla = esperar cliente.obtener_asincrono("/api/inestable")
+consola.mostrar(t"GET    -> {falla.estado()} {falla.cuerpo_texto()}")
+
+RespuestaHttp faltante = esperar cliente.obtener_asincrono("/api/nada")
+consola.mostrar(t"GET    -> {faltante.estado()} {HttpCodigos.descripcion(faltante.estado())}")
+
+servidor.cerrar()
+consola.mostrar_exito("Servicio REST detenido.")

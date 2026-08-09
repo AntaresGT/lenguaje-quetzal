@@ -1,0 +1,71 @@
+// Módulo nativo quetzal/sistema_archivos — el objeto SistemaArchivos
+//
+// SistemaArchivos expone funciones libres (no se instancia) para leer y
+// escribir archivos, crear y listar directorios y comprobar existencia.
+// Cada función tiene su par asíncrono con el sufijo _asincrono.
+//
+// Requiere el permiso "sistema-archivos" en quetzal.json con los
+// directorios y niveles de acceso que use el programa:
+//   lectura   -> listar, leer, existencia y metadatos
+//   escritura -> crear, escribir, copiar, mover, renombrar y borrar
+//   todo      -> lectura + escritura
+
+importar { SistemaArchivos } desde "quetzal/sistema_archivos"
+
+// ── Crear directorios ────────────────────────────────────────────────────
+
+// crear_directorios crea toda la ruta y no falla si ya existe.
+SistemaArchivos.crear_directorios("./salida/reportes/2026")
+
+// crear_directorio crea un solo nivel: falla si el padre no existe
+// o si el directorio ya existía.
+intentar {
+    SistemaArchivos.crear_directorio("./salida/temporal")
+} capturar (excepcion e) {
+    consola.mostrar_advertencia(e.mensaje)
+}
+
+// ── Escribir y leer texto ────────────────────────────────────────────────
+
+// escribir crea el archivo si no existe y sobrescribe si ya existía.
+SistemaArchivos.escribir("./salida/reportes/2026/ventas.csv", "producto,total\ncafé,120\n")
+
+texto ventas = SistemaArchivos.leer("./salida/reportes/2026/ventas.csv")
+consola.mostrar("Contenido del reporte:")
+consola.mostrar(ventas)
+
+// ── Comprobar existencia ─────────────────────────────────────────────────
+
+log hay_reporte = SistemaArchivos.existe("./salida/reportes/2026/ventas.csv")
+log es_archivo = SistemaArchivos.es_archivo("./salida/reportes/2026/ventas.csv")
+log es_directorio = SistemaArchivos.es_directorio("./salida/reportes")
+
+consola.mostrar(t"¿Existe el reporte? {hay_reporte}")
+consola.mostrar(t"¿Es archivo? {es_archivo}")
+consola.mostrar(t"¿Es directorio? {es_directorio}")
+
+// ── Listar directorios y archivos ────────────────────────────────────────
+
+// Ambas funciones devuelven lista<texto> con los nombres relativos al
+// directorio consultado (sin la ruta completa).
+lista<texto> años = SistemaArchivos.listar_directorios("./salida/reportes")
+para (texto var año en años) {
+    consola.mostrar(t"Carpeta de reportes: {año}")
+}
+
+lista<texto> archivos = SistemaArchivos.listar_archivos("./salida/reportes/2026")
+consola.mostrar(t"Archivos en 2026: {archivos.longitud()}")
+
+// ── Copiar, mover, renombrar y borrar ────────────────────────────────────
+
+SistemaArchivos.copiar("./salida/reportes/2026/ventas.csv", "./salida/reportes/2026/ventas_respaldo.csv")
+SistemaArchivos.renombrar("./salida/reportes/2026/ventas_respaldo.csv", "respaldo.csv")
+SistemaArchivos.mover("./salida/reportes/2026/respaldo.csv", "./salida/respaldo.csv")
+
+// borrar acepta un archivo o un directorio vacío.
+SistemaArchivos.borrar("./salida/respaldo.csv")
+
+// borrar_recursivo elimina un directorio con todo su contenido.
+SistemaArchivos.borrar_recursivo("./salida/temporal")
+
+consola.mostrar_exito("Operaciones del sistema de archivos completadas.")

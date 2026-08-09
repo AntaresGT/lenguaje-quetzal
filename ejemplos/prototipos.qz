@@ -140,9 +140,9 @@ objeto UsuarioServicio implementa ClienteApiRest, Persistible {
 
     jsn serializar() {
         retornar {
-            tabla: ambiente.tabla,
-            id: ambiente.id,
-            token: ambiente.tokenAcceso
+            tabla: esto.tabla,
+            id: esto.id,
+            token: esto.tokenAcceso
         }
     }
 }

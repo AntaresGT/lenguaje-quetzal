@@ -1,0 +1,54 @@
+// Módulo nativo quetzal/sistema_archivos — anexar al final de un archivo
+//
+// escribir siempre sobrescribe. Para agregar contenido sin perder lo que
+// ya estaba hay dos caminos:
+//   1. SistemaArchivos.anexar / anexar_bits (función libre, un solo paso)
+//   2. un Flujo abierto en modo "anexar" (varias escrituras seguidas)
+//
+// Ambos crean el archivo si todavía no existe y requieren el nivel
+// "escritura" (o "todo") sobre el directorio en quetzal.json.
+
+importar { SistemaArchivos, Flujo, Bits } desde "quetzal/sistema_archivos"
+
+SistemaArchivos.crear_directorios("./salida")
+
+// ── Anexar texto con la función libre ────────────────────────────────────
+
+// El archivo no existe todavía: anexar lo crea.
+SistemaArchivos.anexar("./salida/bitacora.log", "inicio del turno\n")
+SistemaArchivos.anexar("./salida/bitacora.log", "venta registrada\n")
+SistemaArchivos.anexar("./salida/bitacora.log", "cierre del turno\n")
+
+consola.mostrar("Bitácora completa:")
+consola.mostrar(SistemaArchivos.leer("./salida/bitacora.log"))
+
+// ── Anexar con un flujo en modo "anexar" ─────────────────────────────────
+
+// El flujo mantiene el archivo abierto: cada escritura va al final, sin
+// volver a abrirlo ni recorrerlo.
+Flujo bitacora = SistemaArchivos.abrir_flujo("./salida/bitacora.log", "anexar")
+bitacora.escribir("--- resumen ---\n")
+bitacora.escribir("total: 3 movimientos\n")
+bitacora.cerrar()
+
+consola.mostrar("Bitácora con el resumen:")
+consola.mostrar(SistemaArchivos.leer("./salida/bitacora.log"))
+
+// ── Anexar datos binarios ────────────────────────────────────────────────
+
+Bits marca = Bits.desde_lista([137, 80, 78, 71])
+SistemaArchivos.anexar_bits("./salida/firma.bin", marca)
+SistemaArchivos.anexar_bits("./salida/firma.bin", marca)
+
+Bits firma = SistemaArchivos.leer_bits("./salida/firma.bin")
+consola.mostrar(t"La firma acumuló {firma.longitud()} bytes")
+
+// ── Forma asíncrona ──────────────────────────────────────────────────────
+
+asincrono vacio registrar_cierre() {
+    esperar SistemaArchivos.anexar_asincrono("./salida/bitacora.log", "sincronizado\n")
+}
+
+esperar registrar_cierre()
+
+consola.mostrar_exito("Anexado completado sin perder contenido previo.")

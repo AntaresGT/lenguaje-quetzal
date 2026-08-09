@@ -1,0 +1,70 @@
+// Módulo nativo quetzal/sistema_archivos — Observador y EventoArchivo
+//
+// Un Observador vigila una ruta y entrega los cambios como instancias de
+// EventoArchivo: "creado", "modificado", "borrado" o "renombrado".
+//
+// El ciclo lo controla el programa: iniciar() empieza a vigilar y detener()
+// libera el recurso. Mientras un observador está activo el programa sigue
+// vivo, así que hay que detenerlo cuando ya no se necesita.
+//
+// Observar cambios exige el nivel "escritura" (o "todo") en quetzal.json.
+
+importar { SistemaArchivos, Observador, EventoArchivo } desde "quetzal/sistema_archivos"
+
+SistemaArchivos.crear_directorios("./vigilado")
+
+// El segundo argumento indica si también se vigilan los subdirectorios.
+Observador vigia = SistemaArchivos.observar("./vigilado", verdadero)
+vigia.iniciar()
+
+consola.mostrar(t"Vigilando {vigia.ruta()} (activo: {vigia.esta_activo()})")
+
+// ── Provocar cambios ─────────────────────────────────────────────────────
+
+SistemaArchivos.escribir("./vigilado/pedido.txt", "café x2")
+SistemaArchivos.anexar("./vigilado/pedido.txt", "\nazúcar x1")
+
+// ── Consumir los eventos ─────────────────────────────────────────────────
+
+// esperar_evento espera como máximo los milisegundos indicados y devuelve
+// nulo si no llegó nada (0 significa esperar sin límite).
+EventoArchivo var evento = vigia.esperar_evento(1500)
+mientras (evento != nulo) {
+    consola.mostrar(t"{evento.tipo()} → {evento.ruta()}")
+
+    // Solo los renombrados traen ruta anterior; en el resto es nulo.
+    si (evento.ruta_anterior() != nulo) {
+        consola.mostrar(t"    antes estaba en {evento.ruta_anterior()}")
+    }
+
+    evento = vigia.esperar_evento(1500)
+}
+consola.mostrar("No llegaron más cambios.")
+
+// ── Forma asíncrona ──────────────────────────────────────────────────────
+
+asincrono vacio esperar_borrado() {
+    SistemaArchivos.borrar("./vigilado/pedido.txt")
+
+    EventoArchivo borrado = esperar vigia.esperar_evento_asincrono(1500)
+    si (borrado != nulo) {
+        consola.mostrar(t"(asíncrono) {borrado.tipo()} → {borrado.ruta()}")
+    }
+}
+
+esperar esperar_borrado()
+
+// ── Cerrar el ciclo ──────────────────────────────────────────────────────
+
+// Sin detener, el observador seguiría vivo y el programa no terminaría.
+vigia.detener()
+consola.mostrar(t"Observador detenido (activo: {vigia.esta_activo()})")
+
+// Esperar eventos con el observador detenido es un error capturable.
+intentar {
+    vigia.esperar_evento(100)
+} capturar (excepcion e) {
+    consola.mostrar_advertencia(e.mensaje)
+}
+
+consola.mostrar_exito("Observación del sistema de archivos completada.")

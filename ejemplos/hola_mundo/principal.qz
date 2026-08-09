@@ -1,0 +1,7 @@
+// Archivo principal de hola_mundo
+
+consola.mostrar("¡Hola desde Quetzal!")
+
+entero a = 10
+entero b = 20
+consola.mostrar(a + b)

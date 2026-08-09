@@ -1,0 +1,11 @@
+[package]
+name = "lsp"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Servidor de lenguaje (LSP) del Lenguaje Quetzal. Esqueleto para fases futuras."
+
+[dependencies]
+nucleo = { workspace = true }

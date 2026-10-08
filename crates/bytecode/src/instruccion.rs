@@ -2,8 +2,8 @@
 
 use nucleo::Ubicacion;
 
-/// Instrucción de la VM. Los índices `u32` refieren a las tablas de
-/// constantes y nombres del [`crate::ModuloCompilado`].
+/// Instrucción de la VM. Los índices `u16` de locales/globales y los `u32`
+/// de constantes y nombres refieren a las tablas del [`crate::ModuloCompilado`].
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Instruccion {
     // ----- Pila y constantes -----
@@ -11,13 +11,21 @@ pub enum Instruccion {
     Duplicar,
     Desechar,
 
-    // ----- Variables -----
-    /// Declara una variable en el ámbito actual: `(nombre, mutable)`.
-    DeclararVariable(u32, bool),
-    CargarVariable(u32),
-    GuardarVariable(u32),
-    AbrirAmbito,
-    CerrarAmbito,
+    // ----- Locales (ranuras del marco) -----
+    CargarLocal(u16),
+    GuardarLocal(u16),
+    /// Pone `nulo` en las ranuras `[desde, ranuras_locales)` para soltar `Rc`.
+    LimpiarLocales(u16),
+
+    // ----- Globales del módulo (índice fijo) -----
+    CargarGlobal(u16),
+    /// Primera escritura de una global (no comprueba `var`).
+    DeclararGlobal(u16),
+    GuardarGlobal(u16),
+
+    // ----- Nombres no resueltos en el módulo (REPL, `consola`, `rango`) -----
+    CargarExterno(u32),
+    GuardarExterno(u32),
 
     // ----- Aritmética y lógica -----
     Sumar,
@@ -33,6 +41,20 @@ pub enum Instruccion {
     Menor,
     MayorOIgual,
     MenorOIgual,
+
+    // ----- Aritmética de entero (ambos operandos son `entero`) -----
+    SumarEntero,
+    RestarEntero,
+    MultiplicarEntero,
+    DividirEntero,
+    ModuloEntero,
+    NegarEntero,
+    IgualEntero,
+    DiferenteEntero,
+    MayorEntero,
+    MenorEntero,
+    MayorOIgualEntero,
+    MenorOIgualEntero,
 
     // ----- Saltos -----
     Saltar(usize),
@@ -69,8 +91,8 @@ pub enum Instruccion {
     Interpolar(u32),
 
     // ----- Objetos -----
-    /// `nuevo Objeto(args)`: `(nombre, n_args)`.
-    Instanciar(u32, u32),
+    /// `nuevo Clase(args)`: la clase está bajo los argumentos.
+    Instanciar(u32),
     CargarEsto,
     CargarPadre,
 
@@ -81,8 +103,8 @@ pub enum Instruccion {
     IteradorSiguiente(usize),
 
     // ----- Excepciones -----
-    /// Activa un manejador de excepciones en el `pc` dado.
-    EntrarIntentar(usize),
+    /// Activa un manejador: `(pc, ranuras_locales_al_entrar)`.
+    EntrarIntentar(usize, u16),
     SalirIntentar,
     Lanzar,
 
@@ -118,7 +140,7 @@ impl Trozo {
             | Instruccion::SaltarSiFalsoYDejar(pc)
             | Instruccion::SaltarSiVerdaderoYDejar(pc)
             | Instruccion::IteradorSiguiente(pc)
-            | Instruccion::EntrarIntentar(pc) => *pc = destino,
+            | Instruccion::EntrarIntentar(pc, _) => *pc = destino,
             otra => {
                 // Error de programación del generador, no del usuario.
                 unreachable!("la instrucción {otra:?} no es un salto parchable")

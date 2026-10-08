@@ -16,7 +16,34 @@ fn generar_deberia_emitir_constantes_y_llamadas() {
         modulo
             .principal
             .instrucciones
-            .contains(&bytecode::Instruccion::Sumar)
+            .contains(&bytecode::Instruccion::SumarEntero)
+    );
+}
+
+#[test]
+fn generar_deberia_usar_ranuras_locales_y_globales() {
+    let modulo =
+        generar("entero var suma = 0\npara (entero var i = 1; i <= 3; i++) {\n    suma += i\n}\n");
+    assert!(
+        modulo
+            .nombres_globales
+            .iter()
+            .any(|nombre| nombre == "suma")
+    );
+    assert!(modulo.ranuras_locales_principal >= 1);
+    assert!(
+        modulo
+            .principal
+            .instrucciones
+            .iter()
+            .any(|instruccion| matches!(instruccion, bytecode::Instruccion::CargarLocal(_)))
+    );
+    assert!(
+        modulo
+            .principal
+            .instrucciones
+            .iter()
+            .any(|instruccion| matches!(instruccion, bytecode::Instruccion::CargarGlobal(_)))
     );
 }
 

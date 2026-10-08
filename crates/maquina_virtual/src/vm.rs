@@ -13,8 +13,8 @@ use crate::bucle_eventos::{BucleEventos, CargaNativa, Mensaje};
 use crate::errores::{DatosExcepcion, Fallo};
 use crate::nativos::RegistroNativos;
 use crate::valores::{
-    ClaseObjeto, DatosMetodoEnlazado, DatosTarea, EntornoModulo, EstadoIterador, Instancia, Valor,
-    Variable, carga_a_valor, texto_de_valor,
+    ClaseObjeto, DatosMetodoEnlazado, DatosTarea, EntornoModulo, EstadoIterador, Instancia,
+    MetodoRuntime, Valor, Variable, carga_a_valor, texto_de_valor,
 };
 
 /// Límite de marcos anidados (recursión).
@@ -46,9 +46,8 @@ pub struct Vm {
 /// Marco de ejecución de un trozo de bytecode.
 struct Marco {
     entorno: Rc<EntornoModulo>,
-    /// Ámbitos locales; vacío en el nivel superior (las declaraciones van a
-    /// las globales del módulo).
-    ambitos: Vec<IndexMap<String, Variable>>,
+    /// Ranuras locales del marco (parámetros en `0..n`).
+    locales: Vec<Valor>,
     esto: Option<Valor>,
 }
 
@@ -56,7 +55,7 @@ struct Marco {
 struct Manejador {
     pc: usize,
     profundidad_pila: usize,
-    profundidad_ambitos: usize,
+    ranuras_locales: u16,
 }
 
 impl Vm {
@@ -199,43 +198,77 @@ impl Vm {
         modulo: Rc<ModuloCompilado>,
         importaciones: IndexMap<String, Variable>,
     ) -> Result<(Rc<EntornoModulo>, Valor), ErrorQuetzal> {
+        let constantes = modulo.constantes.iter().map(valor_de_constante).collect();
         let entorno = Rc::new(EntornoModulo {
             modulo: Rc::clone(&modulo),
-            globales: RefCell::new(importaciones),
+            globales: RefCell::new(IndexMap::new()),
+            valores_globales: RefCell::new(Vec::new()),
+            constantes,
         });
 
-        // Funciones del módulo.
-        for funcion in &modulo.funciones {
-            entorno.globales.borrow_mut().insert(
-                funcion.nombre.clone(),
-                Variable {
-                    valor: Valor::Funcion(Rc::new(funcion.clone()), Rc::clone(&entorno)),
-                    mutable: false,
-                },
-            );
+        let funciones: HashMap<&str, &FuncionCompilada> = modulo
+            .funciones
+            .iter()
+            .map(|funcion| (funcion.nombre.as_str(), funcion))
+            .collect();
+
+        let mut importaciones = importaciones;
+        let mut valores_globales = Vec::with_capacity(modulo.nombres_globales.len());
+        {
+            let mut globales = entorno.globales.borrow_mut();
+            for (indice, nombre) in modulo.nombres_globales.iter().enumerate() {
+                let mutable = modulo
+                    .globales_mutables
+                    .get(indice)
+                    .copied()
+                    .unwrap_or(false);
+                let valor = if let Some(funcion) = funciones.get(nombre.as_str()) {
+                    Valor::Funcion(Rc::new((*funcion).clone()), Rc::clone(&entorno))
+                } else if modulo.objetos.iter().any(|objeto| objeto.nombre == *nombre) {
+                    Valor::Nulo
+                } else if let Some(variable) = importaciones.shift_remove(nombre) {
+                    variable.valor
+                } else {
+                    Valor::Nulo
+                };
+                let variable = Variable { valor, mutable };
+                globales.insert(nombre.clone(), variable.clone());
+                valores_globales.push(variable);
+            }
+            // Símbolos extra (REPL: variables de entradas anteriores).
+            for (nombre, variable) in importaciones {
+                globales.entry(nombre).or_insert(variable);
+            }
         }
+        *entorno.valores_globales.borrow_mut() = valores_globales;
 
         // Objetos del módulo (con sus atributos libres inicializados).
         for objeto in &modulo.objetos {
             let clase = self.crear_clase(objeto, &entorno)?;
-            entorno.globales.borrow_mut().insert(
-                objeto.nombre.clone(),
-                Variable {
-                    valor: Valor::Clase(clase),
-                    mutable: false,
-                },
-            );
+            if let Some(variable) = entorno.globales.borrow_mut().get_mut(&objeto.nombre) {
+                variable.valor = Valor::Clase(Rc::clone(&clase));
+            }
+            if let Some(indice) = modulo
+                .nombres_globales
+                .iter()
+                .position(|nombre| nombre == &objeto.nombre)
+                && let Some(variable) = entorno.valores_globales.borrow_mut().get_mut(indice)
+            {
+                variable.valor = Valor::Clase(clase);
+            }
         }
 
         // Código principal del módulo.
         let mut marco = Marco {
             entorno: Rc::clone(&entorno),
-            ambitos: Vec::new(),
+            locales: vec![Valor::Nulo; modulo.ranuras_locales_principal as usize],
             esto: None,
         };
         let valor = self
             .ejecutar_trozo(&modulo.principal, &mut marco)
             .map_err(|fallo| fallo.a_error(&modulo.nombre))?;
+
+        sincronizar_globales(&entorno);
 
         self.modulos
             .insert(modulo.nombre.clone(), Rc::clone(&entorno));
@@ -247,10 +280,30 @@ impl Vm {
         objeto: &ObjetoCompilado,
         entorno: &Rc<EntornoModulo>,
     ) -> Result<Rc<ClaseObjeto>, ErrorQuetzal> {
+        let metodos = objeto
+            .metodos
+            .iter()
+            .map(|metodo| {
+                (
+                    metodo.funcion.nombre.clone(),
+                    MetodoRuntime {
+                        funcion: Rc::new(metodo.funcion.clone()),
+                        libre: metodo.libre,
+                    },
+                )
+            })
+            .collect();
+        let constructores = objeto
+            .constructores
+            .iter()
+            .map(|constructor| Rc::new(constructor.clone()))
+            .collect();
         let clase = Rc::new(ClaseObjeto {
             compilado: objeto.clone(),
             entorno: Rc::clone(entorno),
             atributos_libres: RefCell::new(IndexMap::new()),
+            metodos,
+            constructores,
         });
 
         for atributo in &objeto.atributos {
@@ -284,7 +337,7 @@ impl Vm {
     ) -> Result<Valor, Fallo> {
         let mut marco = Marco {
             entorno: Rc::clone(entorno),
-            ambitos: vec![IndexMap::new()],
+            locales: Vec::new(),
             esto,
         };
         self.ejecutar_trozo(trozo, &mut marco)
@@ -321,20 +374,15 @@ impl Vm {
             ));
         }
 
-        let mut locales = IndexMap::new();
-        for ((nombre, mutable), valor) in funcion.parametros.iter().zip(argumentos) {
-            locales.insert(
-                nombre.clone(),
-                Variable {
-                    valor,
-                    mutable: *mutable,
-                },
-            );
+        let ranuras = (funcion.ranuras_locales as usize).max(argumentos.len());
+        let mut locales = vec![Valor::Nulo; ranuras];
+        for (indice, valor) in argumentos.into_iter().enumerate() {
+            locales[indice] = valor;
         }
 
         let mut marco = Marco {
             entorno: Rc::clone(entorno),
-            ambitos: vec![locales],
+            locales,
             esto,
         };
 
@@ -402,7 +450,7 @@ impl Vm {
                     match manejadores.pop() {
                         Some(manejador) => {
                             pila.truncate(manejador.profundidad_pila);
-                            marco.ambitos.truncate(manejador.profundidad_ambitos);
+                            limpiar_locales(&mut marco.locales, manejador.ranuras_locales);
                             pila.push(Valor::Excepcion(Rc::new(datos)));
                             pc = manejador.pc;
                         }
@@ -427,8 +475,7 @@ impl Vm {
     ) -> Result<Flujo, Fallo> {
         match instruccion {
             Instruccion::CargarConstante(indice) => {
-                let constante = &marco.entorno.modulo.constantes[*indice as usize];
-                pila.push(valor_de_constante(constante));
+                pila.push(marco.entorno.constantes[*indice as usize].clone());
             }
             Instruccion::Duplicar => {
                 let tope = self.tope(pila, ubicacion)?.clone();
@@ -438,25 +485,46 @@ impl Vm {
                 self.sacar(pila, ubicacion)?;
             }
 
-            Instruccion::DeclararVariable(indice, mutable) => {
-                let valor = self.sacar(pila, ubicacion)?;
-                let nombre = marco.entorno.modulo.nombres[*indice as usize].clone();
-                let variable = Variable {
-                    valor,
-                    mutable: *mutable,
-                };
-                match marco.ambitos.last_mut() {
-                    Some(ambito) => {
-                        ambito.insert(nombre, variable);
-                    }
-                    None => {
-                        marco.entorno.globales.borrow_mut().insert(nombre, variable);
-                    }
-                }
+            Instruccion::CargarLocal(ranura) => {
+                let valor = marco
+                    .locales
+                    .get(*ranura as usize)
+                    .cloned()
+                    .ok_or_else(|| {
+                        Fallo::Error(Box::new(ErrorQuetzal::interno(
+                            "ranura local fuera de rango (bytecode inválido)",
+                        )))
+                    })?;
+                pila.push(valor);
             }
-            Instruccion::CargarVariable(indice) => {
-                let nombre = &marco.entorno.modulo.nombres[*indice as usize];
-                let valor = self.buscar_variable(marco, nombre).ok_or_else(|| {
+            Instruccion::GuardarLocal(ranura) => {
+                let valor = self.sacar(pila, ubicacion)?;
+                let ranura = *ranura as usize;
+                if ranura >= marco.locales.len() {
+                    return Err(Fallo::Error(Box::new(ErrorQuetzal::interno(
+                        "ranura local fuera de rango (bytecode inválido)",
+                    ))));
+                }
+                marco.locales[ranura] = valor;
+            }
+            Instruccion::LimpiarLocales(desde) => {
+                limpiar_locales(&mut marco.locales, *desde);
+            }
+
+            Instruccion::CargarGlobal(indice) => {
+                pila.push(self.cargar_global(marco, *indice, ubicacion)?);
+            }
+            Instruccion::DeclararGlobal(indice) => {
+                let valor = self.sacar(pila, ubicacion)?;
+                self.declarar_global(marco, *indice, valor, ubicacion)?;
+            }
+            Instruccion::GuardarGlobal(indice) => {
+                let valor = self.sacar(pila, ubicacion)?;
+                self.guardar_global(marco, *indice, valor, ubicacion)?;
+            }
+            Instruccion::CargarExterno(indice) => {
+                let nombre = marco.entorno.modulo.nombres[*indice as usize].clone();
+                let valor = self.buscar_externo(marco, &nombre).ok_or_else(|| {
                     self.excepcion(
                         "E0201",
                         format!("'{nombre}' no está definido"),
@@ -465,14 +533,10 @@ impl Vm {
                 })?;
                 pila.push(valor);
             }
-            Instruccion::GuardarVariable(indice) => {
+            Instruccion::GuardarExterno(indice) => {
                 let valor = self.sacar(pila, ubicacion)?;
                 let nombre = marco.entorno.modulo.nombres[*indice as usize].clone();
-                self.guardar_variable(marco, &nombre, valor, ubicacion)?;
-            }
-            Instruccion::AbrirAmbito => marco.ambitos.push(IndexMap::new()),
-            Instruccion::CerrarAmbito => {
-                marco.ambitos.pop();
+                self.guardar_externo(marco, &nombre, valor, ubicacion)?;
             }
 
             Instruccion::Sumar
@@ -490,31 +554,28 @@ impl Vm {
                 let izquierda = self.sacar(pila, ubicacion)?;
                 pila.push(self.operacion_binaria(instruccion, izquierda, derecha, ubicacion)?);
             }
+            Instruccion::SumarEntero
+            | Instruccion::RestarEntero
+            | Instruccion::MultiplicarEntero
+            | Instruccion::DividirEntero
+            | Instruccion::ModuloEntero
+            | Instruccion::IgualEntero
+            | Instruccion::DiferenteEntero
+            | Instruccion::MayorEntero
+            | Instruccion::MenorEntero
+            | Instruccion::MayorOIgualEntero
+            | Instruccion::MenorOIgualEntero => {
+                let derecha = self.sacar(pila, ubicacion)?;
+                let izquierda = self.sacar(pila, ubicacion)?;
+                pila.push(self.operacion_entera(instruccion, izquierda, derecha, ubicacion)?);
+            }
             Instruccion::Negar => {
                 let valor = self.sacar(pila, ubicacion)?;
-                let resultado = match valor {
-                    Valor::Entero(entero) => {
-                        Valor::Entero(entero.checked_neg().ok_or_else(|| {
-                            self.excepcion(
-                                "E0402",
-                                "desbordamiento al negar el entero".to_string(),
-                                Some(ubicacion),
-                            )
-                        })?)
-                    }
-                    Valor::Numero(decimal) => Valor::Numero(-decimal),
-                    otro => {
-                        return Err(self.excepcion(
-                            "E0406",
-                            format!(
-                                "no se puede negar un valor de tipo '{}'",
-                                otro.nombre_tipo()
-                            ),
-                            Some(ubicacion),
-                        ));
-                    }
-                };
-                pila.push(resultado);
+                pila.push(self.negar(valor, ubicacion)?);
+            }
+            Instruccion::NegarEntero => {
+                let valor = self.sacar(pila, ubicacion)?;
+                pila.push(self.negar_entero(valor, ubicacion)?);
             }
             Instruccion::NoLogico => {
                 let valor = self.sacar(pila, ubicacion)?;
@@ -617,16 +678,9 @@ impl Vm {
                 pila.push(Valor::texto(texto));
             }
 
-            Instruccion::Instanciar(indice, cantidad) => {
-                let nombre = marco.entorno.modulo.nombres[*indice as usize].clone();
+            Instruccion::Instanciar(cantidad) => {
                 let argumentos = self.sacar_varios(pila, *cantidad as usize, ubicacion)?;
-                let valor_clase = self.buscar_variable(marco, &nombre).ok_or_else(|| {
-                    self.excepcion(
-                        "E0201",
-                        format!("el objeto '{nombre}' no está definido"),
-                        Some(ubicacion),
-                    )
-                })?;
+                let valor_clase = self.sacar(pila, ubicacion)?;
                 match valor_clase {
                     Valor::Clase(clase) => {
                         pila.push(self.instanciar(&clase, argumentos, ubicacion)?);
@@ -638,16 +692,19 @@ impl Vm {
                         if !self.nativos.existe_funcion(&clave) {
                             return Err(self.excepcion(
                                 "E0406",
-                                format!("'{nombre}' no es un objeto instanciable"),
+                                format!("'{modulo}' no es un objeto instanciable"),
                                 Some(ubicacion),
                             ));
                         }
                         pila.push(self.llamar_nativa(&clave, &argumentos, ubicacion)?);
                     }
-                    _ => {
+                    otro => {
                         return Err(self.excepcion(
                             "E0406",
-                            format!("'{nombre}' no es un objeto instanciable"),
+                            format!(
+                                "un valor de tipo '{}' no es un objeto instanciable",
+                                otro.nombre_tipo()
+                            ),
                             Some(ubicacion),
                         ));
                     }
@@ -725,11 +782,11 @@ impl Vm {
                 }
             }
 
-            Instruccion::EntrarIntentar(pc_manejador) => {
+            Instruccion::EntrarIntentar(pc_manejador, ranuras) => {
                 manejadores.push(Manejador {
                     pc: *pc_manejador,
                     profundidad_pila: pila.len(),
-                    profundidad_ambitos: marco.ambitos.len(),
+                    ranuras_locales: *ranuras,
                 });
             }
             Instruccion::SalirIntentar => {
@@ -759,16 +816,89 @@ impl Vm {
 
     // ----- Variables -----
 
-    fn buscar_variable(&self, marco: &Marco, nombre: &str) -> Option<Valor> {
-        for ambito in marco.ambitos.iter().rev() {
-            if let Some(variable) = ambito.get(nombre) {
-                return Some(variable.valor.clone());
-            }
+    fn cargar_global(
+        &self,
+        marco: &Marco,
+        indice: u16,
+        ubicacion: Ubicacion,
+    ) -> Result<Valor, Fallo> {
+        marco
+            .entorno
+            .valores_globales
+            .borrow()
+            .get(indice as usize)
+            .map(|variable| variable.valor.clone())
+            .ok_or_else(|| {
+                self.excepcion(
+                    "E0201",
+                    "la global no está definida".to_string(),
+                    Some(ubicacion),
+                )
+            })
+    }
+
+    fn declarar_global(
+        &self,
+        marco: &Marco,
+        indice: u16,
+        valor: Valor,
+        ubicacion: Ubicacion,
+    ) -> Result<(), Fallo> {
+        let mut valores = marco.entorno.valores_globales.borrow_mut();
+        let variable = valores.get_mut(indice as usize).ok_or_else(|| {
+            self.excepcion(
+                "E0201",
+                "la global no está definida".to_string(),
+                Some(ubicacion),
+            )
+        })?;
+        variable.valor = valor;
+        Ok(())
+    }
+
+    fn guardar_global(
+        &self,
+        marco: &Marco,
+        indice: u16,
+        valor: Valor,
+        ubicacion: Ubicacion,
+    ) -> Result<(), Fallo> {
+        let mut valores = marco.entorno.valores_globales.borrow_mut();
+        let variable = valores.get_mut(indice as usize).ok_or_else(|| {
+            self.excepcion(
+                "E0201",
+                "la global no está definida".to_string(),
+                Some(ubicacion),
+            )
+        })?;
+        if !variable.mutable {
+            let nombre = marco
+                .entorno
+                .modulo
+                .nombres_globales
+                .get(indice as usize)
+                .map(String::as_str)
+                .unwrap_or("?");
+            return Err(self.error_constante(nombre, ubicacion));
+        }
+        variable.valor = valor;
+        Ok(())
+    }
+
+    fn buscar_externo(&self, marco: &Marco, nombre: &str) -> Option<Valor> {
+        if let Some(indice) = marco
+            .entorno
+            .modulo
+            .nombres_globales
+            .iter()
+            .position(|global| global == nombre)
+            && let Some(variable) = marco.entorno.valores_globales.borrow().get(indice)
+        {
+            return Some(variable.valor.clone());
         }
         if let Some(variable) = marco.entorno.globales.borrow().get(nombre) {
             return Some(variable.valor.clone());
         }
-        // Globales del lenguaje (consola, rango) registradas como nativas.
         if self.nativos.buscar_funcion(nombre).is_some() {
             return Some(Valor::Nativa(Rc::from(nombre)));
         }
@@ -778,22 +908,13 @@ impl Vm {
         None
     }
 
-    fn guardar_variable(
+    fn guardar_externo(
         &self,
-        marco: &mut Marco,
+        marco: &Marco,
         nombre: &str,
         valor: Valor,
         ubicacion: Ubicacion,
     ) -> Result<(), Fallo> {
-        for ambito in marco.ambitos.iter_mut().rev() {
-            if let Some(variable) = ambito.get_mut(nombre) {
-                if !variable.mutable {
-                    return Err(self.error_constante(nombre, ubicacion));
-                }
-                variable.valor = valor;
-                return Ok(());
-            }
-        }
         let mut globales = marco.entorno.globales.borrow_mut();
         if let Some(variable) = globales.get_mut(nombre) {
             if !variable.mutable {
@@ -901,6 +1022,79 @@ impl Vm {
                 Ok(Valor::Log(resultado))
             }
             _ => unreachable!("instrucción binaria inesperada"),
+        }
+    }
+
+    fn operacion_entera(
+        &self,
+        instruccion: &Instruccion,
+        izquierda: Valor,
+        derecha: Valor,
+        ubicacion: Ubicacion,
+    ) -> Result<Valor, Fallo> {
+        let Valor::Entero(a) = izquierda else {
+            return Err(self.error_se_esperaba_entero(&izquierda, ubicacion));
+        };
+        let Valor::Entero(b) = derecha else {
+            return Err(self.error_se_esperaba_entero(&derecha, ubicacion));
+        };
+        match instruccion {
+            Instruccion::IgualEntero => Ok(Valor::Log(a == b)),
+            Instruccion::DiferenteEntero => Ok(Valor::Log(a != b)),
+            Instruccion::MayorEntero => Ok(Valor::Log(a > b)),
+            Instruccion::MenorEntero => Ok(Valor::Log(a < b)),
+            Instruccion::MayorOIgualEntero => Ok(Valor::Log(a >= b)),
+            Instruccion::MenorOIgualEntero => Ok(Valor::Log(a <= b)),
+            _ => {
+                let nombre = match instruccion {
+                    Instruccion::SumarEntero => "sumar",
+                    Instruccion::RestarEntero => "restar",
+                    Instruccion::MultiplicarEntero => "multiplicar",
+                    Instruccion::DividirEntero => "dividir",
+                    Instruccion::ModuloEntero => "modulo",
+                    _ => unreachable!("instrucción entera inesperada"),
+                };
+                self.aritmetica(Valor::Entero(a), Valor::Entero(b), ubicacion, nombre)
+            }
+        }
+    }
+
+    fn error_se_esperaba_entero(&self, valor: &Valor, ubicacion: Ubicacion) -> Fallo {
+        self.excepcion(
+            "E0406",
+            format!(
+                "se esperaba un entero, pero se encontró '{}'",
+                valor.nombre_tipo()
+            ),
+            Some(ubicacion),
+        )
+    }
+
+    fn negar(&self, valor: Valor, ubicacion: Ubicacion) -> Result<Valor, Fallo> {
+        match valor {
+            Valor::Entero(entero) => self.negar_entero(Valor::Entero(entero), ubicacion),
+            Valor::Numero(decimal) => Ok(Valor::Numero(-decimal)),
+            otro => Err(self.excepcion(
+                "E0406",
+                format!(
+                    "no se puede negar un valor de tipo '{}'",
+                    otro.nombre_tipo()
+                ),
+                Some(ubicacion),
+            )),
+        }
+    }
+
+    fn negar_entero(&self, valor: Valor, ubicacion: Ubicacion) -> Result<Valor, Fallo> {
+        match valor {
+            Valor::Entero(entero) => entero.checked_neg().map(Valor::Entero).ok_or_else(|| {
+                self.excepcion(
+                    "E0402",
+                    "desbordamiento al negar el entero".to_string(),
+                    Some(ubicacion),
+                )
+            }),
+            otro => Err(self.error_se_esperaba_entero(&otro, ubicacion)),
         }
     }
 
@@ -1152,7 +1346,7 @@ impl Vm {
             Valor::Clase(clase) => {
                 // Métodos `libre`: se llaman sin instancia, `esto` es la clase.
                 match buscar_metodo_en_clase(self, clase, nombre) {
-                    Some((metodo, entorno)) if metodo_es_libre(&clase.compilado, nombre) => self
+                    Some((metodo, entorno)) if metodo_es_libre(clase, nombre) => self
                         .invocar_metodo(
                             metodo,
                             entorno,
@@ -1326,14 +1520,13 @@ impl Vm {
             buscar_clase_con_constructor(self, clase, argumentos.len())
         {
             let constructor = clase_constructora
-                .compilado
                 .constructores
                 .iter()
                 .find(|constructor| constructor.parametros.len() == argumentos.len())
                 .cloned();
             if let Some(constructor) = constructor {
                 self.llamar_funcion(
-                    &Rc::new(constructor),
+                    &constructor,
                     &clase_constructora.entorno,
                     argumentos,
                     Some(Valor::Instancia(Rc::clone(&instancia))),
@@ -1363,7 +1556,6 @@ impl Vm {
         ubicacion: Ubicacion,
     ) -> Result<Valor, Fallo> {
         let constructor = clase
-            .compilado
             .constructores
             .iter()
             .find(|constructor| constructor.parametros.len() == argumentos.len())
@@ -1380,7 +1572,7 @@ impl Vm {
                 )
             })?;
         self.llamar_funcion(
-            &Rc::new(constructor),
+            &constructor,
             &clase.entorno,
             argumentos,
             Some(esto),
@@ -1684,6 +1876,16 @@ impl Vm {
     }
 }
 
+fn limpiar_locales(locales: &mut [Valor], desde: u16) {
+    let desde = desde as usize;
+    if desde >= locales.len() {
+        return;
+    }
+    for ranura in &mut locales[desde..] {
+        *ranura = Valor::Nulo;
+    }
+}
+
 /// Flujo de control al ejecutar una instrucción.
 enum Flujo {
     Continuar,
@@ -1717,6 +1919,39 @@ fn indice_normalizado(indice: i64, longitud: usize) -> Option<usize> {
     }
 }
 
+fn clase_en_entorno(entorno: &EntornoModulo, nombre: &str) -> Option<Rc<ClaseObjeto>> {
+    if let Some(indice) = entorno
+        .modulo
+        .nombres_globales
+        .iter()
+        .position(|global| global == nombre)
+        && let Some(Variable {
+            valor: Valor::Clase(clase),
+            ..
+        }) = entorno.valores_globales.borrow().get(indice)
+    {
+        return Some(Rc::clone(clase));
+    }
+    if let Some(Variable {
+        valor: Valor::Clase(clase),
+        ..
+    }) = entorno.globales.borrow().get(nombre)
+    {
+        return Some(Rc::clone(clase));
+    }
+    None
+}
+
+fn sincronizar_globales(entorno: &EntornoModulo) {
+    let valores = entorno.valores_globales.borrow();
+    let mut globales = entorno.globales.borrow_mut();
+    for (indice, variable) in valores.iter().enumerate() {
+        if let Some((_, destino)) = globales.get_index_mut(indice) {
+            *destino = variable.clone();
+        }
+    }
+}
+
 /// Busca una clase por nombre: primero en el entorno de la clase de partida,
 /// luego entre los módulos cargados.
 fn buscar_clase_por_nombre(
@@ -1724,20 +1959,12 @@ fn buscar_clase_por_nombre(
     desde: &Rc<ClaseObjeto>,
     nombre: &str,
 ) -> Option<Rc<ClaseObjeto>> {
-    if let Some(Variable {
-        valor: Valor::Clase(clase),
-        ..
-    }) = desde.entorno.globales.borrow().get(nombre)
-    {
-        return Some(Rc::clone(clase));
+    if let Some(clase) = clase_en_entorno(&desde.entorno, nombre) {
+        return Some(clase);
     }
     for entorno in vm.modulos.values() {
-        if let Some(Variable {
-            valor: Valor::Clase(clase),
-            ..
-        }) = entorno.globales.borrow().get(nombre)
-        {
-            return Some(Rc::clone(clase));
+        if let Some(clase) = clase_en_entorno(entorno, nombre) {
+            return Some(clase);
         }
     }
     None
@@ -1772,13 +1999,8 @@ fn buscar_metodo_en_clase(
     clase: &Rc<ClaseObjeto>,
     nombre: &str,
 ) -> Option<(Rc<FuncionCompilada>, Rc<EntornoModulo>)> {
-    if let Some(metodo) = clase
-        .compilado
-        .metodos
-        .iter()
-        .find(|metodo| metodo.funcion.nombre == nombre)
-    {
-        return Some((Rc::new(metodo.funcion.clone()), Rc::clone(&clase.entorno)));
+    if let Some(metodo) = clase.metodos.get(nombre) {
+        return Some((Rc::clone(&metodo.funcion), Rc::clone(&clase.entorno)));
     }
     for nombre_padre in clase
         .compilado
@@ -1803,13 +2025,10 @@ fn buscar_metodo_libre_en_clase(
     clase: &Rc<ClaseObjeto>,
     nombre: &str,
 ) -> Option<(Rc<FuncionCompilada>, Rc<EntornoModulo>)> {
-    if let Some(metodo) = clase
-        .compilado
-        .metodos
-        .iter()
-        .find(|metodo| metodo.funcion.nombre == nombre && metodo.libre)
+    if let Some(metodo) = clase.metodos.get(nombre)
+        && metodo.libre
     {
-        return Some((Rc::new(metodo.funcion.clone()), Rc::clone(&clase.entorno)));
+        return Some((Rc::clone(&metodo.funcion), Rc::clone(&clase.entorno)));
     }
     for nombre_padre in clase
         .compilado
@@ -1826,11 +2045,10 @@ fn buscar_metodo_libre_en_clase(
     None
 }
 
-fn metodo_es_libre(compilado: &ObjetoCompilado, nombre: &str) -> bool {
-    compilado
+fn metodo_es_libre(clase: &ClaseObjeto, nombre: &str) -> bool {
+    clase
         .metodos
-        .iter()
-        .find(|metodo| metodo.funcion.nombre == nombre)
+        .get(nombre)
         .map(|metodo| metodo.libre)
         .unwrap_or(false)
 }
@@ -1842,14 +2060,13 @@ fn buscar_clase_con_constructor(
     aridad: usize,
 ) -> Option<Rc<ClaseObjeto>> {
     if clase
-        .compilado
         .constructores
         .iter()
         .any(|constructor| constructor.parametros.len() == aridad)
     {
         return Some(Rc::clone(clase));
     }
-    if !clase.compilado.constructores.is_empty() {
+    if !clase.constructores.is_empty() {
         // Tiene constructores pero ninguno con esa aridad: no seguir subiendo.
         return None;
     }

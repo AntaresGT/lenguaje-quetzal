@@ -10,8 +10,14 @@ on:
 permissions:
   contents: read
 
+env:
+  CARGO_TERM_COLOR: always
+
+# Los jobs no se esperan entre sí: Windows, Ubuntu, el binario musl,
+# Fedora y Arch arrancan a la vez. Fedora y Arch no tienen runner
+# oficial; corren en contenedor sobre ubuntu-latest.
 jobs:
-  compilar:
+  anfitrion:
     name: Compilar (${{ matrix.sistema }})
     runs-on: ${{ matrix.corredor }}
     strategy:
@@ -22,12 +28,118 @@ jobs:
             corredor: windows-latest
             binario: quetzal.exe
             artefacto: quetzal-windows
+            empaquetado: windows
+            objetivo: ""
+            # CRT de MSVC dentro del .exe: el usuario no instala VC++ Redistributable.
+            rustflags: "-C target-feature=+crt-static"
           - sistema: ubuntu
             corredor: ubuntu-latest
             binario: quetzal
             artefacto: quetzal-ubuntu
+            empaquetado: bundle
+            objetivo: ""
+            rustflags: ""
+          - sistema: linux
+            corredor: ubuntu-latest
+            binario: quetzal
+            artefacto: quetzal-linux
+            empaquetado: estatico
+            objetivo: x86_64-unknown-linux-musl
+            # musl estático: un solo archivo, sin libc del sistema.
+            # Corre en Ubuntu, Fedora, Arch y Alpine.
+            rustflags: "-C target-feature=+crt-static"
 
     steps:
+      - name: Instalar musl
+        if: matrix.empaquetado == 'estatico'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Obtener código
+        uses: actions/checkout@v4
+
+      - name: Instalar Rust estable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.objetivo }}
+
+      - name: Cache de dependencias Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: lnc-${{ matrix.sistema }}
+
+      - name: Compilar quetzal (release)
+        if: matrix.objetivo == ''
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+        run: cargo build -p lnc --release
+
+      - name: Compilar quetzal estático (musl)
+        if: matrix.objetivo != ''
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+        run: cargo build -p lnc --release --target ${{ matrix.objetivo }}
+
+      - name: Empaquetar Windows
+        if: matrix.empaquetado == 'windows'
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "target/release/${{ matrix.binario }}" "dist/${{ matrix.binario }}"
+
+      - name: Empaquetar Ubuntu con librerías
+        if: matrix.empaquetado == 'bundle'
+        shell: bash
+        run: bash .github/scripts/empaquetar-linux.sh "target/release/${{ matrix.binario }}" dist
+
+      - name: Empaquetar binario estático
+        if: matrix.empaquetado == 'estatico'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="target/${{ matrix.objetivo }}/release/${{ matrix.binario }}"
+          if readelf -d "$bin" 2>/dev/null | grep -q '(NEEDED)'; then
+            echo "el binario musl sigue enlazado a librerías dinámicas" >&2
+            readelf -d "$bin" || true
+            exit 1
+          fi
+          mkdir -p dist
+          cp "$bin" "dist/${{ matrix.binario }}"
+
+      - name: Subir ejecutable
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artefacto }}
+          path: dist
+          if-no-files-found: error
+          retention-days: 5
+
+  distro:
+    name: Compilar (${{ matrix.sistema }})
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.imagen }}
+      options: --user root
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sistema: fedora
+            imagen: fedora:latest
+            artefacto: quetzal-fedora
+            paquetes: dnf install -y gcc git curl ca-certificates binutils findutils
+          - sistema: arch
+            imagen: archlinux:latest
+            artefacto: quetzal-arch
+            paquetes: |
+              pacman -Sy --noconfirm archlinux-keyring
+              pacman -S --noconfirm --needed base-devel git curl ca-certificates binutils findutils
+
+    steps:
+      # git tiene que existir antes de checkout: si no, Actions baja un
+      # tarball y el clon no trae .git.
+      - name: Instalar toolchain de la distro
+        run: ${{ matrix.paquetes }}
+
       - name: Obtener código
         uses: actions/checkout@v4
 
@@ -42,16 +154,14 @@ jobs:
       - name: Compilar quetzal (release)
         run: cargo build -p lnc --release
 
-      - name: Preparar carpeta del artefacto
+      - name: Empaquetar con librerías
         shell: bash
-        run: |
-          mkdir -p dist
-          cp "target/release/${{ matrix.binario }}" "dist/${{ matrix.binario }}"
+        run: bash .github/scripts/empaquetar-linux.sh target/release/quetzal dist
 
       - name: Subir ejecutable
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artefacto }}
-          path: dist/${{ matrix.binario }}
+          path: dist
           if-no-files-found: error
           retention-days: 5

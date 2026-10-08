@@ -4,7 +4,7 @@ use crate::constantes::Constante;
 use crate::instruccion::Trozo;
 
 /// Versión del formato de bytecode (invalida la cache al cambiar).
-pub const VERSION_FORMATO_BYTECODE: u32 = 1;
+pub const VERSION_FORMATO_BYTECODE: u32 = 2;
 
 /// Función compilada a bytecode.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -14,6 +14,9 @@ pub struct FuncionCompilada {
     pub parametros: Vec<(String, bool)>,
     pub trozo: Trozo,
     pub asincrona: bool,
+    /// Ranuras locales del marco, incluyendo parámetros (ocupan `0..n`).
+    #[serde(default)]
+    pub ranuras_locales: u16,
 }
 
 /// Método u operación de un objeto compilado.
@@ -60,6 +63,15 @@ pub struct ModuloCompilado {
     pub nombre: String,
     pub constantes: Vec<Constante>,
     pub nombres: Vec<String>,
+    /// Nombres de las globales del módulo, en el orden de sus índices.
+    #[serde(default)]
+    pub nombres_globales: Vec<String>,
+    /// Mutabilidad de cada global, alineada con [`Self::nombres_globales`].
+    #[serde(default)]
+    pub globales_mutables: Vec<bool>,
+    /// Ranuras locales del código principal (bloques de nivel superior).
+    #[serde(default)]
+    pub ranuras_locales_principal: u16,
     pub funciones: Vec<FuncionCompilada>,
     pub objetos: Vec<ObjetoCompilado>,
     pub importaciones: Vec<ImportacionCompilada>,

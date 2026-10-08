@@ -1,9 +1,9 @@
 //! Máquina virtual de pila del Lenguaje Quetzal.
 //!
 //! Ejecuta el bytecode generado por el crate `bytecode` con pila de valores,
-//! marcos de ejecución, ámbitos, manejo de excepciones y errores de runtime
-//! con ubicación. Los enteros usan operaciones verificadas (overflow es un
-//! error claro) y el tipo `número` usa decimales exactos
+//! marcos de ejecución, ranuras locales, manejo de excepciones y errores de
+//! runtime con ubicación. Los enteros usan operaciones verificadas (overflow
+//! es un error claro) y el tipo `número` usa decimales exactos
 //! (`0.1 + 0.2 == 0.3`).
 
 pub mod bucle_eventos;

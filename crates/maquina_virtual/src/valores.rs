@@ -1,6 +1,7 @@
 //! Valores en runtime del Lenguaje Quetzal.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::str::FromStr;
 
@@ -19,6 +20,10 @@ use crate::errores::DatosExcepcion;
 pub struct EntornoModulo {
     pub modulo: Rc<ModuloCompilado>,
     pub globales: RefCell<IndexMap<String, Variable>>,
+    /// Globales por índice de compilador. El camino caliente no hashea nombres.
+    pub valores_globales: RefCell<Vec<Variable>>,
+    /// Constantes materializadas (textos internados como `Rc<str>`).
+    pub constantes: Vec<Valor>,
 }
 
 /// Un valor de Quetzal en ejecución.
@@ -71,6 +76,13 @@ pub struct Variable {
     pub mutable: bool,
 }
 
+/// Método resuelto de una clase, compartido por todas las llamadas.
+#[derive(Debug, Clone)]
+pub struct MetodoRuntime {
+    pub funcion: Rc<FuncionCompilada>,
+    pub libre: bool,
+}
+
 /// Definición de objeto en runtime.
 #[derive(Debug)]
 pub struct ClaseObjeto {
@@ -78,6 +90,10 @@ pub struct ClaseObjeto {
     pub entorno: Rc<EntornoModulo>,
     /// Atributos `libre` compartidos (estado de la definición, no de instancias).
     pub atributos_libres: RefCell<IndexMap<String, Variable>>,
+    /// Métodos propios, indexados por nombre. Sin clonar el bytecode al llamar.
+    pub metodos: HashMap<String, MetodoRuntime>,
+    /// Constructores propios, ya envueltos en `Rc`.
+    pub constructores: Vec<Rc<FuncionCompilada>>,
 }
 
 /// Instancia de un objeto en runtime. Los atributos de toda la cadena de

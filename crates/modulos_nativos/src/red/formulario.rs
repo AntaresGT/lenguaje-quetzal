@@ -114,7 +114,11 @@ pub(crate) fn contenido_de_archivo(
         .extension()
         .map(|extension| extension.to_string_lossy().to_string())
         .unwrap_or_default();
-    Ok((bytes, nombre, http::tipo_por_extension(&extension).to_string()))
+    Ok((
+        bytes,
+        nombre,
+        http::tipo_por_extension(&extension).to_string(),
+    ))
 }
 
 // ----- Registro de las funciones nativas -----
@@ -161,9 +165,7 @@ pub(crate) fn registrar(registro: &mut RegistroNativos, guardian: &Rc<GuardianPe
             let opciones = argumentos.get(3).cloned().unwrap_or(Valor::Nulo);
 
             let (contenido, nombre_por_omision, tipo_por_omision) = match &argumentos[2] {
-                valor if es_archivo(valor) => {
-                    contenido_de_archivo(F, &guardian_archivo, valor)?
-                }
+                valor if es_archivo(valor) => contenido_de_archivo(F, &guardian_archivo, valor)?,
                 valor if es_bits(valor) => (
                     bits::arg_bits(F, argumentos, 2)?,
                     format!("{nombre_campo}.bin"),
@@ -343,9 +345,7 @@ fn describir(formulario: &Valor) {
     crate::red::objetos::poner_campo(
         formulario,
         "texto",
-        Valor::texto(format!(
-            "<Formulario {campos} campos, {archivos} archivos>"
-        )),
+        Valor::texto(format!("<Formulario {campos} campos, {archivos} archivos>")),
     );
 }
 

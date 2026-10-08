@@ -131,7 +131,10 @@ impl Progreso {
                 "direccion".to_string(),
                 CargaNativa::Texto(self.direccion.to_string()),
             ),
-            ("cargado".to_string(), CargaNativa::Entero(self.cargado as i64)),
+            (
+                "cargado".to_string(),
+                CargaNativa::Entero(self.cargado as i64),
+            ),
             (
                 "total".to_string(),
                 match self.total {
@@ -176,10 +179,7 @@ pub(crate) fn registrar(registro: &mut RegistroNativos, guardian: &Rc<GuardianPe
                     }
                 },
                 _ => {
-                    return Err(error(
-                        "E0210",
-                        format!("'{F}' espera () o (configuracion)"),
-                    ));
+                    return Err(error("E0210", format!("'{F}' espera () o (configuracion)")));
                 }
             };
             Ok(instancia_cliente(crear.crear(configuracion)))
@@ -219,14 +219,8 @@ fn registrar_metodos(registro: &mut RegistroNativos, red: &RegistroCliente) {
                     let url = arg_texto(&funcion, argumentos, 1)?.to_string();
                     let (datos, configuracion) = partir_args_peticion(&funcion, argumentos)?;
 
-                    let peticion = combinar_configuracion(
-                        &red,
-                        id,
-                        &verbo,
-                        &url,
-                        datos,
-                        configuracion,
-                    )?;
+                    let peticion =
+                        combinar_configuracion(&red, id, &verbo, &url, datos, configuracion)?;
                     ejecutar(vm, &red, id, peticion, asincrono, &funcion)
                 }),
             );
@@ -493,10 +487,7 @@ fn preparar(red: &RegistroCliente, configuracion: &Valor) -> Result<Solicitud, F
                     "application/json; charset=utf-8".to_string(),
                 ));
             }
-            Some(
-                maquina_virtual::valores::jsn_a_texto(&datos, false)
-                    .into_bytes(),
-            )
+            Some(maquina_virtual::valores::jsn_a_texto(&datos, false).into_bytes())
         }
         valor if formulario::es_formulario(&valor) => {
             let (frontera, cuerpo) = formulario::cuerpo_multipart(&valor)?;
@@ -541,10 +532,7 @@ fn preparar(red: &RegistroCliente, configuracion: &Valor) -> Result<Solicitud, F
 
     if let Valor::Jsn(autenticacion) = leer(configuracion, "autenticacion") {
         let mapa = autenticacion.borrow();
-        let usuario = mapa
-            .get("usuario")
-            .map(texto_de_valor)
-            .unwrap_or_default();
+        let usuario = mapa.get("usuario").map(texto_de_valor).unwrap_or_default();
         let clave = mapa.get("clave").map(texto_de_valor).unwrap_or_default();
         let credencial = base64_basico(&format!("{usuario}:{clave}"));
         cabeceras.push(("Authorization".to_string(), format!("Basic {credencial}")));
@@ -746,9 +734,7 @@ fn ejecutar_asincrono(
     let manija = vm.bucle().manija();
     let reporta_subida = al_subir.is_some();
     let reporta_descarga = al_bajar.is_some();
-    red.progresos
-        .borrow_mut()
-        .insert(id, (al_subir, al_bajar));
+    red.progresos.borrow_mut().insert(id, (al_subir, al_bajar));
 
     let red_despacho = red.clone();
     vm.registrar_despachador(SERVICIO_PROGRESO, move |vm, id_recurso, datos| {
@@ -876,13 +862,12 @@ fn transferir_interno(
     reporta_subida: bool,
     reporta_descarga: bool,
 ) -> Result<Transferencia, String> {
-    let mut constructor = reqwest::blocking::Client::builder().redirect(
-        if solicitud.maximo_redirecciones == 0 {
+    let mut constructor =
+        reqwest::blocking::Client::builder().redirect(if solicitud.maximo_redirecciones == 0 {
             reqwest::redirect::Policy::none()
         } else {
             reqwest::redirect::Policy::limited(solicitud.maximo_redirecciones)
-        },
-    );
+        });
     if let Some(limite) = solicitud.tiempo_limite {
         constructor = constructor.timeout(limite);
     }
@@ -1086,8 +1071,8 @@ fn instancia_respuesta(configuracion: &Valor, transferencia: &Transferencia) -> 
     let tipo_original = cabecera("content-type").unwrap_or_default();
     let tipo_contenido = tipo_original.to_ascii_lowercase();
     let frontera = formulario::frontera_de_tipo(&tipo_original);
-    let nombre_archivo = cabecera("content-disposition")
-        .and_then(|valor| formulario::nombre_en_disposicion(&valor));
+    let nombre_archivo =
+        cabecera("content-disposition").and_then(|valor| formulario::nombre_en_disposicion(&valor));
 
     let tipo_respuesta = leer_texto(configuracion, "tipo_respuesta").unwrap_or_default();
     let datos = match tipo_respuesta.as_str() {
@@ -1125,10 +1110,7 @@ fn instancia_respuesta(configuracion: &Valor, transferencia: &Transferencia) -> 
             ("razon", Valor::texto(codigos::razon(estado))),
             ("descripcion", Valor::texto(codigos::descripcion(estado))),
             ("ok", Valor::Log((200..300).contains(&estado))),
-            (
-                "cabeceras",
-                jsn_de_pares(transferencia.cabeceras.clone()),
-            ),
+            ("cabeceras", jsn_de_pares(transferencia.cabeceras.clone())),
             ("datos", datos),
             ("cuerpo_texto", Valor::texto(&texto)),
             ("bits", bits::instancia(&transferencia.cuerpo)),
@@ -1203,10 +1185,7 @@ fn instancia_progreso(datos: &CargaNativa) -> Valor {
             ("bytes", Valor::Entero(bytes)),
             ("progreso", progreso),
             ("porcentaje", porcentaje),
-            (
-                "es_subida",
-                Valor::Log(direccion == "subida"),
-            ),
+            ("es_subida", Valor::Log(direccion == "subida")),
             (
                 "texto",
                 Valor::texto(format!("<ProgresoPeticion {direccion} {cargado}>")),

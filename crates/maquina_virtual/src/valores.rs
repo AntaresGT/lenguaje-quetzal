@@ -24,28 +24,35 @@ pub struct EntornoModulo {
     pub valores_globales: RefCell<Vec<Variable>>,
     /// Constantes materializadas (textos internados como `Rc<str>`).
     pub constantes: Vec<Valor>,
+    /// Nombres del módulo internados una vez al cargar.
+    pub nombres: Vec<Rc<str>>,
 }
 
 /// Un valor de Quetzal en ejecución.
+///
+/// Las variantes pesadas (decimal, función, `padre`, textos) van detrás de
+/// un `Rc` para que el enum quepa en 16 bytes: más valores por línea de
+/// caché, mismo objetivo que el NaN boxing de clox, sin meter el número en
+/// un `f64` (Quetzal usa decimal exacto).
 #[derive(Debug, Clone)]
 pub enum Valor {
     Entero(i64),
     /// Decimal exacto: `0.1 + 0.2 == 0.3`.
-    Numero(Decimal),
-    Texto(Rc<str>),
+    Numero(Rc<Decimal>),
+    Texto(Rc<String>),
     Log(bool),
     Nulo,
     Lista(Rc<RefCell<Vec<Valor>>>),
     Jsn(Rc<RefCell<IndexMap<String, Valor>>>),
     /// Función definida en Quetzal, junto a su entorno de módulo.
-    Funcion(Rc<FuncionCompilada>, Rc<EntornoModulo>),
+    Funcion(Rc<DatosFuncion>),
     /// Método de instancia referenciado sin llamarlo (`instancia.metodo`):
     /// la función junto al `esto` que recibirá al invocarse.
     MetodoEnlazado(Rc<DatosMetodoEnlazado>),
     /// Función nativa registrada por nombre (`consola.mostrar`, `rango`).
-    Nativa(Rc<str>),
+    Nativa(Rc<String>),
     /// Módulo nativo importado (`Matemática` → `matematica`).
-    ModuloNativo(Rc<str>),
+    ModuloNativo(Rc<String>),
     /// Definición de objeto cargada (permite miembros `libre` y `nuevo`).
     Clase(Rc<ClaseObjeto>),
     /// Instancia de un objeto.
@@ -54,10 +61,7 @@ pub enum Valor {
     InstanciaNativa(Rc<DatosInstanciaNativa>),
     /// Vista `padre` dentro de un método: la instancia vista como su objeto
     /// padre (con un padre concreto opcional: `padre.Mamifero.comer()`).
-    Padre {
-        instancia: Rc<RefCell<Instancia>>,
-        clase: Option<Rc<str>>,
-    },
+    Padre(Rc<DatosPadre>),
     /// Resultado pendiente de una función `asincrono` (se resuelve con `esperar`).
     Tarea(Rc<DatosTarea>),
     /// Tarea nativa asincrónica pendiente en el bucle de eventos (E/S de red,
@@ -90,8 +94,9 @@ pub struct ClaseObjeto {
     pub entorno: Rc<EntornoModulo>,
     /// Atributos `libre` compartidos (estado de la definición, no de instancias).
     pub atributos_libres: RefCell<IndexMap<String, Variable>>,
-    /// Métodos propios, indexados por nombre. Sin clonar el bytecode al llamar.
-    pub metodos: HashMap<String, MetodoRuntime>,
+    /// Métodos propios y heredados, indexados por nombre. Tras aplanar la
+    /// herencia al cargar el módulo, la llamada caliente es un `get`.
+    pub metodos: RefCell<HashMap<String, MetodoRuntime>>,
     /// Constructores propios, ya envueltos en `Rc`.
     pub constructores: Vec<Rc<FuncionCompilada>>,
 }
@@ -114,6 +119,20 @@ pub struct Instancia {
 pub struct DatosInstanciaNativa {
     pub tipo: Rc<str>,
     pub datos: RefCell<IndexMap<String, Valor>>,
+}
+
+/// Función de Quetzal con el entorno donde se resolvieron sus nombres.
+#[derive(Debug)]
+pub struct DatosFuncion {
+    pub funcion: Rc<FuncionCompilada>,
+    pub entorno: Rc<EntornoModulo>,
+}
+
+/// Vista `padre` de una instancia.
+#[derive(Debug)]
+pub struct DatosPadre {
+    pub instancia: Rc<RefCell<Instancia>>,
+    pub clase: Option<Rc<str>>,
 }
 
 /// Método de instancia con su receptor capturado (ver
@@ -154,7 +173,27 @@ pub struct EstadoTareaNativa {
 
 impl Valor {
     pub fn texto(texto: impl AsRef<str>) -> Self {
-        Valor::Texto(Rc::from(texto.as_ref()))
+        Valor::Texto(Rc::new(texto.as_ref().to_string()))
+    }
+
+    pub fn nativa(nombre: impl AsRef<str>) -> Self {
+        Valor::Nativa(Rc::new(nombre.as_ref().to_string()))
+    }
+
+    pub fn modulo_nativo(nombre: impl AsRef<str>) -> Self {
+        Valor::ModuloNativo(Rc::new(nombre.as_ref().to_string()))
+    }
+
+    pub fn numero(decimal: Decimal) -> Self {
+        Valor::Numero(Rc::new(decimal))
+    }
+
+    pub fn funcion(funcion: Rc<FuncionCompilada>, entorno: Rc<EntornoModulo>) -> Self {
+        Valor::Funcion(Rc::new(DatosFuncion { funcion, entorno }))
+    }
+
+    pub fn padre(instancia: Rc<RefCell<Instancia>>, clase: Option<Rc<str>>) -> Self {
+        Valor::Padre(Rc::new(DatosPadre { instancia, clase }))
     }
 
     pub fn lista(valores: Vec<Valor>) -> Self {
@@ -178,7 +217,7 @@ impl Valor {
             Valor::Funcion(..) | Valor::MetodoEnlazado(_) | Valor::Nativa(_) => "funcion",
             Valor::ModuloNativo(_) => "modulo",
             Valor::Clase(_) => "objeto",
-            Valor::Instancia(_) | Valor::Padre { .. } => "instancia",
+            Valor::Instancia(_) | Valor::Padre(_) => "instancia",
             Valor::InstanciaNativa(_) => "instancia nativa",
             Valor::Tarea(_) | Valor::TareaNativa(_) => "tarea",
             Valor::Excepcion(_) => "excepcion",
@@ -196,7 +235,7 @@ impl Valor {
         &self,
     ) -> Option<(&Rc<FuncionCompilada>, &Rc<EntornoModulo>, Option<&Valor>)> {
         match self {
-            Valor::Funcion(funcion, entorno) => Some((funcion, entorno, None)),
+            Valor::Funcion(datos) => Some((&datos.funcion, &datos.entorno, None)),
             Valor::MetodoEnlazado(datos) => {
                 Some((&datos.funcion, &datos.entorno, Some(&datos.receptor)))
             }
@@ -210,7 +249,7 @@ impl Valor {
             (Valor::Entero(a), Valor::Entero(b)) => a == b,
             (Valor::Numero(a), Valor::Numero(b)) => a == b,
             (Valor::Entero(a), Valor::Numero(b)) | (Valor::Numero(b), Valor::Entero(a)) => {
-                Decimal::from(*a) == *b
+                Decimal::from(*a) == **b
             }
             (Valor::Texto(a), Valor::Texto(b)) => a == b,
             (Valor::Log(a), Valor::Log(b)) => a == b,
@@ -269,7 +308,7 @@ pub fn texto_de_valor(valor: &Valor) -> String {
             format!("[{}]", interior.join(", "))
         }
         Valor::Jsn(_) => jsn_a_texto(valor, false),
-        Valor::Funcion(funcion, _) => format!("<función {}>", funcion.nombre),
+        Valor::Funcion(datos) => format!("<función {}>", datos.funcion.nombre),
         Valor::MetodoEnlazado(datos) => format!("<método {}>", datos.funcion.nombre),
         Valor::Nativa(nombre) => format!("<función nativa {nombre}>"),
         Valor::ModuloNativo(nombre) => format!("<módulo {nombre}>"),
@@ -280,8 +319,11 @@ pub fn texto_de_valor(valor: &Valor) -> String {
                 instancia.borrow().clase.compilado.nombre
             )
         }
-        Valor::Padre { instancia, .. } => {
-            format!("<padre de {}>", instancia.borrow().clase.compilado.nombre)
+        Valor::Padre(datos) => {
+            format!(
+                "<padre de {}>",
+                datos.instancia.borrow().clase.compilado.nombre
+            )
         }
         Valor::InstanciaNativa(instancia) => match instancia.datos.borrow().get("texto") {
             Some(Valor::Texto(texto)) => texto.to_string(),
@@ -338,7 +380,7 @@ pub fn json_a_valor(json: &serde_json::Value) -> Valor {
                 Valor::Entero(entero)
             } else {
                 Decimal::from_str(&numero.to_string())
-                    .map(Valor::Numero)
+                    .map(Valor::numero)
                     .unwrap_or(Valor::Nulo)
             }
         }
@@ -416,5 +458,15 @@ pub fn valor_a_carga(valor: &Valor) -> CargaNativa {
                 .collect(),
         },
         otro => CargaNativa::Texto(texto_de_valor(otro)),
+    }
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    #[test]
+    fn valor_deberia_medir_dieciseis_bytes() {
+        assert_eq!(std::mem::size_of::<Valor>(), 16);
     }
 }

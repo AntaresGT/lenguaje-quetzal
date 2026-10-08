@@ -4,10 +4,12 @@ use nucleo::Ubicacion;
 
 /// Instrucción de la VM. Los índices `u16` de locales/globales y los `u32`
 /// de constantes y nombres refieren a las tablas del [`crate::ModuloCompilado`].
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Instruccion {
     // ----- Pila y constantes -----
     CargarConstante(u32),
+    /// Entero que cabe en `i16`: evita una carga de la tabla de constantes.
+    CargarEntero(i16),
     Duplicar,
     Desechar,
 
@@ -16,6 +18,8 @@ pub enum Instruccion {
     GuardarLocal(u16),
     /// Pone `nulo` en las ranuras `[desde, ranuras_locales)` para soltar `Rc`.
     LimpiarLocales(u16),
+    /// `locales[ranura] += delta` cuando la ranura es un entero (p. ej. `i++`).
+    AjustarLocal(u16, i16),
 
     // ----- Globales del módulo (índice fijo) -----
     CargarGlobal(u16),
@@ -111,6 +115,36 @@ pub enum Instruccion {
     // ----- Asincronía -----
     /// Resuelve una tarea pendiente (`esperar`).
     Esperar,
+}
+
+impl Instruccion {
+    /// Destino absoluto si esta instrucción es un salto parchable.
+    pub fn destino_salto(self) -> Option<usize> {
+        match self {
+            Self::Saltar(pc)
+            | Self::SaltarSiFalso(pc)
+            | Self::SaltarSiVerdadero(pc)
+            | Self::SaltarSiFalsoYDejar(pc)
+            | Self::SaltarSiVerdaderoYDejar(pc)
+            | Self::IteradorSiguiente(pc)
+            | Self::EntrarIntentar(pc, _) => Some(pc),
+            _ => None,
+        }
+    }
+
+    /// Copia la instrucción con un destino de salto nuevo.
+    pub fn con_destino_salto(self, destino: usize) -> Self {
+        match self {
+            Self::Saltar(_) => Self::Saltar(destino),
+            Self::SaltarSiFalso(_) => Self::SaltarSiFalso(destino),
+            Self::SaltarSiVerdadero(_) => Self::SaltarSiVerdadero(destino),
+            Self::SaltarSiFalsoYDejar(_) => Self::SaltarSiFalsoYDejar(destino),
+            Self::SaltarSiVerdaderoYDejar(_) => Self::SaltarSiVerdaderoYDejar(destino),
+            Self::IteradorSiguiente(_) => Self::IteradorSiguiente(destino),
+            Self::EntrarIntentar(_, ranuras) => Self::EntrarIntentar(destino, ranuras),
+            otra => otra,
+        }
+    }
 }
 
 /// Secuencia de instrucciones con la ubicación de origen de cada una.

@@ -169,7 +169,7 @@ pub fn registrar(registro: &mut RegistroNativos) {
                 .checked_add(valor)
                 .ok_or_else(|| error("E0402", "desbordamiento al sumar la lista"))?;
         }
-        Ok(Valor::Numero(suma))
+        Ok(Valor::numero(suma))
     });
     metodo(registro, "lista.promedio", 0, |lista, _| {
         let elementos = lista.borrow();
@@ -187,7 +187,7 @@ pub fn registrar(registro: &mut RegistroNativos) {
                 .ok_or_else(|| error("E0402", "desbordamiento al promediar la lista"))?;
         }
         suma.checked_div(Decimal::from(elementos.len()))
-            .map(Valor::Numero)
+            .map(Valor::numero)
             .ok_or_else(|| error("E0402", "desbordamiento al promediar la lista"))
     });
     metodo(registro, "lista.maximo", 0, |lista, _| {
@@ -294,10 +294,10 @@ fn ordenar(elementos: &mut [Valor], descendente: bool) -> Result<(), Fallo> {
 fn comparar(a: &Valor, b: &Valor) -> Option<Ordering> {
     match (a, b) {
         (Valor::Entero(a), Valor::Entero(b)) => Some(a.cmp(b)),
-        (Valor::Texto(a), Valor::Texto(b)) => Some(a.cmp(b)),
-        (Valor::Numero(a), Valor::Numero(b)) => Some(a.cmp(b)),
-        (Valor::Entero(a), Valor::Numero(b)) => Some(Decimal::from(*a).cmp(b)),
-        (Valor::Numero(a), Valor::Entero(b)) => Some(a.cmp(&Decimal::from(*b))),
+        (Valor::Texto(a), Valor::Texto(b)) => Some(a.as_str().cmp(b.as_str())),
+        (Valor::Numero(a), Valor::Numero(b)) => Some(a.as_ref().cmp(b.as_ref())),
+        (Valor::Entero(a), Valor::Numero(b)) => Some(Decimal::from(*a).cmp(b.as_ref())),
+        (Valor::Numero(a), Valor::Entero(b)) => Some(a.as_ref().cmp(&Decimal::from(*b))),
         _ => None,
     }
 }

@@ -35,7 +35,7 @@ fn ejecutar_con_registro(
                 importaciones.insert(
                     local.clone(),
                     maquina_virtual::Variable {
-                        valor: Valor::ModuloNativo(Rc::from(destino.as_str())),
+                        valor: Valor::modulo_nativo(destino.as_str()),
                         mutable: false,
                     },
                 );

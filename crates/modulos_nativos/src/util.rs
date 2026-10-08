@@ -36,7 +36,7 @@ pub fn arg_texto<'a>(
     indice: usize,
 ) -> Result<&'a str, Fallo> {
     match argumentos.get(indice) {
-        Some(Valor::Texto(texto)) => Ok(texto),
+        Some(Valor::Texto(texto)) => Ok(texto.as_str()),
         Some(otro) => Err(error(
             "E0406",
             format!(
@@ -74,7 +74,7 @@ pub fn arg_entero(funcion: &str, argumentos: &[Valor], indice: usize) -> Result<
 pub fn arg_decimal(funcion: &str, argumentos: &[Valor], indice: usize) -> Result<Decimal, Fallo> {
     match argumentos.get(indice) {
         Some(Valor::Entero(entero)) => Ok(Decimal::from(*entero)),
-        Some(Valor::Numero(decimal)) => Ok(*decimal),
+        Some(Valor::Numero(decimal)) => Ok(**decimal),
         Some(otro) => Err(error(
             "E0406",
             format!(
@@ -152,7 +152,7 @@ pub fn f64_a_decimal(funcion: &str, valor: f64) -> Result<Valor, Fallo> {
             format!("'{funcion}' produjo un resultado no representable ({valor})"),
         ));
     }
-    Decimal::from_f64(valor).map(Valor::Numero).ok_or_else(|| {
+    Decimal::from_f64(valor).map(Valor::numero).ok_or_else(|| {
         error(
             "E0406",
             format!("'{funcion}' produjo un resultado fuera del rango decimal ({valor})"),

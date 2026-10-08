@@ -15,14 +15,14 @@ pub fn registrar(registro: &mut RegistroNativos) {
 
     // Constantes (28 dígitos de precisión decimal).
     let pi = Decimal::from_str("3.1415926535897932384626433833").unwrap_or(Decimal::ZERO);
-    registro.registrar_constante("matematica.PI", Valor::Numero(pi));
+    registro.registrar_constante("matematica.PI", Valor::numero(pi));
     registro.registrar_constante(
         "matematica.TAU",
-        Valor::Numero(Decimal::from_str("6.2831853071795864769252867666").unwrap_or(Decimal::ZERO)),
+        Valor::numero(Decimal::from_str("6.2831853071795864769252867666").unwrap_or(Decimal::ZERO)),
     );
     registro.registrar_constante(
         "matematica.E",
-        Valor::Numero(Decimal::from_str("2.7182818284590452353602874714").unwrap_or(Decimal::ZERO)),
+        Valor::numero(Decimal::from_str("2.7182818284590452353602874714").unwrap_or(Decimal::ZERO)),
     );
 
     // Aritmética exacta con decimales.
@@ -39,7 +39,7 @@ pub fn registrar(registro: &mut RegistroNativos) {
                 return Err(error("E0401", "división por cero"));
             }
             a.checked_div(b)
-                .map(Valor::Numero)
+                .map(Valor::numero)
                 .ok_or_else(|| error("E0402", "desbordamiento al dividir"))
         }),
     );
@@ -77,7 +77,7 @@ pub fn registrar(registro: &mut RegistroNativos) {
                     .checked_abs()
                     .map(Valor::Entero)
                     .ok_or_else(|| error("E0402", "desbordamiento al calcular el absoluto")),
-                otro => Ok(Valor::Numero(
+                otro => Ok(Valor::numero(
                     arg_decimal("matematica.absoluto", std::slice::from_ref(otro), 0)?.abs(),
                 )),
             }
@@ -91,14 +91,14 @@ pub fn registrar(registro: &mut RegistroNativos) {
             let decimales = arg_entero("matematica.redondear", argumentos, 1)?;
             let decimales = u32::try_from(decimales)
                 .map_err(|_| error("E0406", "los decimales de 'redondear' deben ser >= 0"))?;
-            Ok(Valor::Numero(valor.round_dp(decimales)))
+            Ok(Valor::numero(valor.round_dp(decimales)))
         }),
     );
     registro.registrar_funcion(
         "matematica.piso",
         Box::new(|argumentos| {
             exigir_aridad("matematica.piso", argumentos, 1)?;
-            Ok(Valor::Numero(
+            Ok(Valor::numero(
                 arg_decimal("matematica.piso", argumentos, 0)?.floor(),
             ))
         }),
@@ -107,7 +107,7 @@ pub fn registrar(registro: &mut RegistroNativos) {
         "matematica.techo",
         Box::new(|argumentos| {
             exigir_aridad("matematica.techo", argumentos, 1)?;
-            Ok(Valor::Numero(
+            Ok(Valor::numero(
                 arg_decimal("matematica.techo", argumentos, 0)?.ceil(),
             ))
         }),
@@ -203,7 +203,7 @@ fn binaria_exacta(
             let a = arg_decimal(nombre, argumentos, 0)?;
             let b = arg_decimal(nombre, argumentos, 1)?;
             operacion(a, b)
-                .map(Valor::Numero)
+                .map(Valor::numero)
                 .ok_or_else(|| error("E0402", format!("desbordamiento en '{nombre}'")))
         }),
     );
@@ -246,7 +246,7 @@ fn estadistica(
     for elemento in elementos.iter() {
         valores.push(arg_decimal(nombre, std::slice::from_ref(elemento), 0)?);
     }
-    operacion(&valores).map(Valor::Numero).ok_or_else(|| {
+    operacion(&valores).map(Valor::numero).ok_or_else(|| {
         error(
             "E0406",
             format!("'{nombre}' no se pudo calcular sobre la lista"),

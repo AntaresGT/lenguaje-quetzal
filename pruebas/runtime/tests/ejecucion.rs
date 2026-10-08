@@ -84,7 +84,7 @@ fn ejecutar_deberia_sumar_decimales_exactos() {
     assert!(global(&entorno, "exacto").es_igual(&Valor::Log(true)));
     match global(&entorno, "resultado") {
         Valor::Numero(decimal) => {
-            assert_eq!(decimal, Decimal::from_str("0.3").expect("decimal válido"));
+            assert_eq!(*decimal, Decimal::from_str("0.3").expect("decimal válido"));
         }
         otro => panic!("se esperaba número, se obtuvo {otro:?}"),
     }

@@ -55,7 +55,7 @@ pub fn registrar(registro: &mut RegistroNativos) {
             exigir_aridad("texto.numero", argumentos, 1)?;
             let texto = arg_texto("texto.numero", argumentos, 0)?;
             Decimal::from_str(texto.trim())
-                .map(Valor::Numero)
+                .map(Valor::numero)
                 .map_err(|_| error("E0406", format!("'{texto}' no se puede convertir a número")))
         }),
     );
@@ -97,7 +97,7 @@ pub fn registrar(registro: &mut RegistroNativos) {
                     if let Ok(entero) = fragmento.parse::<i64>() {
                         Valor::Entero(entero)
                     } else if let Ok(decimal) = Decimal::from_str(fragmento) {
-                        Valor::Numero(decimal)
+                        Valor::numero(decimal)
                     } else {
                         Valor::texto(fragmento)
                     }
@@ -113,7 +113,7 @@ pub fn registrar(registro: &mut RegistroNativos) {
         Box::new(|argumentos| {
             exigir_aridad("entero.numero", argumentos, 1)?;
             match &argumentos[0] {
-                Valor::Entero(entero) => Ok(Valor::Numero(Decimal::from(*entero))),
+                Valor::Entero(entero) => Ok(Valor::numero(Decimal::from(*entero))),
                 otro => Err(error(
                     "E0406",
                     format!("se esperaba un entero, no '{}'", otro.nombre_tipo()),

@@ -168,7 +168,7 @@ impl<'vm> Cargador<'vm> {
                         // `SistemaArchivos` y `sistema_archivos` refieren al módulo.
                         let normalizado = normalizar_nombre(nombre).to_lowercase().replace('_', "");
                         let valor = if normalizado == nombre_modulo.replace('_', "") {
-                            Valor::ModuloNativo(Rc::from(nombre_modulo.as_str()))
+                            Valor::modulo_nativo(nombre_modulo.as_str())
                         } else if let Some(tipo) =
                             // Tipos instanciables exportados por el módulo
                             // (`Archivo` y `Ruta` desde `sistema_archivos`).
@@ -177,9 +177,9 @@ impl<'vm> Cargador<'vm> {
                                 &normalizado,
                             )
                         {
-                            Valor::ModuloNativo(Rc::from(tipo))
+                            Valor::modulo_nativo(tipo)
                         } else {
-                            Valor::Nativa(Rc::from(format!("{nombre_modulo}.{nombre}").as_str()))
+                            Valor::nativa(format!("{nombre_modulo}.{nombre}"))
                         };
                         importaciones.insert(
                             local.clone(),

@@ -1,7 +1,7 @@
 //! Intérprete de bytecode: pila de valores, marcos y excepciones.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use bytecode::{Constante, FuncionCompilada, Instruccion, ModuloCompilado, ObjetoCompilado, Trozo};
@@ -231,11 +231,17 @@ impl Vm {
         importaciones: IndexMap<String, Variable>,
     ) -> Result<(Rc<EntornoModulo>, Valor), ErrorQuetzal> {
         let constantes = modulo.constantes.iter().map(valor_de_constante).collect();
+        let nombres = modulo
+            .nombres
+            .iter()
+            .map(|nombre| Rc::<str>::from(nombre.as_str()))
+            .collect();
         let entorno = Rc::new(EntornoModulo {
             modulo: Rc::clone(&modulo),
             globales: RefCell::new(IndexMap::new()),
             valores_globales: RefCell::new(Vec::new()),
             constantes,
+            nombres,
         });
 
         let funciones: HashMap<&str, &FuncionCompilada> = modulo
@@ -255,7 +261,7 @@ impl Vm {
                     .copied()
                     .unwrap_or(false);
                 let valor = if let Some(funcion) = funciones.get(nombre.as_str()) {
-                    Valor::Funcion(Rc::new((*funcion).clone()), Rc::clone(&entorno))
+                    Valor::funcion(Rc::new((*funcion).clone()), Rc::clone(&entorno))
                 } else if modulo.objetos.iter().any(|objeto| objeto.nombre == *nombre) {
                     Valor::Nulo
                 } else if let Some(variable) = importaciones.shift_remove(nombre) {
@@ -275,6 +281,7 @@ impl Vm {
         *entorno.valores_globales.borrow_mut() = valores_globales;
 
         // Objetos del módulo (con sus atributos libres inicializados).
+        let mut clases = Vec::new();
         for objeto in &modulo.objetos {
             let clase = self.crear_clase(objeto, &entorno)?;
             if let Some(variable) = entorno.globales.borrow_mut().get_mut(&objeto.nombre) {
@@ -286,8 +293,13 @@ impl Vm {
                 .position(|nombre| nombre == &objeto.nombre)
                 && let Some(variable) = entorno.valores_globales.borrow_mut().get_mut(indice)
             {
-                variable.valor = Valor::Clase(clase);
+                variable.valor = Valor::Clase(Rc::clone(&clase));
             }
+            clases.push(clase);
+        }
+        let mut visitados = HashSet::new();
+        for clase in &clases {
+            aplanar_metodos(self, clase, &mut visitados);
         }
 
         // Código principal del módulo.
@@ -334,7 +346,7 @@ impl Vm {
             compilado: objeto.clone(),
             entorno: Rc::clone(entorno),
             atributos_libres: RefCell::new(IndexMap::new()),
-            metodos,
+            metodos: RefCell::new(metodos),
             constructores,
         });
 
@@ -512,37 +524,31 @@ impl Vm {
     // ----- Bucle principal del intérprete -----
 
     fn correr_hasta(&mut self, base: usize) -> Result<Valor, Fallo> {
+        let mut marco = self.tomar_marco("pila de marcos vacía (bytecode inválido)")?;
         loop {
-            let mut marco = self.marcos.pop().ok_or_else(|| {
-                Fallo::Error(Box::new(ErrorQuetzal::interno(
-                    "pila de marcos vacía (bytecode inválido)",
-                )))
-            })?;
-
             if marco.pc >= marco.codigo.trozo().instrucciones.len() {
                 let valor = marco.pila.pop().unwrap_or(Valor::Nulo);
                 if let Some(valor) = self.completar_retorno(base, marco, valor) {
                     return Ok(valor);
                 }
+                marco = self.tomar_marco("pila de marcos vacía (bytecode inválido)")?;
                 continue;
             }
 
-            let instruccion = marco.codigo.trozo().instrucciones[marco.pc].clone();
+            let instruccion = marco.codigo.trozo().instrucciones[marco.pc];
             let ubicacion = marco.codigo.trozo().ubicaciones[marco.pc];
             let resultado = self.ejecutar_instruccion(&instruccion, ubicacion, &mut marco);
 
             match resultado {
                 Ok(Flujo::Continuar) => {
                     marco.pc += 1;
-                    self.marcos.push(marco);
                 }
-                Ok(Flujo::SinAvanzar) => {
-                    self.marcos.push(marco);
-                }
+                Ok(Flujo::SinAvanzar) => {}
                 Ok(Flujo::Retornar(valor)) => {
                     if let Some(valor) = self.completar_retorno(base, marco, valor) {
                         return Ok(valor);
                     }
+                    marco = self.tomar_marco("pila de marcos vacía al retornar")?;
                 }
                 Ok(Flujo::Llamar(callee)) => {
                     if self.pila_llamadas.len() >= LIMITE_PROFUNDIDAD {
@@ -554,6 +560,7 @@ impl Vm {
                             }
                         };
                         self.propagar_excepcion(base, marco, datos, ubicacion)?;
+                        marco = self.tomar_marco("pila de marcos vacía al manejar desborde")?;
                         continue;
                     }
                     marco.pc += 1;
@@ -561,10 +568,11 @@ impl Vm {
                         self.pila_llamadas.push(nombre.clone());
                     }
                     self.marcos.push(marco);
-                    self.marcos.push(callee);
+                    marco = callee;
                 }
                 Err(Fallo::Excepcion(datos)) => {
                     self.propagar_excepcion(base, marco, datos, ubicacion)?;
+                    marco = self.tomar_marco("pila de marcos vacía al propagar excepción")?;
                 }
                 Err(otro) => {
                     self.descartar_hasta(base, Some(marco));
@@ -572,6 +580,12 @@ impl Vm {
                 }
             }
         }
+    }
+
+    fn tomar_marco(&mut self, mensaje: &'static str) -> Result<Marco, Fallo> {
+        self.marcos
+            .pop()
+            .ok_or_else(|| Fallo::Error(Box::new(ErrorQuetzal::interno(mensaje))))
     }
 
     fn completar_retorno(&mut self, base: usize, marco: Marco, valor: Valor) -> Option<Valor> {
@@ -658,6 +672,9 @@ impl Vm {
                 let constante = marco.entorno.constantes[*indice as usize].clone();
                 marco.pila.push(constante);
             }
+            Instruccion::CargarEntero(valor) => {
+                marco.pila.push(Valor::Entero(*valor as i64));
+            }
             Instruccion::Duplicar => {
                 let tope = self.tope(&marco.pila, ubicacion)?.clone();
                 marco.pila.push(tope);
@@ -691,6 +708,24 @@ impl Vm {
             Instruccion::LimpiarLocales(desde) => {
                 limpiar_locales(&mut marco.locales, *desde);
             }
+            Instruccion::AjustarLocal(ranura, delta) => {
+                let ranura = *ranura as usize;
+                let valor = marco.locales.get_mut(ranura).ok_or_else(|| {
+                    Fallo::Error(Box::new(ErrorQuetzal::interno(
+                        "ranura local fuera de rango (bytecode inválido)",
+                    )))
+                })?;
+                let Valor::Entero(actual) = valor else {
+                    return Err(self.error_se_esperaba_entero(valor, ubicacion));
+                };
+                *actual = actual.checked_add(*delta as i64).ok_or_else(|| {
+                    self.excepcion(
+                        "E0402",
+                        format!("desbordamiento de entero al ajustar {actual} en {delta}"),
+                        Some(ubicacion),
+                    )
+                })?;
+            }
 
             Instruccion::CargarGlobal(indice) => {
                 let valor = self.cargar_global(marco, *indice, ubicacion)?;
@@ -705,8 +740,8 @@ impl Vm {
                 self.guardar_global(marco, *indice, valor, ubicacion)?;
             }
             Instruccion::CargarExterno(indice) => {
-                let nombre = marco.entorno.modulo.nombres[*indice as usize].clone();
-                let valor = self.buscar_externo(marco, &nombre).ok_or_else(|| {
+                let nombre = &marco.entorno.nombres[*indice as usize];
+                let valor = self.buscar_externo(marco, nombre).ok_or_else(|| {
                     self.excepcion(
                         "E0201",
                         format!("'{nombre}' no está definido"),
@@ -717,8 +752,8 @@ impl Vm {
             }
             Instruccion::GuardarExterno(indice) => {
                 let valor = self.sacar(&mut marco.pila, ubicacion)?;
-                let nombre = marco.entorno.modulo.nombres[*indice as usize].clone();
-                self.guardar_externo(marco, &nombre, valor, ubicacion)?;
+                let nombre = &marco.entorno.nombres[*indice as usize];
+                self.guardar_externo(marco, nombre, valor, ubicacion)?;
             }
 
             Instruccion::Sumar
@@ -818,7 +853,7 @@ impl Vm {
                 return Ok(Self::aplicar_destino(&mut marco.pila, destino));
             }
             Instruccion::LlamarMetodo(indice_nombre, cantidad) => {
-                let nombre = marco.entorno.modulo.nombres[*indice_nombre as usize].clone();
+                let nombre = Rc::clone(&marco.entorno.nombres[*indice_nombre as usize]);
                 let argumentos =
                     self.sacar_varios(&mut marco.pila, *cantidad as usize, ubicacion)?;
                 let receptor = self.sacar(&mut marco.pila, ubicacion)?;
@@ -831,7 +866,7 @@ impl Vm {
             }
 
             Instruccion::CargarMiembro(indice) => {
-                let nombre = marco.entorno.modulo.nombres[*indice as usize].clone();
+                let nombre = Rc::clone(&marco.entorno.nombres[*indice as usize]);
                 let objeto = self.sacar(&mut marco.pila, ubicacion)?;
                 marco
                     .pila
@@ -840,7 +875,7 @@ impl Vm {
             Instruccion::GuardarMiembro(indice) => {
                 let valor = self.sacar(&mut marco.pila, ubicacion)?;
                 let objeto = self.sacar(&mut marco.pila, ubicacion)?;
-                let nombre = marco.entorno.modulo.nombres[*indice as usize].clone();
+                let nombre = Rc::clone(&marco.entorno.nombres[*indice as usize]);
                 self.guardar_miembro(objeto, &nombre, valor, ubicacion)?;
             }
             Instruccion::Indexar => {
@@ -937,10 +972,7 @@ impl Vm {
                         Some(ubicacion),
                     ));
                 };
-                marco.pila.push(Valor::Padre {
-                    instancia,
-                    clase: None,
-                });
+                marco.pila.push(Valor::padre(instancia, None));
             }
 
             Instruccion::CrearIterador => {
@@ -1105,10 +1137,10 @@ impl Vm {
             return Some(variable.valor.clone());
         }
         if self.nativos.buscar_funcion(nombre).is_some() {
-            return Some(Valor::Nativa(Rc::from(nombre)));
+            return Some(Valor::nativa(nombre));
         }
         if self.nativos.existe_modulo(nombre) {
-            return Some(Valor::ModuloNativo(Rc::from(nombre)));
+            return Some(Valor::modulo_nativo(nombre));
         }
         None
     }
@@ -1250,18 +1282,54 @@ impl Vm {
             Instruccion::MenorEntero => Ok(Valor::Log(a < b)),
             Instruccion::MayorOIgualEntero => Ok(Valor::Log(a >= b)),
             Instruccion::MenorOIgualEntero => Ok(Valor::Log(a <= b)),
-            _ => {
-                let nombre = match instruccion {
-                    Instruccion::SumarEntero => "sumar",
-                    Instruccion::RestarEntero => "restar",
-                    Instruccion::MultiplicarEntero => "multiplicar",
-                    Instruccion::DividirEntero => "dividir",
-                    Instruccion::ModuloEntero => "modulo",
-                    _ => unreachable!("instrucción entera inesperada"),
-                };
-                self.aritmetica(Valor::Entero(a), Valor::Entero(b), ubicacion, nombre)
+            Instruccion::SumarEntero => {
+                self.entero_checked(a.checked_add(b), a, b, "sumar", ubicacion)
             }
+            Instruccion::RestarEntero => {
+                self.entero_checked(a.checked_sub(b), a, b, "restar", ubicacion)
+            }
+            Instruccion::MultiplicarEntero => {
+                self.entero_checked(a.checked_mul(b), a, b, "multiplicar", ubicacion)
+            }
+            Instruccion::DividirEntero => {
+                if b == 0 {
+                    return Err(self.excepcion(
+                        "E0401",
+                        "división por cero".to_string(),
+                        Some(ubicacion),
+                    ));
+                }
+                self.entero_checked(a.checked_div(b), a, b, "dividir", ubicacion)
+            }
+            Instruccion::ModuloEntero => {
+                if b == 0 {
+                    return Err(self.excepcion(
+                        "E0401",
+                        "módulo por cero".to_string(),
+                        Some(ubicacion),
+                    ));
+                }
+                self.entero_checked(a.checked_rem(b), a, b, "modulo", ubicacion)
+            }
+            _ => unreachable!("instrucción entera inesperada"),
         }
+    }
+
+    fn entero_checked(
+        &self,
+        resultado: Option<i64>,
+        izquierda: i64,
+        derecha: i64,
+        operacion: &str,
+        ubicacion: Ubicacion,
+    ) -> Result<Valor, Fallo> {
+        resultado.map(Valor::Entero).ok_or_else(|| {
+            self.excepcion(
+                "E0402",
+                format!("desbordamiento de entero al {operacion} {izquierda} y {derecha}"),
+                Some(ubicacion),
+            )
+        })
     }
 
     fn error_se_esperaba_entero(&self, valor: &Valor, ubicacion: Ubicacion) -> Fallo {
@@ -1278,7 +1346,7 @@ impl Vm {
     fn negar(&self, valor: Valor, ubicacion: Ubicacion) -> Result<Valor, Fallo> {
         match valor {
             Valor::Entero(entero) => self.negar_entero(Valor::Entero(entero), ubicacion),
-            Valor::Numero(decimal) => Ok(Valor::Numero(-decimal)),
+            Valor::Numero(decimal) => Ok(Valor::numero(-*decimal)),
             otro => Err(self.excepcion(
                 "E0406",
                 format!(
@@ -1396,7 +1464,7 @@ impl Vm {
                     }
                     _ => unreachable!(),
                 };
-                resultado.map(Valor::Numero).ok_or_else(|| {
+                resultado.map(Valor::numero).ok_or_else(|| {
                     self.excepcion(
                         "E0402",
                         format!("desbordamiento numérico al {operacion}"),
@@ -1415,7 +1483,7 @@ impl Vm {
     ) -> Result<Decimal, Fallo> {
         match valor {
             Valor::Entero(entero) => Ok(Decimal::from(*entero)),
-            Valor::Numero(decimal) => Ok(*decimal),
+            Valor::Numero(decimal) => Ok(**decimal),
             otro => Err(self.excepcion(
                 "E0406",
                 format!(
@@ -1435,7 +1503,7 @@ impl Vm {
     ) -> Result<std::cmp::Ordering, Fallo> {
         match (izquierda, derecha) {
             (Valor::Entero(a), Valor::Entero(b)) => Ok(a.cmp(b)),
-            (Valor::Texto(a), Valor::Texto(b)) => Ok(a.cmp(b)),
+            (Valor::Texto(a), Valor::Texto(b)) => Ok(a.as_str().cmp(b.as_str())),
             _ => {
                 let a = self.como_decimal(izquierda, ubicacion, "comparar")?;
                 let b = self.como_decimal(derecha, ubicacion, "comparar")?;
@@ -1453,18 +1521,18 @@ impl Vm {
         ubicacion: Ubicacion,
     ) -> Result<DestinoLlamada, Fallo> {
         match objetivo {
-            Valor::Funcion(funcion, entorno) => {
-                if funcion.asincrona {
+            Valor::Funcion(datos) => {
+                if datos.funcion.asincrona {
                     return Ok(DestinoLlamada::Valor(Valor::Tarea(Rc::new(DatosTarea {
-                        funcion,
-                        entorno,
+                        funcion: Rc::clone(&datos.funcion),
+                        entorno: Rc::clone(&datos.entorno),
                         argumentos,
                         instancia: None,
                     }))));
                 }
                 Ok(DestinoLlamada::Marco(self.preparar_marco_funcion(
-                    &funcion,
-                    &entorno,
+                    &datos.funcion,
+                    &datos.entorno,
                     argumentos,
                     None,
                     Some(ubicacion),
@@ -1585,7 +1653,9 @@ impl Vm {
                     )),
                 }
             }
-            Valor::Padre { instancia, clase } => {
+            Valor::Padre(datos) => {
+                let instancia = &datos.instancia;
+                let clase = &datos.clase;
                 let clase_actual = Rc::clone(&instancia.borrow().clase);
                 match clase {
                     // `padre.Mamifero.comer()`: buscar desde el padre concreto.
@@ -1861,7 +1931,7 @@ impl Vm {
                 }
                 if let Some((funcion, entorno)) = buscar_metodo_libre_en_clase(self, &clase, nombre)
                 {
-                    return Ok(Valor::Funcion(funcion, entorno));
+                    return Ok(Valor::funcion(funcion, entorno));
                 }
                 // Método de instancia como valor: se enlaza con su receptor
                 // para que `esto` siga apuntando a esta instancia.
@@ -1887,7 +1957,7 @@ impl Vm {
                 }
                 if let Some((funcion, entorno)) = buscar_metodo_libre_en_clase(self, clase, nombre)
                 {
-                    return Ok(Valor::Funcion(funcion, entorno));
+                    return Ok(Valor::funcion(funcion, entorno));
                 }
                 Err(self.excepcion(
                     "E0201",
@@ -1904,7 +1974,7 @@ impl Vm {
                     return Ok(constante.clone());
                 }
                 if self.nativos.existe_funcion(&clave) {
-                    return Ok(Valor::Nativa(Rc::from(clave.as_str())));
+                    return Ok(Valor::nativa(clave));
                 }
                 Err(self.excepcion(
                     "E0201",
@@ -1923,19 +1993,19 @@ impl Vm {
                     Some(ubicacion),
                 )),
             },
-            Valor::Padre { instancia, clase } => {
-                if clase.is_none() {
-                    let clase_actual = Rc::clone(&instancia.borrow().clase);
+            Valor::Padre(datos) => {
+                if datos.clase.is_none() {
+                    let clase_actual = Rc::clone(&datos.instancia.borrow().clase);
                     // `padre.Mamifero` → vista del padre concreto.
                     if buscar_clase_ancestro(self, &clase_actual, nombre).is_some() {
-                        return Ok(Valor::Padre {
-                            instancia: Rc::clone(instancia),
-                            clase: Some(Rc::from(nombre)),
-                        });
+                        return Ok(Valor::padre(
+                            Rc::clone(&datos.instancia),
+                            Some(Rc::from(nombre)),
+                        ));
                     }
                 }
                 // `padre.atributo`: los atributos viven aplanados en la instancia.
-                if let Some(variable) = instancia.borrow().atributos.get(nombre) {
+                if let Some(variable) = datos.instancia.borrow().atributos.get(nombre) {
                     return Ok(variable.valor.clone());
                 }
                 Err(self.excepcion(
@@ -2123,7 +2193,7 @@ enum Flujo {
 fn valor_de_constante(constante: &Constante) -> Valor {
     match constante {
         Constante::Entero(entero) => Valor::Entero(*entero),
-        Constante::Numero(decimal) => Valor::Numero(*decimal),
+        Constante::Numero(decimal) => Valor::numero(*decimal),
         Constante::Texto(texto) => Valor::texto(texto),
         Constante::Log(valor_logico) => Valor::Log(*valor_logico),
         Constante::Nulo => Valor::Nulo,
@@ -2219,14 +2289,47 @@ fn buscar_clase_ancestro(
     None
 }
 
+/// Copia los métodos heredados al mapa de la clase. El camino caliente queda
+/// en un `get`; el recorrido de padres queda como respaldo.
+fn aplanar_metodos(vm: &Vm, clase: &Rc<ClaseObjeto>, visitados: &mut HashSet<usize>) {
+    let id = Rc::as_ptr(clase) as usize;
+    if !visitados.insert(id) {
+        return;
+    }
+    for nombre_padre in clase
+        .compilado
+        .padres
+        .iter()
+        .chain(clase.compilado.extiende_como.iter())
+    {
+        let Some(padre) = buscar_clase_por_nombre(vm, clase, nombre_padre) else {
+            continue;
+        };
+        aplanar_metodos(vm, &padre, visitados);
+        let heredados: Vec<(String, MetodoRuntime)> = padre
+            .metodos
+            .borrow()
+            .iter()
+            .map(|(nombre, metodo)| (nombre.clone(), metodo.clone()))
+            .collect();
+        let mut propios = clase.metodos.borrow_mut();
+        for (nombre, metodo) in heredados {
+            propios.entry(nombre).or_insert(metodo);
+        }
+    }
+}
+
 /// Busca un método subiendo por la cadena de herencia.
 fn buscar_metodo_en_clase(
     vm: &Vm,
     clase: &Rc<ClaseObjeto>,
     nombre: &str,
 ) -> Option<(Rc<FuncionCompilada>, Rc<EntornoModulo>)> {
-    if let Some(metodo) = clase.metodos.get(nombre) {
-        return Some((Rc::clone(&metodo.funcion), Rc::clone(&clase.entorno)));
+    {
+        let metodos = clase.metodos.borrow();
+        if let Some(metodo) = metodos.get(nombre) {
+            return Some((Rc::clone(&metodo.funcion), Rc::clone(&clase.entorno)));
+        }
     }
     for nombre_padre in clase
         .compilado
@@ -2251,10 +2354,13 @@ fn buscar_metodo_libre_en_clase(
     clase: &Rc<ClaseObjeto>,
     nombre: &str,
 ) -> Option<(Rc<FuncionCompilada>, Rc<EntornoModulo>)> {
-    if let Some(metodo) = clase.metodos.get(nombre)
-        && metodo.libre
     {
-        return Some((Rc::clone(&metodo.funcion), Rc::clone(&clase.entorno)));
+        let metodos = clase.metodos.borrow();
+        if let Some(metodo) = metodos.get(nombre)
+            && metodo.libre
+        {
+            return Some((Rc::clone(&metodo.funcion), Rc::clone(&clase.entorno)));
+        }
     }
     for nombre_padre in clase
         .compilado
@@ -2274,6 +2380,7 @@ fn buscar_metodo_libre_en_clase(
 fn metodo_es_libre(clase: &ClaseObjeto, nombre: &str) -> bool {
     clase
         .metodos
+        .borrow()
         .get(nombre)
         .map(|metodo| metodo.libre)
         .unwrap_or(false)

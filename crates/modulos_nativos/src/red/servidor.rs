@@ -217,7 +217,10 @@ pub(crate) fn instancia_error(mensaje: &str, estado: i64) -> Valor {
         vec![
             ("mensaje", Valor::texto(mensaje)),
             ("estado", Valor::Entero(estado)),
-            ("texto", Valor::texto(format!("<ErrorHttp {estado}: {mensaje}>"))),
+            (
+                "texto",
+                Valor::texto(format!("<ErrorHttp {estado}: {mensaje}>")),
+            ),
         ],
     )
 }
@@ -476,11 +479,7 @@ fn registrar_auxiliares(registro: &mut RegistroNativos, red: &RegistroRed) {
                 let enrutador = red_parametro.enrutador_de(&funcion_parametro, id, es_servidor)?;
                 let nombre = arg_texto(&funcion_parametro, argumentos, 1)?.to_string();
                 let manejador = exigir_funcion(&funcion_parametro, &argumentos[2])?;
-                if let Some(destino) = red_parametro
-                    .enrutadores
-                    .borrow_mut()
-                    .get_mut(&enrutador)
-                {
+                if let Some(destino) = red_parametro.enrutadores.borrow_mut().get_mut(&enrutador) {
                     destino.parametros.push((nombre, manejador));
                 }
                 Ok(argumentos[0].clone())
@@ -496,7 +495,10 @@ fn registrar_auxiliares(registro: &mut RegistroNativos, red: &RegistroRed) {
                 let id = id_receptor(&funcion_estaticos, argumentos, tipo)?;
                 let enrutador = red_estaticos.enrutador_de(&funcion_estaticos, id, es_servidor)?;
                 let (camino, directorio) = match argumentos.len() {
-                    2 => ("/".to_string(), arg_texto(&funcion_estaticos, argumentos, 1)?.to_string()),
+                    2 => (
+                        "/".to_string(),
+                        arg_texto(&funcion_estaticos, argumentos, 1)?.to_string(),
+                    ),
                     3 => (
                         arg_texto(&funcion_estaticos, argumentos, 1)?.to_string(),
                         arg_texto(&funcion_estaticos, argumentos, 2)?.to_string(),
@@ -504,7 +506,9 @@ fn registrar_auxiliares(registro: &mut RegistroNativos, red: &RegistroRed) {
                     _ => {
                         return Err(error(
                             "E0210",
-                            format!("'{funcion_estaticos}' espera (directorio) o (ruta, directorio)"),
+                            format!(
+                                "'{funcion_estaticos}' espera (directorio) o (ruta, directorio)"
+                            ),
                         ));
                     }
                 };
@@ -724,10 +728,7 @@ fn registrar_escucha(registro: &mut RegistroNativos, red: &RegistroRed) {
                 servidor.escuchando = true;
                 servidor.detener = Some(Arc::clone(&detener));
             }
-            red_escuchar
-                .por_recurso
-                .borrow_mut()
-                .insert(id_recurso, id);
+            red_escuchar.por_recurso.borrow_mut().insert(id_recurso, id);
 
             let manija = vm.bucle().manija();
             let bandera = Arc::clone(&detener);
@@ -750,11 +751,7 @@ fn registrar_escucha(registro: &mut RegistroNativos, red: &RegistroRed) {
 
             let red_despacho = red_escuchar.clone();
             vm.registrar_despachador(SERVICIO, move |vm, id_recurso, datos| {
-                let id_servidor = red_despacho
-                    .por_recurso
-                    .borrow()
-                    .get(&id_recurso)
-                    .copied();
+                let id_servidor = red_despacho.por_recurso.borrow().get(&id_recurso).copied();
                 match id_servidor {
                     Some(id) => atender_peticion(vm, &red_despacho, id, datos),
                     None => respuesta_simple(500, "no hay un servidor para esta petición"),
@@ -893,7 +890,10 @@ fn atender_conexion(flujo: TcpStream, manija: maquina_virtual::ManijaBucle, id_r
                     &mut escritura,
                     400,
                     codigos::razon(400),
-                    &[("Content-Type".to_string(), "text/plain; charset=utf-8".to_string())],
+                    &[(
+                        "Content-Type".to_string(),
+                        "text/plain; charset=utf-8".to_string(),
+                    )],
                     mensaje.as_bytes(),
                     false,
                     true,
@@ -905,14 +905,26 @@ fn atender_conexion(flujo: TcpStream, manija: maquina_virtual::ManijaBucle, id_r
         let persistente = peticion.conexion_persistente();
         let sin_cuerpo = peticion.metodo.eq_ignore_ascii_case("HEAD");
         let datos = CargaNativa::Mapa(vec![
-            ("metodo".to_string(), CargaNativa::Texto(peticion.metodo.clone())),
-            ("destino".to_string(), CargaNativa::Texto(peticion.destino.clone())),
-            ("ruta".to_string(), CargaNativa::Texto(peticion.ruta.clone())),
+            (
+                "metodo".to_string(),
+                CargaNativa::Texto(peticion.metodo.clone()),
+            ),
+            (
+                "destino".to_string(),
+                CargaNativa::Texto(peticion.destino.clone()),
+            ),
+            (
+                "ruta".to_string(),
+                CargaNativa::Texto(peticion.ruta.clone()),
+            ),
             (
                 "consulta".to_string(),
                 CargaNativa::Texto(peticion.consulta.clone()),
             ),
-            ("version".to_string(), CargaNativa::Texto(peticion.version.clone())),
+            (
+                "version".to_string(),
+                CargaNativa::Texto(peticion.version.clone()),
+            ),
             (
                 "cabeceras".to_string(),
                 CargaNativa::Mapa(
@@ -1029,13 +1041,8 @@ fn atender_peticion(
         }
         Err(fallo) => {
             let mensaje = mensaje_de_fallo(&fallo);
-            let manejado = ejecutar_manejadores_error(
-                vm,
-                &manejadores_error,
-                &mensaje,
-                &peticion,
-                &respuesta,
-            );
+            let manejado =
+                ejecutar_manejadores_error(vm, &manejadores_error, &mensaje, &peticion, &respuesta);
             if !manejado && !campo_log(&respuesta, "terminada") {
                 responder_texto(&respuesta, 500, &mensaje);
             }
@@ -1268,11 +1275,7 @@ fn ejecutar_cadena(
         };
         let aridad = funcion.parametros.len();
         let continuacion = instancia_continuacion();
-        let mut argumentos = vec![
-            peticion.clone(),
-            respuesta.clone(),
-            continuacion.clone(),
-        ];
+        let mut argumentos = vec![peticion.clone(), respuesta.clone(), continuacion.clone()];
         argumentos.truncate(aridad.min(3));
         vm.llamar_funcion(funcion, entorno, argumentos, esto.cloned(), None)?;
 
@@ -1326,7 +1329,11 @@ fn servir_estatico(
         .extension()
         .map(|extension| extension.to_string_lossy().to_string())
         .unwrap_or_default();
-    poner_cabecera(respuesta, "Content-Type", http::tipo_por_extension(&extension));
+    poner_cabecera(
+        respuesta,
+        "Content-Type",
+        http::tipo_por_extension(&extension),
+    );
     poner_campo(respuesta, "estado", Valor::Entero(200));
     poner_campo(respuesta, "cuerpo", bits::instancia(&bytes));
     poner_campo(respuesta, "terminada", Valor::Log(true));
@@ -1680,7 +1687,9 @@ fn registrar_peticion(registro: &mut RegistroNativos) {
                 None => String::new(),
             };
             Ok(Valor::Log(
-                actual.to_ascii_lowercase().contains(&esperado.to_ascii_lowercase()),
+                actual
+                    .to_ascii_lowercase()
+                    .contains(&esperado.to_ascii_lowercase()),
             ))
         }),
     );
@@ -1692,7 +1701,11 @@ fn registrar_peticion(registro: &mut RegistroNativos) {
             exigir_aridad(F, &argumentos[1..], 1)?;
             let peticion = receptor(F, argumentos, TIPO_PETICION)?;
             let esperado = http::tipo_mime(arg_texto(F, argumentos, 1)?);
-            let esperado = esperado.split(';').next().unwrap_or("").to_ascii_lowercase();
+            let esperado = esperado
+                .split(';')
+                .next()
+                .unwrap_or("")
+                .to_ascii_lowercase();
             let acepta = match crate::red::objetos::buscar_sin_caso(
                 &campo(&peticion, "cabeceras"),
                 "accept",
@@ -1814,7 +1827,11 @@ fn registrar_respuesta(registro: &mut RegistroNativos, guardian: &Rc<GuardianPer
             const F: &str = "RespuestaSaliente.jsn";
             exigir_aridad(F, &argumentos[1..], 1)?;
             let respuesta = receptor(F, argumentos, TIPO_RESPUESTA)?;
-            poner_cabecera(&respuesta, "Content-Type", "application/json; charset=utf-8");
+            poner_cabecera(
+                &respuesta,
+                "Content-Type",
+                "application/json; charset=utf-8",
+            );
             poner_campo(
                 &respuesta,
                 "cuerpo",
@@ -1864,13 +1881,11 @@ fn registrar_respuesta(registro: &mut RegistroNativos, guardian: &Rc<GuardianPer
                 match argumentos.len() {
                     2 => {
                         let nombre = arg_texto(&funcion, argumentos, 1)?;
-                        Ok(
-                            crate::red::objetos::buscar_sin_caso(
-                                &campo(&respuesta, "cabeceras"),
-                                nombre,
-                            )
-                            .unwrap_or(Valor::Nulo),
+                        Ok(crate::red::objetos::buscar_sin_caso(
+                            &campo(&respuesta, "cabeceras"),
+                            nombre,
                         )
+                        .unwrap_or(Valor::Nulo))
                     }
                     3 => {
                         let nombre = arg_texto(&funcion, argumentos, 1)?;
@@ -1894,8 +1909,9 @@ fn registrar_respuesta(registro: &mut RegistroNativos, guardian: &Rc<GuardianPer
             let respuesta = receptor(F, argumentos, TIPO_RESPUESTA)?;
             let nombre = arg_texto(F, argumentos, 1)?;
             let nuevo = texto_de_valor(&argumentos[2]);
-            let actual = crate::red::objetos::buscar_sin_caso(&campo(&respuesta, "cabeceras"), nombre)
-                .map(|valor| texto_de_valor(&valor));
+            let actual =
+                crate::red::objetos::buscar_sin_caso(&campo(&respuesta, "cabeceras"), nombre)
+                    .map(|valor| texto_de_valor(&valor));
             let combinado = match actual {
                 Some(previo) if !previo.is_empty() => format!("{previo}, {nuevo}"),
                 _ => nuevo,
@@ -2011,9 +2027,9 @@ fn registrar_respuesta(registro: &mut RegistroNativos, guardian: &Rc<GuardianPer
             let respuesta = receptor(F, argumentos, TIPO_RESPUESTA)?;
             let nombre = arg_texto(F, argumentos, 1)?;
             if let Valor::Lista(lista) = campo(&respuesta, "galletas") {
-                lista.borrow_mut().push(Valor::texto(format!(
-                    "{nombre}=; Max-Age=0; Path=/"
-                )));
+                lista
+                    .borrow_mut()
+                    .push(Valor::texto(format!("{nombre}=; Max-Age=0; Path=/")));
             }
             Ok(argumentos[0].clone())
         }),

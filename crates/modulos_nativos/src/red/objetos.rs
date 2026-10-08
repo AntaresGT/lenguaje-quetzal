@@ -52,7 +52,10 @@ pub(crate) fn campo(valor: &Valor, nombre: &str) -> Valor {
 /// Asigna un campo de una instancia nativa.
 pub(crate) fn poner_campo(valor: &Valor, nombre: &str, nuevo: Valor) {
     if let Valor::InstanciaNativa(instancia) = valor {
-        instancia.datos.borrow_mut().insert(nombre.to_string(), nuevo);
+        instancia
+            .datos
+            .borrow_mut()
+            .insert(nombre.to_string(), nuevo);
     }
 }
 
@@ -120,12 +123,7 @@ pub(crate) fn pares_de_jsn(valor: &Valor) -> Vec<(String, String)> {
         Valor::Jsn(mapa) => mapa
             .borrow()
             .iter()
-            .map(|(clave, valor)| {
-                (
-                    clave.clone(),
-                    maquina_virtual::texto_de_valor(valor),
-                )
-            })
+            .map(|(clave, valor)| (clave.clone(), maquina_virtual::texto_de_valor(valor)))
             .collect(),
         _ => Vec::new(),
     }

@@ -211,12 +211,12 @@ fn nativa_con_vm_puede_invocar_un_manejador_de_quetzal_por_referencia() {
     registro.registrar_funcion_con_vm(
         "prueba.invocar_manejador",
         Box::new(|vm, argumentos| {
-            let (Some(Valor::Funcion(funcion, entorno)), Some(argumento)) =
+            let (Some(Valor::Funcion(datos)), Some(argumento)) =
                 (argumentos.first().cloned(), argumentos.get(1).cloned())
             else {
                 panic!("se esperaba (funcion, argumento)");
             };
-            vm.llamar_funcion(&funcion, &entorno, vec![argumento], None, None)
+            vm.llamar_funcion(&datos.funcion, &datos.entorno, vec![argumento], None, None)
         }),
     );
 

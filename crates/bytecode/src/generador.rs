@@ -17,6 +17,7 @@ use crate::modulo::{
     AtributoCompilado, FuncionCompilada, ImportacionCompilada, MetodoCompilado, ModuloCompilado,
     ObjetoCompilado,
 };
+use crate::optimizar::optimizar_modulo;
 
 /// Genera el bytecode de un módulo completo.
 pub fn generar_modulo(modulo: &Modulo) -> Result<ModuloCompilado, ErrorQuetzal> {
@@ -140,6 +141,7 @@ impl Generador {
         compilado.nombres_globales = std::mem::take(&mut self.nombres_globales);
         compilado.globales_mutables = std::mem::take(&mut self.globales_mutables);
         compilado.ranuras_locales_principal = self.ranuras_max;
+        optimizar_modulo(&mut compilado);
         Ok(compilado)
     }
 
@@ -302,6 +304,15 @@ impl Generador {
     fn emitir_nulo(&mut self, trozo: &mut Trozo, ubicacion: Ubicacion) {
         let indice = self.indice_constante(Constante::Nulo);
         trozo.emitir(Instruccion::CargarConstante(indice), ubicacion);
+    }
+
+    fn emitir_entero(&mut self, trozo: &mut Trozo, valor: i64, ubicacion: Ubicacion) {
+        if let Ok(pequeno) = i16::try_from(valor) {
+            trozo.emitir(Instruccion::CargarEntero(pequeno), ubicacion);
+        } else {
+            let indice = self.indice_constante(Constante::Entero(valor));
+            trozo.emitir(Instruccion::CargarConstante(indice), ubicacion);
+        }
     }
 
     // ----- Funciones y objetos -----
@@ -718,8 +729,7 @@ impl Generador {
         let ubicacion = expresion.ubicacion;
         match &expresion.nodo {
             NodoExpresion::LiteralEntero(valor) => {
-                let indice = self.indice_constante(Constante::Entero(*valor));
-                trozo.emitir(Instruccion::CargarConstante(indice), ubicacion);
+                self.emitir_entero(trozo, *valor, ubicacion);
                 Ok(TipoRapido::Entero)
             }
             NodoExpresion::LiteralNumero(texto) => {

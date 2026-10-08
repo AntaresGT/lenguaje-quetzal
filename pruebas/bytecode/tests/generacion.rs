@@ -16,7 +16,8 @@ fn generar_deberia_emitir_constantes_y_llamadas() {
         modulo
             .principal
             .instrucciones
-            .contains(&bytecode::Instruccion::SumarEntero)
+            .contains(&bytecode::Instruccion::CargarEntero(3)),
+        "1 + 2 debe plegarse a la constante 3"
     );
 }
 

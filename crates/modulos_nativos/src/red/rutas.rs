@@ -13,7 +13,10 @@
 #[derive(Debug, Clone)]
 enum Segmento {
     Literal(String),
-    Parametro { nombre: String, opcional: bool },
+    Parametro {
+        nombre: String,
+        opcional: bool,
+    },
     /// Comodín: consume todo lo que queda de la ruta.
     Comodin(String),
     /// Segmento literal opcional (`/libros{/detalle}`).
@@ -203,9 +206,11 @@ mod pruebas {
 
     #[test]
     fn comodin_captura_el_resto() {
-        let parametros =
-            coincide("/archivos/*ruta", "/archivos/a/b.txt").expect("debe coincidir");
-        assert_eq!(parametros, vec![("ruta".to_string(), "a/b.txt".to_string())]);
+        let parametros = coincide("/archivos/*ruta", "/archivos/a/b.txt").expect("debe coincidir");
+        assert_eq!(
+            parametros,
+            vec![("ruta".to_string(), "a/b.txt".to_string())]
+        );
     }
 
     #[test]

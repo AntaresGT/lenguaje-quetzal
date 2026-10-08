@@ -113,6 +113,23 @@ fn ejecutar_deberia_llamar_funciones_y_recursion() {
 }
 
 #[test]
+fn ejecutar_deberia_soportar_recursion_profunda() {
+    let entorno = ejecutar(
+        "entero contar(entero n) {\n    si (n <= 0) {\n        retornar 0\n    }\n    retornar 1 + contar(n - 1)\n}\n\nentero resultado = contar(2000)\n",
+    );
+    assert_eq!(como_entero(&global(&entorno, "resultado")), 2000);
+}
+
+#[test]
+fn ejecutar_deberia_fallar_al_desbordar_la_pila_de_llamadas() {
+    let error = intentar_ejecutar(
+        "entero bucle(entero n) {\n    retornar bucle(n + 1)\n}\n\nentero resultado = bucle(0)\n",
+    )
+    .expect_err("el desborde de pila debe ser un error");
+    assert_eq!(error.codigo, "E0409");
+}
+
+#[test]
 fn ejecutar_deberia_interpolar_textos() {
     let entorno = ejecutar(
         "texto nombre = \"Quetzal\"\ntexto saludo = t\"Hola {nombre}, 2 + 2 = {2 + 2}\"\n",

@@ -254,12 +254,7 @@ fn http_codigos_deberia_describir_y_clasificar_los_estados() {
     assert_eq!(texto_global(&entorno, "error_servidor"), "verdadero");
     assert_eq!(texto_global(&entorno, "redireccion"), "verdadero");
     assert_eq!(texto_global(&entorno, "creado"), "201");
-    assert!(
-        texto_global(&entorno, "total")
-            .parse::<i64>()
-            .unwrap_or(0)
-            > 50
-    );
+    assert!(texto_global(&entorno, "total").parse::<i64>().unwrap_or(0) > 50);
 }
 
 // CA-03: el servidor enruta con parámetros, interceptores y enrutadores
@@ -443,12 +438,7 @@ fn el_cliente_deberia_interceptar_y_reportar_progreso() {
     assert_eq!(texto_global(&entorno, "saludo"), "hola");
     assert_eq!(texto_global(&entorno, "estado"), "200");
     assert_eq!(texto_global(&entorno, "visto"), "200");
-    assert!(
-        texto_global(&entorno, "avisos")
-            .parse::<i64>()
-            .unwrap_or(0)
-            >= 1
-    );
+    assert!(texto_global(&entorno, "avisos").parse::<i64>().unwrap_or(0) >= 1);
 }
 
 // CA-08: sin el permiso `red`, ninguna operación de red procede.

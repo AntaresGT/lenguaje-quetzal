@@ -17,8 +17,8 @@ use crate::valores::{
     MetodoRuntime, Valor, Variable, carga_a_valor, texto_de_valor,
 };
 
-/// Límite de marcos anidados (recursión).
-const LIMITE_PROFUNDIDAD: usize = 200;
+/// Límite de marcos anidados (recursión). Vive en el heap, no en la pila de Rust.
+const LIMITE_PROFUNDIDAD: usize = 10_000;
 
 /// Despachador genérico de un servicio nativo (por ejemplo `servidor_http`):
 /// recibe la VM, el identificador del recurso concreto y los datos de la
@@ -33,6 +33,8 @@ pub struct Vm {
     pub modulos: IndexMap<String, Rc<EntornoModulo>>,
     /// Pila de nombres de funciones en ejecución (para `e.llamadas`).
     pila_llamadas: Vec<String>,
+    /// Marcos de activación en el heap. La recursión Quetzal no crece la pila de Rust.
+    marcos: Vec<Marco>,
     /// Bucle de eventos: E/S de fondo (tokio) + despacho de solicitudes en
     /// el hilo de la VM. Ver `crate::bucle_eventos`.
     bucle: BucleEventos,
@@ -43,12 +45,41 @@ pub struct Vm {
     despachadores: RefCell<HashMap<String, Despachador>>,
 }
 
-/// Marco de ejecución de un trozo de bytecode.
+/// Código que ejecuta un marco: función compilada o trozo suelto (módulo, inicializador).
+enum CodigoMarco {
+    Funcion(Rc<FuncionCompilada>),
+    Trozo(Rc<Trozo>),
+}
+
+impl CodigoMarco {
+    fn trozo(&self) -> &Trozo {
+        match self {
+            Self::Funcion(funcion) => &funcion.trozo,
+            Self::Trozo(trozo) => trozo,
+        }
+    }
+}
+
+/// Marco de activación: locales, pila de operandos y manejadores de excepción.
 struct Marco {
+    codigo: CodigoMarco,
+    pc: usize,
     entorno: Rc<EntornoModulo>,
     /// Ranuras locales del marco (parámetros en `0..n`).
     locales: Vec<Valor>,
     esto: Option<Valor>,
+    pila: Vec<Valor>,
+    manejadores: Vec<Manejador>,
+    /// Nombre para `e.llamadas`. `None` = cuerpo de módulo o trozo aislado.
+    nombre: Option<String>,
+    /// Si está, al retornar se empuja esto en el caller (constructores).
+    valor_al_volver: Option<Valor>,
+}
+
+/// Resultado de preparar una llamada: valor ya resuelto o marco que hay que empujar.
+enum DestinoLlamada {
+    Valor(Valor),
+    Marco(Marco),
 }
 
 /// Manejador de excepciones activo dentro de un marco.
@@ -64,6 +95,7 @@ impl Vm {
             nativos,
             modulos: IndexMap::new(),
             pila_llamadas: Vec::new(),
+            marcos: Vec::new(),
             bucle: BucleEventos::nuevo(),
             resultados_pendientes: RefCell::new(HashMap::new()),
             despachadores: RefCell::new(HashMap::new()),
@@ -259,13 +291,13 @@ impl Vm {
         }
 
         // Código principal del módulo.
-        let mut marco = Marco {
-            entorno: Rc::clone(&entorno),
-            locales: vec![Valor::Nulo; modulo.ranuras_locales_principal as usize],
-            esto: None,
-        };
         let valor = self
-            .ejecutar_trozo(&modulo.principal, &mut marco)
+            .correr_trozo(
+                Rc::new(modulo.principal.clone()),
+                Rc::clone(&entorno),
+                vec![Valor::Nulo; modulo.ranuras_locales_principal as usize],
+                None,
+            )
             .map_err(|fallo| fallo.a_error(&modulo.nombre))?;
 
         sincronizar_globales(&entorno);
@@ -335,12 +367,7 @@ impl Vm {
         entorno: &Rc<EntornoModulo>,
         esto: Option<Valor>,
     ) -> Result<Valor, Fallo> {
-        let mut marco = Marco {
-            entorno: Rc::clone(entorno),
-            locales: Vec::new(),
-            esto,
-        };
-        self.ejecutar_trozo(trozo, &mut marco)
+        self.correr_trozo(Rc::new(trozo.clone()), Rc::clone(entorno), Vec::new(), esto)
     }
 
     /// Llama una función de Quetzal con sus argumentos.
@@ -352,6 +379,51 @@ impl Vm {
         esto: Option<Valor>,
         ubicacion: Option<Ubicacion>,
     ) -> Result<Valor, Fallo> {
+        let marco = self.preparar_marco_funcion(funcion, entorno, argumentos, esto, ubicacion)?;
+        self.entrar_marco(marco, ubicacion)
+    }
+
+    /// Resuelve un valor `esperar`: si es una [`Valor::Tarea`] (función
+    /// Quetzal `asincrono`) la ejecuta; si es una [`Valor::TareaNativa`]
+    /// (E/S en el bucle de eventos) bombea el bucle hasta que se resuelve;
+    /// cualquier otro valor se devuelve sin cambios. Es la implementación de
+    /// la instrucción `Esperar`, expuesta también para que los módulos
+    /// nativos (y las pruebas) puedan esperar tareas fuera del bytecode.
+    pub fn esperar(&mut self, valor: Valor, ubicacion: Ubicacion) -> Result<Valor, Fallo> {
+        match self.destino_esperar(valor, ubicacion)? {
+            DestinoLlamada::Valor(valor) => Ok(valor),
+            DestinoLlamada::Marco(marco) => self.entrar_marco(marco, Some(ubicacion)),
+        }
+    }
+
+    fn destino_esperar(
+        &mut self,
+        valor: Valor,
+        ubicacion: Ubicacion,
+    ) -> Result<DestinoLlamada, Fallo> {
+        match valor {
+            Valor::Tarea(tarea) => Ok(DestinoLlamada::Marco(self.preparar_marco_funcion(
+                &tarea.funcion,
+                &tarea.entorno,
+                tarea.argumentos.clone(),
+                tarea.instancia.clone(),
+                Some(ubicacion),
+            )?)),
+            Valor::TareaNativa(tarea) => Ok(DestinoLlamada::Valor(
+                self.resolver_tarea_nativa(tarea.id, ubicacion)?,
+            )),
+            otro => Ok(DestinoLlamada::Valor(otro)),
+        }
+    }
+
+    fn preparar_marco_funcion(
+        &self,
+        funcion: &Rc<FuncionCompilada>,
+        entorno: &Rc<EntornoModulo>,
+        argumentos: Vec<Valor>,
+        esto: Option<Valor>,
+        ubicacion: Option<Ubicacion>,
+    ) -> Result<Marco, Fallo> {
         if argumentos.len() != funcion.parametros.len() {
             return Err(self.excepcion(
                 "E0210",
@@ -364,15 +436,6 @@ impl Vm {
                 ubicacion,
             ));
         }
-        if self.pila_llamadas.len() >= LIMITE_PROFUNDIDAD {
-            return Err(self.excepcion(
-                "E0407",
-                format!(
-                    "se alcanzó el límite de {LIMITE_PROFUNDIDAD} llamadas anidadas (¿recursión infinita?)"
-                ),
-                ubicacion,
-            ));
-        }
 
         let ranuras = (funcion.ranuras_locales as usize).max(argumentos.len());
         let mut locales = vec![Valor::Nulo; ranuras];
@@ -380,36 +443,61 @@ impl Vm {
             locales[indice] = valor;
         }
 
-        let mut marco = Marco {
+        Ok(Marco {
+            codigo: CodigoMarco::Funcion(Rc::clone(funcion)),
+            pc: 0,
             entorno: Rc::clone(entorno),
             locales,
             esto,
-        };
-
-        self.pila_llamadas.push(funcion.nombre.clone());
-        let resultado = self.ejecutar_trozo(&funcion.trozo, &mut marco);
-        self.pila_llamadas.pop();
-        resultado
+            pila: Vec::new(),
+            manejadores: Vec::new(),
+            nombre: Some(funcion.nombre.clone()),
+            valor_al_volver: None,
+        })
     }
 
-    /// Resuelve un valor `esperar`: si es una [`Valor::Tarea`] (función
-    /// Quetzal `asincrono`) la ejecuta; si es una [`Valor::TareaNativa`]
-    /// (E/S en el bucle de eventos) bombea el bucle hasta que se resuelve;
-    /// cualquier otro valor se devuelve sin cambios. Es la implementación de
-    /// la instrucción `Esperar`, expuesta también para que los módulos
-    /// nativos (y las pruebas) puedan esperar tareas fuera del bytecode.
-    pub fn esperar(&mut self, valor: Valor, ubicacion: Ubicacion) -> Result<Valor, Fallo> {
-        match valor {
-            Valor::Tarea(tarea) => self.llamar_funcion(
-                &tarea.funcion,
-                &tarea.entorno,
-                tarea.argumentos.clone(),
-                tarea.instancia.clone(),
-                Some(ubicacion),
+    fn error_desborde_pila(&self, ubicacion: Option<Ubicacion>) -> Fallo {
+        self.excepcion(
+            "E0409",
+            format!(
+                "se alcanzó el límite de {LIMITE_PROFUNDIDAD} llamadas anidadas (¿recursión infinita?)"
             ),
-            Valor::TareaNativa(tarea) => self.resolver_tarea_nativa(tarea.id, ubicacion),
-            otro => Ok(otro),
+            ubicacion,
+        )
+    }
+
+    fn entrar_marco(&mut self, marco: Marco, ubicacion: Option<Ubicacion>) -> Result<Valor, Fallo> {
+        if self.pila_llamadas.len() >= LIMITE_PROFUNDIDAD {
+            return Err(self.error_desborde_pila(ubicacion));
         }
+        let base = self.marcos.len();
+        if let Some(ref nombre) = marco.nombre {
+            self.pila_llamadas.push(nombre.clone());
+        }
+        self.marcos.push(marco);
+        self.correr_hasta(base)
+    }
+
+    fn correr_trozo(
+        &mut self,
+        trozo: Rc<Trozo>,
+        entorno: Rc<EntornoModulo>,
+        locales: Vec<Valor>,
+        esto: Option<Valor>,
+    ) -> Result<Valor, Fallo> {
+        let base = self.marcos.len();
+        self.marcos.push(Marco {
+            codigo: CodigoMarco::Trozo(trozo),
+            pc: 0,
+            entorno,
+            locales,
+            esto,
+            pila: Vec::new(),
+            manejadores: Vec::new(),
+            nombre: None,
+            valor_al_volver: None,
+        });
+        self.correr_hasta(base)
     }
 
     fn excepcion(&self, codigo: &str, mensaje: String, ubicacion: Option<Ubicacion>) -> Fallo {
@@ -423,45 +511,140 @@ impl Vm {
 
     // ----- Bucle principal del intérprete -----
 
-    fn ejecutar_trozo(&mut self, trozo: &Trozo, marco: &mut Marco) -> Result<Valor, Fallo> {
-        let mut pila: Vec<Valor> = Vec::new();
-        let mut manejadores: Vec<Manejador> = Vec::new();
-        let mut pc = 0usize;
+    fn correr_hasta(&mut self, base: usize) -> Result<Valor, Fallo> {
+        loop {
+            let mut marco = self.marcos.pop().ok_or_else(|| {
+                Fallo::Error(Box::new(ErrorQuetzal::interno(
+                    "pila de marcos vacía (bytecode inválido)",
+                )))
+            })?;
 
-        while pc < trozo.instrucciones.len() {
-            let ubicacion = trozo.ubicaciones[pc];
-            let resultado = self.ejecutar_instruccion(
-                &trozo.instrucciones[pc],
-                ubicacion,
-                marco,
-                &mut pila,
-                &mut manejadores,
-                &mut pc,
-            );
+            if marco.pc >= marco.codigo.trozo().instrucciones.len() {
+                let valor = marco.pila.pop().unwrap_or(Valor::Nulo);
+                if let Some(valor) = self.completar_retorno(base, marco, valor) {
+                    return Ok(valor);
+                }
+                continue;
+            }
+
+            let instruccion = marco.codigo.trozo().instrucciones[marco.pc].clone();
+            let ubicacion = marco.codigo.trozo().ubicaciones[marco.pc];
+            let resultado = self.ejecutar_instruccion(&instruccion, ubicacion, &mut marco);
 
             match resultado {
-                Ok(Flujo::Continuar) => pc += 1,
-                Ok(Flujo::SinAvanzar) => {}
-                Ok(Flujo::Retornar(valor)) => return Ok(valor),
-                Err(Fallo::Excepcion(mut datos)) => {
-                    if datos.ubicacion.is_none() {
-                        datos.ubicacion = Some(ubicacion);
-                    }
-                    match manejadores.pop() {
-                        Some(manejador) => {
-                            pila.truncate(manejador.profundidad_pila);
-                            limpiar_locales(&mut marco.locales, manejador.ranuras_locales);
-                            pila.push(Valor::Excepcion(Rc::new(datos)));
-                            pc = manejador.pc;
-                        }
-                        None => return Err(Fallo::Excepcion(datos)),
+                Ok(Flujo::Continuar) => {
+                    marco.pc += 1;
+                    self.marcos.push(marco);
+                }
+                Ok(Flujo::SinAvanzar) => {
+                    self.marcos.push(marco);
+                }
+                Ok(Flujo::Retornar(valor)) => {
+                    if let Some(valor) = self.completar_retorno(base, marco, valor) {
+                        return Ok(valor);
                     }
                 }
-                Err(otro) => return Err(otro),
+                Ok(Flujo::Llamar(callee)) => {
+                    if self.pila_llamadas.len() >= LIMITE_PROFUNDIDAD {
+                        let datos = match self.error_desborde_pila(Some(ubicacion)) {
+                            Fallo::Excepcion(datos) => datos,
+                            otro => {
+                                self.descartar_hasta(base, Some(marco));
+                                return Err(otro);
+                            }
+                        };
+                        self.propagar_excepcion(base, marco, datos, ubicacion)?;
+                        continue;
+                    }
+                    marco.pc += 1;
+                    if let Some(ref nombre) = callee.nombre {
+                        self.pila_llamadas.push(nombre.clone());
+                    }
+                    self.marcos.push(marco);
+                    self.marcos.push(callee);
+                }
+                Err(Fallo::Excepcion(datos)) => {
+                    self.propagar_excepcion(base, marco, datos, ubicacion)?;
+                }
+                Err(otro) => {
+                    self.descartar_hasta(base, Some(marco));
+                    return Err(otro);
+                }
             }
         }
+    }
 
-        Ok(pila.pop().unwrap_or(Valor::Nulo))
+    fn completar_retorno(&mut self, base: usize, marco: Marco, valor: Valor) -> Option<Valor> {
+        let valor = marco.valor_al_volver.unwrap_or(valor);
+        if marco.nombre.is_some() {
+            self.pila_llamadas.pop();
+        }
+        if self.marcos.len() == base {
+            Some(valor)
+        } else if let Some(caller) = self.marcos.last_mut() {
+            caller.pila.push(valor);
+            None
+        } else {
+            Some(valor)
+        }
+    }
+
+    fn propagar_excepcion(
+        &mut self,
+        base: usize,
+        mut marco: Marco,
+        mut datos: DatosExcepcion,
+        ubicacion: Ubicacion,
+    ) -> Result<(), Fallo> {
+        if datos.ubicacion.is_none() {
+            datos.ubicacion = Some(ubicacion);
+        }
+        loop {
+            if let Some(manejador) = marco.manejadores.pop() {
+                marco.pila.truncate(manejador.profundidad_pila);
+                limpiar_locales(&mut marco.locales, manejador.ranuras_locales);
+                marco.pila.push(Valor::Excepcion(Rc::new(datos)));
+                marco.pc = manejador.pc;
+                self.marcos.push(marco);
+                return Ok(());
+            }
+            if marco.nombre.is_some() {
+                self.pila_llamadas.pop();
+            }
+            if self.marcos.len() == base {
+                return Err(Fallo::Excepcion(datos));
+            }
+            marco = self.marcos.pop().ok_or_else(|| {
+                Fallo::Error(Box::new(ErrorQuetzal::interno(
+                    "pila de marcos vacía al propagar excepción",
+                )))
+            })?;
+        }
+    }
+
+    fn descartar_hasta(&mut self, base: usize, actual: Option<Marco>) {
+        if let Some(marco) = actual
+            && marco.nombre.is_some()
+        {
+            self.pila_llamadas.pop();
+        }
+        while self.marcos.len() > base {
+            if let Some(marco) = self.marcos.pop()
+                && marco.nombre.is_some()
+            {
+                self.pila_llamadas.pop();
+            }
+        }
+    }
+
+    fn aplicar_destino(pila: &mut Vec<Valor>, destino: DestinoLlamada) -> Flujo {
+        match destino {
+            DestinoLlamada::Valor(valor) => {
+                pila.push(valor);
+                Flujo::Continuar
+            }
+            DestinoLlamada::Marco(marco) => Flujo::Llamar(marco),
+        }
     }
 
     fn ejecutar_instruccion(
@@ -469,20 +652,18 @@ impl Vm {
         instruccion: &Instruccion,
         ubicacion: Ubicacion,
         marco: &mut Marco,
-        pila: &mut Vec<Valor>,
-        manejadores: &mut Vec<Manejador>,
-        pc: &mut usize,
     ) -> Result<Flujo, Fallo> {
         match instruccion {
             Instruccion::CargarConstante(indice) => {
-                pila.push(marco.entorno.constantes[*indice as usize].clone());
+                let constante = marco.entorno.constantes[*indice as usize].clone();
+                marco.pila.push(constante);
             }
             Instruccion::Duplicar => {
-                let tope = self.tope(pila, ubicacion)?.clone();
-                pila.push(tope);
+                let tope = self.tope(&marco.pila, ubicacion)?.clone();
+                marco.pila.push(tope);
             }
             Instruccion::Desechar => {
-                self.sacar(pila, ubicacion)?;
+                self.sacar(&mut marco.pila, ubicacion)?;
             }
 
             Instruccion::CargarLocal(ranura) => {
@@ -495,10 +676,10 @@ impl Vm {
                             "ranura local fuera de rango (bytecode inválido)",
                         )))
                     })?;
-                pila.push(valor);
+                marco.pila.push(valor);
             }
             Instruccion::GuardarLocal(ranura) => {
-                let valor = self.sacar(pila, ubicacion)?;
+                let valor = self.sacar(&mut marco.pila, ubicacion)?;
                 let ranura = *ranura as usize;
                 if ranura >= marco.locales.len() {
                     return Err(Fallo::Error(Box::new(ErrorQuetzal::interno(
@@ -512,14 +693,15 @@ impl Vm {
             }
 
             Instruccion::CargarGlobal(indice) => {
-                pila.push(self.cargar_global(marco, *indice, ubicacion)?);
+                let valor = self.cargar_global(marco, *indice, ubicacion)?;
+                marco.pila.push(valor);
             }
             Instruccion::DeclararGlobal(indice) => {
-                let valor = self.sacar(pila, ubicacion)?;
+                let valor = self.sacar(&mut marco.pila, ubicacion)?;
                 self.declarar_global(marco, *indice, valor, ubicacion)?;
             }
             Instruccion::GuardarGlobal(indice) => {
-                let valor = self.sacar(pila, ubicacion)?;
+                let valor = self.sacar(&mut marco.pila, ubicacion)?;
                 self.guardar_global(marco, *indice, valor, ubicacion)?;
             }
             Instruccion::CargarExterno(indice) => {
@@ -531,10 +713,10 @@ impl Vm {
                         Some(ubicacion),
                     )
                 })?;
-                pila.push(valor);
+                marco.pila.push(valor);
             }
             Instruccion::GuardarExterno(indice) => {
-                let valor = self.sacar(pila, ubicacion)?;
+                let valor = self.sacar(&mut marco.pila, ubicacion)?;
                 let nombre = marco.entorno.modulo.nombres[*indice as usize].clone();
                 self.guardar_externo(marco, &nombre, valor, ubicacion)?;
             }
@@ -550,9 +732,14 @@ impl Vm {
             | Instruccion::Menor
             | Instruccion::MayorOIgual
             | Instruccion::MenorOIgual => {
-                let derecha = self.sacar(pila, ubicacion)?;
-                let izquierda = self.sacar(pila, ubicacion)?;
-                pila.push(self.operacion_binaria(instruccion, izquierda, derecha, ubicacion)?);
+                let derecha = self.sacar(&mut marco.pila, ubicacion)?;
+                let izquierda = self.sacar(&mut marco.pila, ubicacion)?;
+                marco.pila.push(self.operacion_binaria(
+                    instruccion,
+                    izquierda,
+                    derecha,
+                    ubicacion,
+                )?);
             }
             Instruccion::SumarEntero
             | Instruccion::RestarEntero
@@ -565,125 +752,138 @@ impl Vm {
             | Instruccion::MenorEntero
             | Instruccion::MayorOIgualEntero
             | Instruccion::MenorOIgualEntero => {
-                let derecha = self.sacar(pila, ubicacion)?;
-                let izquierda = self.sacar(pila, ubicacion)?;
-                pila.push(self.operacion_entera(instruccion, izquierda, derecha, ubicacion)?);
+                let derecha = self.sacar(&mut marco.pila, ubicacion)?;
+                let izquierda = self.sacar(&mut marco.pila, ubicacion)?;
+                marco.pila.push(self.operacion_entera(
+                    instruccion,
+                    izquierda,
+                    derecha,
+                    ubicacion,
+                )?);
             }
             Instruccion::Negar => {
-                let valor = self.sacar(pila, ubicacion)?;
-                pila.push(self.negar(valor, ubicacion)?);
+                let valor = self.sacar(&mut marco.pila, ubicacion)?;
+                marco.pila.push(self.negar(valor, ubicacion)?);
             }
             Instruccion::NegarEntero => {
-                let valor = self.sacar(pila, ubicacion)?;
-                pila.push(self.negar_entero(valor, ubicacion)?);
+                let valor = self.sacar(&mut marco.pila, ubicacion)?;
+                marco.pila.push(self.negar_entero(valor, ubicacion)?);
             }
             Instruccion::NoLogico => {
-                let valor = self.sacar(pila, ubicacion)?;
+                let valor = self.sacar(&mut marco.pila, ubicacion)?;
                 let logico = self.como_logico(&valor, ubicacion)?;
-                pila.push(Valor::Log(!logico));
+                marco.pila.push(Valor::Log(!logico));
             }
 
             Instruccion::Saltar(destino) => {
-                *pc = *destino;
+                marco.pc = *destino;
                 return Ok(Flujo::SinAvanzar);
             }
             Instruccion::SaltarSiFalso(destino) => {
-                let valor = self.sacar(pila, ubicacion)?;
+                let valor = self.sacar(&mut marco.pila, ubicacion)?;
                 if !self.como_logico(&valor, ubicacion)? {
-                    *pc = *destino;
+                    marco.pc = *destino;
                     return Ok(Flujo::SinAvanzar);
                 }
             }
             Instruccion::SaltarSiVerdadero(destino) => {
-                let valor = self.sacar(pila, ubicacion)?;
+                let valor = self.sacar(&mut marco.pila, ubicacion)?;
                 if self.como_logico(&valor, ubicacion)? {
-                    *pc = *destino;
+                    marco.pc = *destino;
                     return Ok(Flujo::SinAvanzar);
                 }
             }
             Instruccion::SaltarSiFalsoYDejar(destino) => {
-                let valor = self.tope(pila, ubicacion)?.clone();
+                let valor = self.tope(&marco.pila, ubicacion)?.clone();
                 if !self.como_logico(&valor, ubicacion)? {
-                    *pc = *destino;
+                    marco.pc = *destino;
                     return Ok(Flujo::SinAvanzar);
                 }
-                self.sacar(pila, ubicacion)?;
+                self.sacar(&mut marco.pila, ubicacion)?;
             }
             Instruccion::SaltarSiVerdaderoYDejar(destino) => {
-                let valor = self.tope(pila, ubicacion)?.clone();
+                let valor = self.tope(&marco.pila, ubicacion)?.clone();
                 if self.como_logico(&valor, ubicacion)? {
-                    *pc = *destino;
+                    marco.pc = *destino;
                     return Ok(Flujo::SinAvanzar);
                 }
-                self.sacar(pila, ubicacion)?;
+                self.sacar(&mut marco.pila, ubicacion)?;
             }
 
             Instruccion::Llamar(cantidad) => {
-                let argumentos = self.sacar_varios(pila, *cantidad as usize, ubicacion)?;
-                let objetivo = self.sacar(pila, ubicacion)?;
-                let resultado = self.llamar_valor(objetivo, argumentos, ubicacion)?;
-                pila.push(resultado);
+                let argumentos =
+                    self.sacar_varios(&mut marco.pila, *cantidad as usize, ubicacion)?;
+                let objetivo = self.sacar(&mut marco.pila, ubicacion)?;
+                let destino = self.llamar_valor(objetivo, argumentos, ubicacion)?;
+                return Ok(Self::aplicar_destino(&mut marco.pila, destino));
             }
             Instruccion::LlamarMetodo(indice_nombre, cantidad) => {
                 let nombre = marco.entorno.modulo.nombres[*indice_nombre as usize].clone();
-                let argumentos = self.sacar_varios(pila, *cantidad as usize, ubicacion)?;
-                let receptor = self.sacar(pila, ubicacion)?;
-                let resultado = self.llamar_metodo(receptor, &nombre, argumentos, ubicacion)?;
-                pila.push(resultado);
+                let argumentos =
+                    self.sacar_varios(&mut marco.pila, *cantidad as usize, ubicacion)?;
+                let receptor = self.sacar(&mut marco.pila, ubicacion)?;
+                let destino = self.llamar_metodo(receptor, &nombre, argumentos, ubicacion)?;
+                return Ok(Self::aplicar_destino(&mut marco.pila, destino));
             }
             Instruccion::Retornar => {
-                let valor = pila.pop().unwrap_or(Valor::Nulo);
+                let valor = marco.pila.pop().unwrap_or(Valor::Nulo);
                 return Ok(Flujo::Retornar(valor));
             }
 
             Instruccion::CargarMiembro(indice) => {
                 let nombre = marco.entorno.modulo.nombres[*indice as usize].clone();
-                let objeto = self.sacar(pila, ubicacion)?;
-                pila.push(self.cargar_miembro(objeto, &nombre, ubicacion)?);
+                let objeto = self.sacar(&mut marco.pila, ubicacion)?;
+                marco
+                    .pila
+                    .push(self.cargar_miembro(objeto, &nombre, ubicacion)?);
             }
             Instruccion::GuardarMiembro(indice) => {
-                let valor = self.sacar(pila, ubicacion)?;
-                let objeto = self.sacar(pila, ubicacion)?;
+                let valor = self.sacar(&mut marco.pila, ubicacion)?;
+                let objeto = self.sacar(&mut marco.pila, ubicacion)?;
                 let nombre = marco.entorno.modulo.nombres[*indice as usize].clone();
                 self.guardar_miembro(objeto, &nombre, valor, ubicacion)?;
             }
             Instruccion::Indexar => {
-                let indice = self.sacar(pila, ubicacion)?;
-                let objeto = self.sacar(pila, ubicacion)?;
-                pila.push(self.indexar(objeto, indice, ubicacion)?);
+                let indice = self.sacar(&mut marco.pila, ubicacion)?;
+                let objeto = self.sacar(&mut marco.pila, ubicacion)?;
+                marco.pila.push(self.indexar(objeto, indice, ubicacion)?);
             }
             Instruccion::GuardarIndice => {
-                let valor = self.sacar(pila, ubicacion)?;
-                let indice = self.sacar(pila, ubicacion)?;
-                let objeto = self.sacar(pila, ubicacion)?;
+                let valor = self.sacar(&mut marco.pila, ubicacion)?;
+                let indice = self.sacar(&mut marco.pila, ubicacion)?;
+                let objeto = self.sacar(&mut marco.pila, ubicacion)?;
                 self.guardar_indice(objeto, indice, valor, ubicacion)?;
             }
 
             Instruccion::CrearLista(cantidad) => {
-                let elementos = self.sacar_varios(pila, *cantidad as usize, ubicacion)?;
-                pila.push(Valor::lista(elementos));
+                let elementos =
+                    self.sacar_varios(&mut marco.pila, *cantidad as usize, ubicacion)?;
+                marco.pila.push(Valor::lista(elementos));
             }
             Instruccion::CrearJsn(cantidad) => {
-                let pares = self.sacar_varios(pila, (*cantidad as usize) * 2, ubicacion)?;
+                let pares =
+                    self.sacar_varios(&mut marco.pila, (*cantidad as usize) * 2, ubicacion)?;
                 let mut mapa = IndexMap::new();
                 for par in pares.chunks(2) {
                     let clave = texto_de_valor(&par[0]);
                     mapa.insert(clave, par[1].clone());
                 }
-                pila.push(Valor::jsn(mapa));
+                marco.pila.push(Valor::jsn(mapa));
             }
             Instruccion::Interpolar(cantidad) => {
-                let partes = self.sacar_varios(pila, *cantidad as usize, ubicacion)?;
+                let partes = self.sacar_varios(&mut marco.pila, *cantidad as usize, ubicacion)?;
                 let texto: String = partes.iter().map(texto_de_valor).collect();
-                pila.push(Valor::texto(texto));
+                marco.pila.push(Valor::texto(texto));
             }
 
             Instruccion::Instanciar(cantidad) => {
-                let argumentos = self.sacar_varios(pila, *cantidad as usize, ubicacion)?;
-                let valor_clase = self.sacar(pila, ubicacion)?;
+                let argumentos =
+                    self.sacar_varios(&mut marco.pila, *cantidad as usize, ubicacion)?;
+                let valor_clase = self.sacar(&mut marco.pila, ubicacion)?;
                 match valor_clase {
                     Valor::Clase(clase) => {
-                        pila.push(self.instanciar(&clase, argumentos, ubicacion)?);
+                        let destino = self.instanciar(&clase, argumentos, ubicacion)?;
+                        return Ok(Self::aplicar_destino(&mut marco.pila, destino));
                     }
                     // Objetos nativos (`nuevo Tiempo(...)`): el módulo registra
                     // su constructor con la clave `{modulo}.constructor`.
@@ -696,7 +896,9 @@ impl Vm {
                                 Some(ubicacion),
                             ));
                         }
-                        pila.push(self.llamar_nativa(&clave, &argumentos, ubicacion)?);
+                        marco
+                            .pila
+                            .push(self.llamar_nativa(&clave, &argumentos, ubicacion)?);
                     }
                     otro => {
                         return Err(self.excepcion(
@@ -718,7 +920,7 @@ impl Vm {
                         Some(ubicacion),
                     )
                 })?;
-                pila.push(esto);
+                marco.pila.push(esto);
             }
             Instruccion::CargarPadre => {
                 let esto = marco.esto.clone().ok_or_else(|| {
@@ -735,14 +937,14 @@ impl Vm {
                         Some(ubicacion),
                     ));
                 };
-                pila.push(Valor::Padre {
+                marco.pila.push(Valor::Padre {
                     instancia,
                     clase: None,
                 });
             }
 
             Instruccion::CrearIterador => {
-                let valor = self.sacar(pila, ubicacion)?;
+                let valor = self.sacar(&mut marco.pila, ubicacion)?;
                 let elementos = match &valor {
                     Valor::Lista(lista) => lista.borrow().clone(),
                     Valor::Jsn(mapa) => mapa.borrow().keys().map(Valor::texto).collect(),
@@ -757,13 +959,15 @@ impl Vm {
                         ));
                     }
                 };
-                pila.push(Valor::Iterador(Rc::new(RefCell::new(EstadoIterador {
-                    elementos,
-                    posicion: 0,
-                }))));
+                marco
+                    .pila
+                    .push(Valor::Iterador(Rc::new(RefCell::new(EstadoIterador {
+                        elementos,
+                        posicion: 0,
+                    }))));
             }
             Instruccion::IteradorSiguiente(destino) => {
-                let valor = self.sacar(pila, ubicacion)?;
+                let valor = self.sacar(&mut marco.pila, ubicacion)?;
                 let Valor::Iterador(iterador) = valor else {
                     return Err(self.excepcion(
                         "E0406",
@@ -775,25 +979,25 @@ impl Vm {
                 if estado.posicion < estado.elementos.len() {
                     let elemento = estado.elementos[estado.posicion].clone();
                     estado.posicion += 1;
-                    pila.push(elemento);
+                    marco.pila.push(elemento);
                 } else {
-                    *pc = *destino;
+                    marco.pc = *destino;
                     return Ok(Flujo::SinAvanzar);
                 }
             }
 
             Instruccion::EntrarIntentar(pc_manejador, ranuras) => {
-                manejadores.push(Manejador {
+                marco.manejadores.push(Manejador {
                     pc: *pc_manejador,
-                    profundidad_pila: pila.len(),
+                    profundidad_pila: marco.pila.len(),
                     ranuras_locales: *ranuras,
                 });
             }
             Instruccion::SalirIntentar => {
-                manejadores.pop();
+                marco.manejadores.pop();
             }
             Instruccion::Lanzar => {
-                let valor = self.sacar(pila, ubicacion)?;
+                let valor = self.sacar(&mut marco.pila, ubicacion)?;
                 let datos = match valor {
                     Valor::Excepcion(datos) => (*datos).clone(),
                     otro => DatosExcepcion {
@@ -807,8 +1011,9 @@ impl Vm {
             }
 
             Instruccion::Esperar => {
-                let valor = self.sacar(pila, ubicacion)?;
-                pila.push(self.esperar(valor, ubicacion)?);
+                let valor = self.sacar(&mut marco.pila, ubicacion)?;
+                let destino = self.destino_esperar(valor, ubicacion)?;
+                return Ok(Self::aplicar_destino(&mut marco.pila, destino));
             }
         }
         Ok(Flujo::Continuar)
@@ -1246,18 +1451,24 @@ impl Vm {
         objetivo: Valor,
         argumentos: Vec<Valor>,
         ubicacion: Ubicacion,
-    ) -> Result<Valor, Fallo> {
+    ) -> Result<DestinoLlamada, Fallo> {
         match objetivo {
             Valor::Funcion(funcion, entorno) => {
                 if funcion.asincrona {
-                    return Ok(Valor::Tarea(Rc::new(DatosTarea {
+                    return Ok(DestinoLlamada::Valor(Valor::Tarea(Rc::new(DatosTarea {
                         funcion,
                         entorno,
                         argumentos,
                         instancia: None,
-                    })));
+                    }))));
                 }
-                self.llamar_funcion(&funcion, &entorno, argumentos, None, Some(ubicacion))
+                Ok(DestinoLlamada::Marco(self.preparar_marco_funcion(
+                    &funcion,
+                    &entorno,
+                    argumentos,
+                    None,
+                    Some(ubicacion),
+                )?))
             }
             Valor::MetodoEnlazado(datos) => self.invocar_metodo(
                 Rc::clone(&datos.funcion),
@@ -1266,7 +1477,9 @@ impl Vm {
                 datos.receptor.clone(),
                 ubicacion,
             ),
-            Valor::Nativa(nombre) => self.llamar_nativa(&nombre, &argumentos, ubicacion),
+            Valor::Nativa(nombre) => self
+                .llamar_nativa(&nombre, &argumentos, ubicacion)
+                .map(DestinoLlamada::Valor),
             otro => Err(self.excepcion(
                 "E0406",
                 format!(
@@ -1318,11 +1531,11 @@ impl Vm {
         nombre: &str,
         argumentos: Vec<Valor>,
         ubicacion: Ubicacion,
-    ) -> Result<Valor, Fallo> {
+    ) -> Result<DestinoLlamada, Fallo> {
         match &receptor {
-            Valor::ModuloNativo(modulo) => {
-                self.llamar_nativa(&format!("{modulo}.{nombre}"), &argumentos, ubicacion)
-            }
+            Valor::ModuloNativo(modulo) => self
+                .llamar_nativa(&format!("{modulo}.{nombre}"), &argumentos, ubicacion)
+                .map(DestinoLlamada::Valor),
             Valor::Instancia(instancia) => {
                 let clase = Rc::clone(&instancia.borrow().clase);
                 match buscar_metodo_en_clase(self, &clase, nombre) {
@@ -1458,6 +1671,7 @@ impl Vm {
                 completos.push(receptor.clone());
                 completos.extend(argumentos);
                 self.llamar_nativa(&clave, &completos, ubicacion)
+                    .map(DestinoLlamada::Valor)
             }
             // Métodos nativos de los tipos primitivos: `texto.mayusculas`, ...
             _ => {
@@ -1475,6 +1689,7 @@ impl Vm {
                 completos.push(receptor);
                 completos.extend(argumentos);
                 self.llamar_nativa(&clave, &completos, ubicacion)
+                    .map(DestinoLlamada::Valor)
             }
         }
     }
@@ -1486,16 +1701,22 @@ impl Vm {
         argumentos: Vec<Valor>,
         esto: Valor,
         ubicacion: Ubicacion,
-    ) -> Result<Valor, Fallo> {
+    ) -> Result<DestinoLlamada, Fallo> {
         if metodo.asincrona {
-            return Ok(Valor::Tarea(Rc::new(DatosTarea {
+            return Ok(DestinoLlamada::Valor(Valor::Tarea(Rc::new(DatosTarea {
                 funcion: metodo,
                 entorno,
                 argumentos,
                 instancia: Some(esto),
-            })));
+            }))));
         }
-        self.llamar_funcion(&metodo, &entorno, argumentos, Some(esto), Some(ubicacion))
+        Ok(DestinoLlamada::Marco(self.preparar_marco_funcion(
+            &metodo,
+            &entorno,
+            argumentos,
+            Some(esto),
+            Some(ubicacion),
+        )?))
     }
 
     // ----- Objetos -----
@@ -1505,7 +1726,7 @@ impl Vm {
         clase: &Rc<ClaseObjeto>,
         argumentos: Vec<Valor>,
         ubicacion: Ubicacion,
-    ) -> Result<Valor, Fallo> {
+    ) -> Result<DestinoLlamada, Fallo> {
         // Atributos de toda la cadena (ancestros primero), aplanados.
         let mut atributos = IndexMap::new();
         self.recolectar_atributos(clase, &mut atributos)?;
@@ -1525,13 +1746,15 @@ impl Vm {
                 .find(|constructor| constructor.parametros.len() == argumentos.len())
                 .cloned();
             if let Some(constructor) = constructor {
-                self.llamar_funcion(
+                let mut marco = self.preparar_marco_funcion(
                     &constructor,
                     &clase_constructora.entorno,
                     argumentos,
                     Some(Valor::Instancia(Rc::clone(&instancia))),
                     Some(ubicacion),
                 )?;
+                marco.valor_al_volver = Some(Valor::Instancia(Rc::clone(&instancia)));
+                return Ok(DestinoLlamada::Marco(marco));
             }
         } else if !argumentos.is_empty() {
             return Err(self.excepcion(
@@ -1545,7 +1768,7 @@ impl Vm {
             ));
         }
 
-        Ok(Valor::Instancia(instancia))
+        Ok(DestinoLlamada::Valor(Valor::Instancia(instancia)))
     }
 
     fn llamar_constructor(
@@ -1554,7 +1777,7 @@ impl Vm {
         argumentos: Vec<Valor>,
         esto: Valor,
         ubicacion: Ubicacion,
-    ) -> Result<Valor, Fallo> {
+    ) -> Result<DestinoLlamada, Fallo> {
         let constructor = clase
             .constructores
             .iter()
@@ -1571,14 +1794,15 @@ impl Vm {
                     Some(ubicacion),
                 )
             })?;
-        self.llamar_funcion(
+        let mut marco = self.preparar_marco_funcion(
             &constructor,
             &clase.entorno,
             argumentos,
             Some(esto),
             Some(ubicacion),
         )?;
-        Ok(Valor::Nulo)
+        marco.valor_al_volver = Some(Valor::Nulo);
+        Ok(DestinoLlamada::Marco(marco))
     }
 
     fn recolectar_atributos(
@@ -1892,6 +2116,8 @@ enum Flujo {
     /// El `pc` ya fue actualizado (saltos).
     SinAvanzar,
     Retornar(Valor),
+    /// Empujar un marco y seguir en el mismo bucle (sin anidar Rust).
+    Llamar(Marco),
 }
 
 fn valor_de_constante(constante: &Constante) -> Valor {

@@ -54,6 +54,8 @@ pub const ERROR_ENTRADA_SALIDA: &str = "E0407";
 /// Fallo de red: conexión rechazada, tiempo agotado, respuesta HTTP inválida
 /// o estado HTTP fuera del rango aceptado.
 pub const ERROR_RED: &str = "E0408";
+/// Recursión o anidamiento de llamadas que supera el tope de marcos de la VM.
+pub const DESBORDAMIENTO_PILA: &str = "E0409";
 
 // Permisos
 pub const PERMISO_DENEGADO: &str = "E0501";

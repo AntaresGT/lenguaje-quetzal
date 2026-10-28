@@ -422,7 +422,7 @@ impl Vm {
         ubicacion: Option<Ubicacion>,
     ) -> Result<Valor, Fallo> {
         #[cfg(feature = "jit")]
-        if esto.is_none() && argumentos.len() == funcion.parametros.len() {
+        if self.jit_habilitado && esto.is_none() && argumentos.len() == funcion.parametros.len() {
             let codigo = self.runtime_de(funcion, entorno);
             if let Some(resultado) = self.intentar_jit(&codigo, entorno, &argumentos, ubicacion) {
                 return resultado;
@@ -699,7 +699,7 @@ impl Vm {
             _ => return Ok(None),
         };
         #[cfg(feature = "jit")]
-        if esto.is_none() && cantidad == funcion.parametros.len() {
+        if self.jit_habilitado && esto.is_none() && cantidad == funcion.parametros.len() {
             let argumentos = self.pila[indice + 1..].to_vec();
             let codigo = self.runtime_de(&funcion, &entorno);
             if let Some(resultado) =

@@ -4,8 +4,12 @@ use diagnosticos::colores::Paleta;
 use motor::{ConfiguracionMotor, MotorQuetzal};
 
 /// Ejecuta un archivo `.qz` o el proyecto actual (vía `quetzal.json`).
-pub fn ejecutar(archivo: Option<&str>) -> i32 {
-    let motor = match MotorQuetzal::nuevo(ConfiguracionMotor::por_defecto()) {
+pub fn ejecutar(archivo: Option<&str>, sin_optimizar: bool) -> i32 {
+    let mut configuracion = ConfiguracionMotor::por_defecto();
+    if sin_optimizar {
+        configuracion = configuracion.sin_optimizar();
+    }
+    let motor = match MotorQuetzal::nuevo(configuracion) {
         Ok(motor) => motor,
         Err(error) => return reportar_errores(None, &[error]),
     };

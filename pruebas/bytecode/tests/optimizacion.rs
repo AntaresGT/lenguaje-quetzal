@@ -48,8 +48,8 @@ fn generar_deberia_plegar_aritmetica_entera_constante() {
             .instrucciones
             .iter()
             .any(|instruccion| matches!(
-                instruccion,
-                bytecode::Instruccion::SumarEntero | bytecode::Instruccion::MultiplicarEntero
+                instruccion.op,
+                bytecode::CodigoOp::SumarEntero | bytecode::CodigoOp::MultiplicarEntero
             ))
     );
 }
@@ -61,7 +61,9 @@ fn generar_deberia_fusionar_incremento_local_en_ajustar() {
     assert!(
         instrucciones
             .iter()
-            .any(|instruccion| matches!(instruccion, bytecode::Instruccion::AjustarLocal(_, 1))),
+            .any(|instruccion| {
+                instruccion.op == bytecode::CodigoOp::AjustarLocal && instruccion.delta_ajuste() == 1
+            }),
         "i++ sobre un local debe fusionarse a AjustarLocal: {instrucciones:?}"
     );
 }
@@ -73,6 +75,6 @@ fn generar_no_deberia_plegar_division_por_cero() {
         modulo
             .principal
             .instrucciones
-            .contains(&bytecode::Instruccion::DividirEntero)
+            .contains(&bytecode::Instruccion::DividirEntero())
     );
 }

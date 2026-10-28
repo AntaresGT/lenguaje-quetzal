@@ -4,6 +4,8 @@
 //! dentro de él y el error central del lenguaje. No depende de ningún otro
 //! crate del workspace.
 
+#![forbid(unsafe_code)]
+
 pub mod errores;
 pub mod fuente;
 pub mod resultado;

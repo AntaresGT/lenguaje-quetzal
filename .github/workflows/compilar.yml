@@ -79,17 +79,31 @@ jobs:
           RUSTFLAGS: ${{ matrix.rustflags }}
         run: cargo build -p lnc --release --target ${{ matrix.objetivo }}
 
+      - name: Instalar WiX
+        if: matrix.empaquetado == 'windows'
+        run: dotnet tool install --global wix --version 5.0.2
+
       - name: Empaquetar Windows
         if: matrix.empaquetado == 'windows'
         shell: bash
         run: |
           mkdir -p dist
           cp "target/release/${{ matrix.binario }}" "dist/${{ matrix.binario }}"
+          bash .github/scripts/empaquetar-msi.sh "dist/${{ matrix.binario }}" dist
+
+      - name: Instalar dpkg-dev
+        if: matrix.empaquetado == 'bundle'
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev
 
       - name: Empaquetar Ubuntu con librerías
         if: matrix.empaquetado == 'bundle'
         shell: bash
         run: bash .github/scripts/empaquetar-linux.sh "target/release/${{ matrix.binario }}" dist
+
+      - name: Empaquetar .deb
+        if: matrix.empaquetado == 'bundle'
+        shell: bash
+        run: bash .github/scripts/empaquetar-deb.sh "target/release/${{ matrix.binario }}" dist
 
       - name: Empaquetar binario estático
         if: matrix.empaquetado == 'estatico'
@@ -104,6 +118,11 @@ jobs:
           fi
           mkdir -p dist
           cp "$bin" "dist/${{ matrix.binario }}"
+
+      - name: Empaquetar AppImage
+        if: matrix.empaquetado == 'estatico'
+        shell: bash
+        run: bash .github/scripts/empaquetar-appimage.sh "dist/${{ matrix.binario }}" dist
 
       - name: Subir ejecutable
         uses: actions/upload-artifact@v4
@@ -126,10 +145,12 @@ jobs:
           - sistema: fedora
             imagen: fedora:latest
             artefacto: quetzal-fedora
-            paquetes: dnf install -y gcc git curl ca-certificates binutils findutils
+            empaquetado: rpm
+            paquetes: dnf install -y gcc git curl ca-certificates binutils findutils rpm-build
           - sistema: arch
             imagen: archlinux:latest
             artefacto: quetzal-arch
+            empaquetado: bundle
             paquetes: |
               pacman -Sy --noconfirm archlinux-keyring
               pacman -S --noconfirm --needed base-devel git curl ca-certificates binutils findutils
@@ -158,6 +179,11 @@ jobs:
         shell: bash
         run: bash .github/scripts/empaquetar-linux.sh target/release/quetzal dist
 
+      - name: Empaquetar RPM
+        if: matrix.empaquetado == 'rpm'
+        shell: bash
+        run: bash .github/scripts/empaquetar-rpm.sh target/release/quetzal dist
+
       - name: Subir ejecutable
         uses: actions/upload-artifact@v4
         with:
@@ -165,3 +191,35 @@ jobs:
           path: dist
           if-no-files-found: error
           retention-days: 5
+
+  pruebas:
+    name: Pruebas y cero unsafe
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obtener código
+        uses: actions/checkout@v4
+
+      - name: Instalar Rust estable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache de dependencias Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: pruebas
+
+      - name: Prohibir unsafe_code
+        env:
+          RUSTFLAGS: "-Dunsafe_code"
+        run: cargo check --workspace --tests --locked
+
+      - name: Suite de pruebas
+        run: cargo test --workspace --locked
+
+      - name: cargo geiger (opcional, informativo)
+        continue-on-error: true
+        run: |
+          if command -v cargo-geiger >/dev/null 2>&1; then
+            cargo geiger --all-features
+          else
+            echo "cargo-geiger no está instalado; se omite (opcional)"
+          fi

@@ -37,14 +37,14 @@ fn generar_deberia_usar_ranuras_locales_y_globales() {
             .principal
             .instrucciones
             .iter()
-            .any(|instruccion| matches!(instruccion, bytecode::Instruccion::CargarLocal(_)))
+            .any(|instruccion| instruccion.op == bytecode::CodigoOp::CargarLocal)
     );
     assert!(
         modulo
             .principal
             .instrucciones
             .iter()
-            .any(|instruccion| matches!(instruccion, bytecode::Instruccion::CargarGlobal(_)))
+            .any(|instruccion| instruccion.op == bytecode::CodigoOp::CargarGlobal)
     );
 }
 
@@ -85,4 +85,19 @@ fn generar_deberia_procesar_todos_los_ejemplos() {
     }
 
     assert!(revisados >= 18, "se esperaban al menos 18 ejemplos");
+}
+
+#[test]
+fn generar_deberia_emitir_cargar_esto_atributo_para_esto() {
+    let modulo = generar(
+        "objeto Caja {\n    entero var n = 1\n    entero ver() { retornar esto.n }\n}\n",
+    );
+    let metodo = &modulo.objetos[0].metodos[0].funcion.trozo.instrucciones;
+    assert!(
+        metodo
+            .iter()
+            .any(|instruccion| instruccion.op == bytecode::CodigoOp::CargarEstoAtributo
+                || instruccion.op == bytecode::CodigoOp::CargarAtributo),
+        "esto.n debe usar slot, no CargarMiembro: {metodo:?}"
+    );
 }

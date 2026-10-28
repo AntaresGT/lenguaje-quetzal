@@ -1,6 +1,7 @@
 //! Comandos de la CLI `quetzal`.
 
 pub mod cache;
+pub mod compilar;
 pub mod ejecutar;
 pub mod instalar;
 pub mod nuevo;
@@ -17,6 +18,7 @@ Uso: quetzal [COMANDO] [ARCHIVO]
 Comandos:
   ejecutar [ARCHIVO]      Ejecuta un archivo o proyecto Quetzal
   revisar [ARCHIVO]       Analiza el código sin ejecutarlo
+  compilar ENTRADA [-o APP]  Genera un ejecutable único con bytecode embebido
   nuevo NOMBRE            Crea un nuevo proyecto
   instalar [PAQUETE]      Instala dependencias
   version                 Muestra la versión

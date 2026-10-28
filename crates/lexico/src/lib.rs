@@ -5,6 +5,8 @@
 //! números, textos (incluidos los interpolados `t"Hola {nombre}"`),
 //! operadores, delimitadores y comentarios.
 
+#![forbid(unsafe_code)]
+
 pub mod lexer;
 pub mod normalizacion;
 pub mod palabras_reservadas;

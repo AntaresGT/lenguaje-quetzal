@@ -4,6 +4,8 @@
 //! permiso, el programa no puede usar la red, leer o escribir archivos ni
 //! ejecutar programas externos.
 
+#![forbid(unsafe_code)]
+
 pub mod permisos;
 
 pub use permisos::{AccesoSolicitado, GuardianPermisos};

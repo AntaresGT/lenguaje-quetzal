@@ -2,11 +2,11 @@
 //!
 //! La clave de cada entrada combina el hash del código fuente, la versión de
 //! Quetzal y la versión del formato de bytecode: cualquier cambio invalida la
-//! entrada automáticamente.
+//! entrada automáticamente. El payload es binario (`postcard`).
 
 use std::path::{Path, PathBuf};
 
-use bytecode::{ModuloCompilado, modulo::VERSION_FORMATO_BYTECODE};
+use bytecode::{ModuloCompilado, modulo::VERSION_FORMATO_BYTECODE, verificar_modulo_inmutable};
 use sha2::{Digest, Sha256};
 
 /// Cache de módulos compilados de un proyecto.
@@ -31,12 +31,13 @@ impl CacheBytecode {
         hex::encode(hasher.finalize())
     }
 
-    /// Recupera un módulo compilado si hay una entrada válida.
+    /// Recupera un módulo compilado si hay una entrada válida y verificada.
     pub fn buscar(&self, contenido_fuente: &str) -> Option<ModuloCompilado> {
         let ruta = self.ruta_entrada(contenido_fuente);
-        let datos = std::fs::read_to_string(ruta).ok()?;
-        // Una entrada corrupta o de un formato viejo simplemente se ignora.
-        serde_json::from_str(&datos).ok()
+        let datos = std::fs::read(ruta).ok()?;
+        let modulo: ModuloCompilado = postcard::from_bytes(&datos).ok()?;
+        verificar_modulo_inmutable(&modulo).ok()?;
+        Some(modulo)
     }
 
     /// Guarda un módulo compilado (mejor esfuerzo: si falla, se recompila
@@ -45,7 +46,7 @@ impl CacheBytecode {
         if std::fs::create_dir_all(&self.directorio).is_err() {
             return;
         }
-        if let Ok(datos) = serde_json::to_string(modulo) {
+        if let Ok(datos) = postcard::to_allocvec(modulo) {
             let _ = std::fs::write(self.ruta_entrada(contenido_fuente), datos);
         }
     }
@@ -60,6 +61,6 @@ impl CacheBytecode {
 
     fn ruta_entrada(&self, contenido_fuente: &str) -> PathBuf {
         self.directorio
-            .join(format!("{}.bytecode.json", Self::clave(contenido_fuente)))
+            .join(format!("{}.bytecode", Self::clave(contenido_fuente)))
     }
 }

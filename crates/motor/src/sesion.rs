@@ -27,9 +27,14 @@ pub struct SesionInteractiva {
 
 impl SesionInteractiva {
     pub fn nueva(configuracion: ConfiguracionMotor) -> ResultadoQuetzal<Self> {
-        let motor = MotorQuetzal::nuevo(configuracion)?;
+        let motor = MotorQuetzal::nuevo(configuracion.clone())?;
+        let vm = if configuracion.optimizar {
+            Vm::nueva(motor.nativos())
+        } else {
+            Vm::nueva(motor.nativos()).sin_optimizar()
+        };
         Ok(Self {
-            vm: Vm::nueva(motor.nativos()),
+            vm,
             globales: IndexMap::new(),
             contador: 0,
             ultima_fuente: None,
@@ -61,7 +66,7 @@ impl SesionInteractiva {
                 if matches!(sentencia.nodo, ast::NodoSentencia::Expresion(_))
         );
         if termina_en_expresion
-            && modulo.principal.instrucciones.last() == Some(&Instruccion::Desechar)
+            && modulo.principal.instrucciones.last() == Some(&Instruccion::Desechar())
         {
             modulo.principal.instrucciones.pop();
             modulo.principal.ubicaciones.pop();

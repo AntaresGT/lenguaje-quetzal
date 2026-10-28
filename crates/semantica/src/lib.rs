@@ -4,6 +4,8 @@
 //! constantes, tipos incompatibles, retornos, visibilidad y cumplimiento de
 //! prototipos. Acumula todos los errores antes de reportar.
 
+#![forbid(unsafe_code)]
+
 pub mod analizador;
 pub mod mutabilidad;
 pub mod permisos;

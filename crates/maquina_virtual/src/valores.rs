@@ -11,6 +11,7 @@ use rust_decimal::Decimal;
 
 use crate::bucle_eventos::CargaNativa;
 use crate::errores::DatosExcepcion;
+use crate::nativos::IdNativo;
 
 /// Entorno de un módulo cargado: su bytecode y sus variables globales.
 ///
@@ -26,20 +27,22 @@ pub struct EntornoModulo {
     pub constantes: Vec<Valor>,
     /// Nombres del módulo internados una vez al cargar.
     pub nombres: Vec<Rc<str>>,
+    /// Código ejecutable (principal y funciones) con caches y especialización.
+    pub runtimes: RefCell<HashMap<String, Rc<crate::codigo::CodigoRuntime>>>,
 }
 
 /// Un valor de Quetzal en ejecución.
 ///
-/// Las variantes pesadas (decimal, función, `padre`, textos) van detrás de
-/// un `Rc` para que el enum quepa en 16 bytes: más valores por línea de
-/// caché, mismo objetivo que el NaN boxing de clox, sin meter el número en
-/// un `f64` (Quetzal usa decimal exacto).
+/// Las variantes pesadas (decimal, función, `padre`) van detrás de un `Rc`
+/// delgado. `Texto` usa `Rc<str>` (puntero gordo, 16 bytes) así que el enum
+/// mide 24 bytes: se comparte el contenido sin clonar, a costa de 8 bytes
+/// más que el objetivo original de 16.
 #[derive(Debug, Clone)]
 pub enum Valor {
     Entero(i64),
     /// Decimal exacto: `0.1 + 0.2 == 0.3`.
     Numero(Rc<Decimal>),
-    Texto(Rc<String>),
+    Texto(Rc<str>),
     Log(bool),
     Nulo,
     Lista(Rc<RefCell<Vec<Valor>>>),
@@ -49,8 +52,8 @@ pub enum Valor {
     /// Método de instancia referenciado sin llamarlo (`instancia.metodo`):
     /// la función junto al `esto` que recibirá al invocarse.
     MetodoEnlazado(Rc<DatosMetodoEnlazado>),
-    /// Función nativa registrada por nombre (`consola.mostrar`, `rango`).
-    Nativa(Rc<String>),
+    /// Función nativa registrada por identificador (`consola.mostrar`, `rango`).
+    Nativa(IdNativo),
     /// Módulo nativo importado (`Matemática` → `matematica`).
     ModuloNativo(Rc<String>),
     /// Definición de objeto cargada (permite miembros `libre` y `nuevo`).
@@ -97,8 +100,12 @@ pub struct ClaseObjeto {
     /// Métodos propios y heredados, indexados por nombre. Tras aplanar la
     /// herencia al cargar el módulo, la llamada caliente es un `get`.
     pub metodos: RefCell<HashMap<String, MetodoRuntime>>,
+    /// Nombre de atributo de instancia → slot, aplanado con herencia.
+    pub slots: RefCell<IndexMap<Rc<str>, u16>>,
     /// Constructores propios, ya envueltos en `Rc`.
     pub constructores: Vec<Rc<FuncionCompilada>>,
+    /// Código ejecutable de cada método, paralelo a `compilado.metodos`.
+    pub codigos_metodo: RefCell<HashMap<String, Rc<crate::codigo::CodigoRuntime>>>,
 }
 
 /// Instancia de un objeto en runtime. Los atributos de toda la cadena de
@@ -106,7 +113,7 @@ pub struct ClaseObjeto {
 #[derive(Debug)]
 pub struct Instancia {
     pub clase: Rc<ClaseObjeto>,
-    pub atributos: IndexMap<String, Variable>,
+    pub atributos: Vec<Variable>,
 }
 
 /// Instancia de un objeto implementado en Rust (módulos nativos).
@@ -173,11 +180,11 @@ pub struct EstadoTareaNativa {
 
 impl Valor {
     pub fn texto(texto: impl AsRef<str>) -> Self {
-        Valor::Texto(Rc::new(texto.as_ref().to_string()))
+        Valor::Texto(Rc::from(texto.as_ref()))
     }
 
-    pub fn nativa(nombre: impl AsRef<str>) -> Self {
-        Valor::Nativa(Rc::new(nombre.as_ref().to_string()))
+    pub fn nativa(id: IdNativo) -> Self {
+        Valor::Nativa(id)
     }
 
     pub fn modulo_nativo(nombre: impl AsRef<str>) -> Self {
@@ -310,7 +317,7 @@ pub fn texto_de_valor(valor: &Valor) -> String {
         Valor::Jsn(_) => jsn_a_texto(valor, false),
         Valor::Funcion(datos) => format!("<función {}>", datos.funcion.nombre),
         Valor::MetodoEnlazado(datos) => format!("<método {}>", datos.funcion.nombre),
-        Valor::Nativa(nombre) => format!("<función nativa {nombre}>"),
+        Valor::Nativa(id) => format!("<función nativa #{}>", id.0),
         Valor::ModuloNativo(nombre) => format!("<módulo {nombre}>"),
         Valor::Clase(clase) => format!("<objeto {}>", clase.compilado.nombre),
         Valor::Instancia(instancia) => {
@@ -466,7 +473,7 @@ mod pruebas {
     use super::*;
 
     #[test]
-    fn valor_deberia_medir_dieciseis_bytes() {
-        assert_eq!(std::mem::size_of::<Valor>(), 16);
+    fn valor_deberia_medir_veinticuatro_bytes() {
+        assert_eq!(std::mem::size_of::<Valor>(), 24);
     }
 }

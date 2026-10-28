@@ -1,0 +1,40 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="Quetzal"
+    Manufacturer="Antares"
+    Version="$(var.ProductVersion)"
+    UpgradeCode="8E3C1A47-6B2F-4D91-A5E0-7C4B9F2D1836"
+    Scope="perMachine"
+    Language="1034">
+    <MajorUpgrade DowngradeErrorMessage="Ya hay una versión más reciente de Quetzal instalada." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="IconoQuetzal" SourceFile="$(var.IconSource)" />
+    <Property Id="ARPPRODUCTICON" Value="IconoQuetzal" />
+    <Property Id="ARPHELPLINK" Value="https://lenguajequetzal.com" />
+    <Property Id="ARPURLINFOABOUT" Value="https://lenguajequetzal.com" />
+    <Property Id="ARPCONTACT" Value="Antares info@antaresgt.com" />
+    <Property Id="ARPCOMMENTS" Value="Autor: Allam López." />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLDIR" Name="Quetzal">
+        <Component Id="QuetzalExe" Guid="C7A91D5E-4B38-4F02-9E16-A8D3C5B27014">
+          <File Id="QuetzalFile" Source="$(var.ExeSource)" Name="quetzal.exe" KeyPath="yes" />
+          <File Id="QuetzalIco" Source="$(var.IconSource)" Name="quetzal.ico" />
+          <Environment
+            Id="PathQuetzal"
+            Name="PATH"
+            Value="[INSTALLDIR]"
+            Permanent="no"
+            Part="last"
+            Action="set"
+            System="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Principal" Title="Quetzal" Level="1">
+      <ComponentRef Id="QuetzalExe" />
+    </Feature>
+  </Package>
+</Wix>

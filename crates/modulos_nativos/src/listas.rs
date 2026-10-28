@@ -294,7 +294,7 @@ fn ordenar(elementos: &mut [Valor], descendente: bool) -> Result<(), Fallo> {
 fn comparar(a: &Valor, b: &Valor) -> Option<Ordering> {
     match (a, b) {
         (Valor::Entero(a), Valor::Entero(b)) => Some(a.cmp(b)),
-        (Valor::Texto(a), Valor::Texto(b)) => Some(a.as_str().cmp(b.as_str())),
+        (Valor::Texto(a), Valor::Texto(b)) => Some(a.as_ref().cmp(b.as_ref())),
         (Valor::Numero(a), Valor::Numero(b)) => Some(a.as_ref().cmp(b.as_ref())),
         (Valor::Entero(a), Valor::Numero(b)) => Some(Decimal::from(*a).cmp(b.as_ref())),
         (Valor::Numero(a), Valor::Entero(b)) => Some(a.as_ref().cmp(&Decimal::from(*b))),

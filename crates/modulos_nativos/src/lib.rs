@@ -5,6 +5,8 @@
 //! `ExpresiónRegular`), los métodos de `texto`, `lista` y `jsn`, las
 //! conversiones de tipos y la función global `rango`.
 
+#![forbid(unsafe_code)]
+
 pub mod archivo;
 pub mod bits;
 pub mod consola;
@@ -29,6 +31,10 @@ use runtime::GuardianPermisos;
 
 /// Crea el registro con todos los módulos nativos, aplicando el guardián de
 /// permisos a los módulos peligrosos (`red`, `sistema_archivos`).
+///
+/// El despacho en caliente es por [`maquina_virtual::IdNativo`]: los nombres
+/// se normalizan una vez aquí. El motor resuelve `consola.mostrar` al cargar
+/// el import, no en cada llamada.
 pub fn crear_registro_con_permisos(guardian: &Rc<GuardianPermisos>) -> RegistroNativos {
     let mut registro = RegistroNativos::nuevo();
     consola::registrar(&mut registro);

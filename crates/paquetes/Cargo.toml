@@ -21,6 +21,7 @@ semver = { workspace = true }
 # Hashes de integridad para el archivo de bloqueo y la cache.
 sha2 = { workspace = true }
 hex = { workspace = true }
+postcard = { workspace = true }
 
 # Tablas ordenadas para dependencias.
 indexmap = { workspace = true }

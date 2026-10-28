@@ -17,6 +17,8 @@ pub(crate) struct Cargador<'vm> {
     vm: Option<&'vm mut Vm>,
     /// Módulos ya compilados, por ruta canónica.
     compilados: HashMap<PathBuf, Rc<ModuloCompilado>>,
+    /// Orden de finalización (dependencias antes que quien las importa).
+    orden_compilados: Vec<PathBuf>,
     /// Entornos ya cargados en la VM, por ruta canónica.
     entornos: HashMap<PathBuf, Rc<EntornoModulo>>,
     /// Rutas en proceso de carga (detección de ciclos).
@@ -36,6 +38,7 @@ impl<'vm> Cargador<'vm> {
         Self {
             vm,
             compilados: HashMap::new(),
+            orden_compilados: Vec::new(),
             entornos: HashMap::new(),
             cargando: Vec::new(),
             ultimo_entorno: None,
@@ -95,8 +98,59 @@ impl<'vm> Cargador<'vm> {
 
         let modulo = resultado?;
         self.compilados.insert(canonica.clone(), modulo);
+        self.orden_compilados.push(canonica.clone());
         if let Some(entorno) = self.ultimo_entorno.take() {
             self.entornos.insert(canonica, entorno);
+        }
+        Ok(())
+    }
+
+    /// Grafo compilado listo para embeber: claves relativas a `raiz` si existe.
+    pub fn carga_embebida(
+        &self,
+        entrada: &Path,
+        raiz: Option<&Path>,
+        permisos: paquetes::Permisos,
+    ) -> paquetes::CargaEmbebida {
+        let clave_entrada = clave_modulo(entrada, raiz);
+        let mut modulos = Vec::new();
+        for ruta in &self.orden_compilados {
+            if let Some(modulo) = self.compilados.get(ruta) {
+                modulos.push((clave_modulo(ruta, raiz), (**modulo).clone()));
+            }
+        }
+        paquetes::CargaEmbebida {
+            entrada: clave_entrada,
+            modulos,
+            permisos,
+        }
+    }
+
+    /// Carga un grafo ya embebido (sin leer archivos).
+    pub fn cargar_carga_embebida(
+        &mut self,
+        carga: &paquetes::CargaEmbebida,
+    ) -> Result<(), Vec<ErrorQuetzal>> {
+        for (clave, modulo) in &carga.modulos {
+            let ruta = PathBuf::from(clave);
+            self.compilados.insert(ruta.clone(), Rc::new(modulo.clone()));
+            self.orden_compilados.push(ruta);
+        }
+        for (clave, _) in &carga.modulos {
+            let ruta = PathBuf::from(clave);
+            if self.entornos.contains_key(&ruta) {
+                continue;
+            }
+            let modulo = Rc::clone(self.compilados.get(&ruta).ok_or_else(|| {
+                vec![ErrorQuetzal::interno("módulo embebido ausente tras registrar")]
+            })?);
+            let importaciones = self.resolver_importaciones(&modulo, ruta.parent(), clave)?;
+            if let Some(vm) = &mut self.vm {
+                let (entorno, _valor) = vm
+                    .cargar_modulo(Rc::clone(&modulo), importaciones)
+                    .map_err(|error| vec![con_archivo_si_falta(error, clave)])?;
+                self.entornos.insert(ruta, entorno);
+            }
         }
         Ok(())
     }
@@ -179,7 +233,12 @@ impl<'vm> Cargador<'vm> {
                         {
                             Valor::modulo_nativo(tipo)
                         } else {
-                            Valor::nativa(format!("{nombre_modulo}.{nombre}"))
+                            let clave = format!("{nombre_modulo}.{nombre}");
+                            self.vm
+                                .as_ref()
+                                .and_then(|vm| vm.nativos.id_de(&clave))
+                                .map(Valor::Nativa)
+                                .unwrap_or(Valor::Nulo)
                         };
                         importaciones.insert(
                             local.clone(),
@@ -195,6 +254,10 @@ impl<'vm> Cargador<'vm> {
                         Some(directorio) => directorio.join(&relativa),
                         None => PathBuf::from(&relativa),
                     };
+                    if let Some(clave) = self.clave_embebida(&destino, &relativa) {
+                        self.tomar_simbolos(&clave, importacion, &mut importaciones, archivo)?;
+                        continue;
+                    }
                     self.cargar_archivo(&destino)?;
                     let canonica = destino.canonicalize().map_err(|_| {
                         vec![
@@ -326,6 +389,29 @@ impl<'vm> Cargador<'vm> {
             Err(errores)
         }
     }
+
+    fn clave_embebida(&self, destino: &Path, relativa: &str) -> Option<PathBuf> {
+        let candidatas = [
+            destino.to_path_buf(),
+            PathBuf::from(relativa),
+            PathBuf::from(relativa.replace('\\', "/")),
+        ];
+        candidatas
+            .into_iter()
+            .find(|ruta| self.compilados.contains_key(ruta))
+    }
+}
+
+fn clave_modulo(ruta: &Path, raiz: Option<&Path>) -> String {
+    if let Some(raiz) = raiz
+        && let Ok(relativa) = ruta.strip_prefix(raiz)
+    {
+        return relativa.display().to_string().replace('\\', "/");
+    }
+    ruta.file_name()
+        .map(|nombre| nombre.to_string_lossy().into_owned())
+        .unwrap_or_else(|| ruta.display().to_string())
+        .replace('\\', "/")
 }
 
 /// Pipeline de compilación de un archivo: léxico → sintaxis → semántica → bytecode.

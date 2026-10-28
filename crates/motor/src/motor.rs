@@ -56,7 +56,7 @@ impl MotorQuetzal {
     /// eventos de Node.js sigue corriendo mientras haya servidores abiertos.
     pub fn ejecutar_texto(&self, codigo: &str) -> ResultadoMultiple<()> {
         let fuente = Fuente::nueva("<entrada>", codigo);
-        let mut vm = maquina_virtual::Vm::nueva(Rc::clone(&self.nativos));
+        let mut vm = self.crear_vm();
         let resultado = {
             let mut cargador = Cargador::nuevo(Some(&mut vm));
             let base = std::env::current_dir().ok();
@@ -76,7 +76,7 @@ impl MotorQuetzal {
     /// mientras haya trabajo activo (ver [`Self::ejecutar_texto`]).
     pub fn ejecutar_archivo(&self, ruta: &str) -> ResultadoMultiple<()> {
         let (entrada, raiz) = resolver_entrada(ruta).map_err(|error| vec![error])?;
-        let mut vm = maquina_virtual::Vm::nueva(Rc::clone(&self.nativos));
+        let mut vm = self.crear_vm();
         let resultado = {
             let mut cargador = Cargador::nuevo(Some(&mut vm));
             if let Some(raiz) = &raiz {
@@ -112,6 +112,48 @@ impl MotorQuetzal {
     /// Registro de nativos compartido (para la sesión interactiva).
     pub(crate) fn nativos(&self) -> Rc<RegistroNativos> {
         Rc::clone(&self.nativos)
+    }
+
+    fn crear_vm(&self) -> maquina_virtual::Vm {
+        let vm = maquina_virtual::Vm::nueva(Rc::clone(&self.nativos));
+        if self.configuracion.optimizar {
+            vm
+        } else {
+            vm.sin_optimizar()
+        }
+    }
+
+    /// Compila el grafo de un archivo o proyecto a una carga embebible.
+    pub fn compilar_carga(&self, ruta: &str) -> ResultadoMultiple<paquetes::CargaEmbebida> {
+        let (entrada, raiz) = resolver_entrada(ruta).map_err(|error| vec![error])?;
+        let mut cargador = Cargador::nuevo(None);
+        let permisos = if let Some(raiz) = &raiz {
+            cargador = cargador.con_proyecto(raiz);
+            paquetes::Manifiesto::leer_de_directorio(raiz)
+                .map(|manifiesto| manifiesto.permisos)
+                .unwrap_or_default()
+        } else {
+            paquetes::Permisos::default()
+        };
+        cargador.cargar_archivo(&entrada)?;
+        self.fuentes.replace(cargador.fuentes.clone());
+        Ok(cargador.carga_embebida(&entrada, raiz.as_deref(), permisos))
+    }
+
+    /// Ejecuta una carga embebida (bytecode ya verificado).
+    pub fn ejecutar_carga(&self, carga: &paquetes::CargaEmbebida) -> ResultadoMultiple<()> {
+        self.permisos.configurar(carga.permisos.clone(), Path::new("."));
+        let mut vm = self.crear_vm();
+        let resultado = {
+            let mut cargador = Cargador::nuevo(Some(&mut vm));
+            let resultado = cargador.cargar_carga_embebida(carga);
+            self.fuentes.replace(cargador.fuentes);
+            resultado
+        };
+        if resultado.is_ok() {
+            vm.drenar_bucle_eventos();
+        }
+        resultado
     }
 }
 

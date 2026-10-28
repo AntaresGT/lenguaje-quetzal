@@ -4,7 +4,7 @@ use crate::constantes::Constante;
 use crate::instruccion::Trozo;
 
 /// Versión del formato de bytecode (invalida la cache al cambiar).
-pub const VERSION_FORMATO_BYTECODE: u32 = 3;
+pub const VERSION_FORMATO_BYTECODE: u32 = 4;
 
 /// Función compilada a bytecode.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]

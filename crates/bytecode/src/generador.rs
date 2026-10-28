@@ -1,6 +1,6 @@
 //! Generador de bytecode: convierte el AST validado en un módulo compilado.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use ast::{
@@ -18,6 +18,7 @@ use crate::modulo::{
     ObjetoCompilado,
 };
 use crate::optimizar::optimizar_modulo;
+use crate::verificador::verificar_modulo;
 
 /// Genera el bytecode de un módulo completo.
 pub fn generar_modulo(modulo: &Modulo) -> Result<ModuloCompilado, ErrorQuetzal> {
@@ -28,8 +29,8 @@ pub fn generar_modulo(modulo: &Modulo) -> Result<ModuloCompilado, ErrorQuetzal> 
 /// Contexto de un bucle activo para `romper`/`continuar`.
 #[derive(Debug, Default)]
 struct ContextoBucle {
-    rupturas: Vec<usize>,
-    continuaciones: Vec<usize>,
+    rupturas: Vec<u32>,
+    continuaciones: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,6 +72,10 @@ struct Generador {
     locales: Vec<Local>,
     profundidad: u32,
     ranuras_max: u16,
+    /// Slots de instancia del objeto cuyo método se está generando (`esto.x`).
+    slots_esto: HashMap<String, u16>,
+    /// Atributos de instancia por objeto del módulo: (padres, nombres no libres).
+    objetos_info: HashMap<String, (Vec<String>, Vec<String>)>,
 }
 
 impl Generador {
@@ -87,6 +92,8 @@ impl Generador {
             locales: Vec::new(),
             profundidad: 0,
             ranuras_max: 0,
+            slots_esto: HashMap::new(),
+            objetos_info: HashMap::new(),
         }
     }
 
@@ -142,6 +149,7 @@ impl Generador {
         compilado.globales_mutables = std::mem::take(&mut self.globales_mutables);
         compilado.ranuras_locales_principal = self.ranuras_max;
         optimizar_modulo(&mut compilado);
+        verificar_modulo(&mut compilado)?;
         Ok(compilado)
     }
 
@@ -162,6 +170,18 @@ impl Generador {
                 }
                 Elemento::Objeto(objeto) => {
                     self.declarar_global(&objeto.nombre, false, TipoRapido::Otro);
+                    let mut atributos = Vec::new();
+                    for miembro in &objeto.miembros {
+                        if let ClaseMiembro::Atributo { nombre, .. } = &miembro.clase
+                            && !miembro.libre
+                        {
+                            atributos.push(nombre.clone());
+                        }
+                    }
+                    let mut padres = objeto.padres.clone();
+                    padres.extend(objeto.extiende_como.iter().cloned());
+                    self.objetos_info
+                        .insert(objeto.nombre.clone(), (padres, atributos));
                 }
                 Elemento::Sentencia(sentencia) => {
                     if let NodoSentencia::DeclaracionVariable {
@@ -327,7 +347,7 @@ impl Generador {
         let mut trozo = Trozo::default();
         self.generar_bloque_sin_ambito(&mut trozo, &funcion.cuerpo)?;
         self.emitir_nulo(&mut trozo, funcion.ubicacion);
-        trozo.emitir(Instruccion::Retornar, funcion.ubicacion);
+        trozo.emitir(Instruccion::Retornar(), funcion.ubicacion);
 
         Ok(FuncionCompilada {
             nombre: funcion.nombre.clone(),
@@ -346,6 +366,8 @@ impl Generador {
         &mut self,
         objeto: &DefinicionObjeto,
     ) -> Result<ObjetoCompilado, ErrorQuetzal> {
+        let slots = self.calcular_slots(&objeto.nombre);
+        let anteriores = std::mem::replace(&mut self.slots_esto, slots);
         let mut compilado = ObjetoCompilado {
             nombre: objeto.nombre.clone(),
             padres: objeto.padres.clone(),
@@ -369,7 +391,7 @@ impl Generador {
                             self.profundidad = 0;
                             let mut trozo = Trozo::default();
                             self.generar_expresion(&mut trozo, valor)?;
-                            trozo.emitir(Instruccion::Retornar, *ubicacion);
+                            trozo.emitir(Instruccion::Retornar(), *ubicacion);
                             Some(trozo)
                         }
                         None => None,
@@ -395,7 +417,42 @@ impl Generador {
             }
         }
 
+        self.slots_esto = anteriores;
         Ok(compilado)
+    }
+
+    fn calcular_slots(&self, nombre: &str) -> HashMap<String, u16> {
+        let mut nombres = Vec::new();
+        self.recolectar_atributos_slots(nombre, &mut nombres, &mut HashSet::new());
+        nombres
+            .into_iter()
+            .enumerate()
+            .map(|(indice, nombre)| (nombre, indice as u16))
+            .collect()
+    }
+
+    fn recolectar_atributos_slots(
+        &self,
+        nombre: &str,
+        destino: &mut Vec<String>,
+        visitados: &mut HashSet<String>,
+    ) {
+        if !visitados.insert(nombre.to_string()) {
+            return;
+        }
+        let Some((padres, atributos)) = self.objetos_info.get(nombre) else {
+            return;
+        };
+        let padres = padres.clone();
+        let atributos = atributos.clone();
+        for padre in &padres {
+            self.recolectar_atributos_slots(padre, destino, visitados);
+        }
+        for atributo in atributos {
+            if !destino.iter().any(|existente| existente == &atributo) {
+                destino.push(atributo);
+            }
+        }
     }
 
     // ----- Sentencias -----
@@ -472,7 +529,7 @@ impl Generador {
             }
             NodoSentencia::Expresion(expresion) => {
                 self.generar_expresion(trozo, expresion)?;
-                trozo.emitir(Instruccion::Desechar, ubicacion);
+                trozo.emitir(Instruccion::Desechar(), ubicacion);
             }
             NodoSentencia::Si {
                 condicion,
@@ -546,7 +603,7 @@ impl Generador {
             } => {
                 self.abrir_ambito();
                 self.generar_expresion(trozo, iterable)?;
-                trozo.emitir(Instruccion::CrearIterador, ubicacion);
+                trozo.emitir(Instruccion::CrearIterador(), ubicacion);
                 let ranura_iterador = self.agregar_local("__iterador", TipoRapido::Otro);
                 trozo.emitir(Instruccion::GuardarLocal(ranura_iterador), ubicacion);
 
@@ -585,7 +642,7 @@ impl Generador {
                     }
                     None => self.emitir_nulo(trozo, ubicacion),
                 }
-                trozo.emitir(Instruccion::Retornar, ubicacion);
+                trozo.emitir(Instruccion::Retornar(), ubicacion);
             }
             NodoSentencia::Intentar {
                 bloque,
@@ -595,7 +652,7 @@ impl Generador {
                 let ranuras = self.locales.len() as u16;
                 let entrada = trozo.emitir(Instruccion::EntrarIntentar(0, ranuras), ubicacion);
                 self.generar_bloque(trozo, bloque, ubicacion)?;
-                trozo.emitir(Instruccion::SalirIntentar, ubicacion);
+                trozo.emitir(Instruccion::SalirIntentar(), ubicacion);
                 let salto_sin_error = trozo.emitir(Instruccion::Saltar(0), ubicacion);
 
                 // Manejador: la VM deja el valor de la excepción en la pila.
@@ -613,7 +670,7 @@ impl Generador {
                         if let Some(bloque_finalmente) = finalmente {
                             self.generar_bloque(trozo, bloque_finalmente, ubicacion)?;
                         }
-                        trozo.emitir(Instruccion::Lanzar, ubicacion);
+                        trozo.emitir(Instruccion::Lanzar(), ubicacion);
                     }
                 }
 
@@ -632,14 +689,14 @@ impl Generador {
             }
             NodoSentencia::Lanzar(expresion) => {
                 self.generar_expresion(trozo, expresion)?;
-                trozo.emitir(Instruccion::Lanzar, ubicacion);
+                trozo.emitir(Instruccion::Lanzar(), ubicacion);
             }
         }
         Ok(())
     }
 
     /// Cierra el contexto de bucle parchando `romper` → fin y `continuar` → destino.
-    fn cerrar_bucle(&mut self, trozo: &mut Trozo, fin: usize, destino_continuar: usize) {
+    fn cerrar_bucle(&mut self, trozo: &mut Trozo, fin: u32, destino_continuar: u32) {
         if let Some(bucle) = self.bucles.pop() {
             for salto in bucle.rupturas {
                 trozo.parchar_salto(salto, fin);
@@ -679,10 +736,25 @@ impl Generador {
                 self.emitir_guarda(trozo, nombre, ubicacion);
             }
             NodoExpresion::AccesoMiembro { objeto, miembro } => {
+                if matches!(objeto.nodo, NodoExpresion::Esto)
+                    && let Some(&slot) = self.slots_esto.get(miembro)
+                {
+                    trozo.emitir(Instruccion::CargarEsto(), ubicacion);
+                    if compuesto {
+                        trozo.emitir(Instruccion::Duplicar(), ubicacion);
+                        trozo.emitir(Instruccion::CargarAtributo(slot), ubicacion);
+                        self.generar_expresion(trozo, valor)?;
+                        trozo.emitir(instruccion_de_asignacion(operador), ubicacion);
+                    } else {
+                        self.generar_expresion(trozo, valor)?;
+                    }
+                    trozo.emitir(Instruccion::GuardarAtributo(slot), ubicacion);
+                    return Ok(());
+                }
                 let indice = self.indice_nombre(miembro);
                 self.generar_expresion(trozo, objeto)?;
                 if compuesto {
-                    trozo.emitir(Instruccion::Duplicar, ubicacion);
+                    trozo.emitir(Instruccion::Duplicar(), ubicacion);
                     trozo.emitir(Instruccion::CargarMiembro(indice), ubicacion);
                     self.generar_expresion(trozo, valor)?;
                     trozo.emitir(instruccion_de_asignacion(operador), ubicacion);
@@ -704,7 +776,7 @@ impl Generador {
                     .con_archivo(&self.archivo));
                 }
                 self.generar_expresion(trozo, valor)?;
-                trozo.emitir(Instruccion::GuardarIndice, ubicacion);
+                trozo.emitir(Instruccion::GuardarIndice(), ubicacion);
             }
             _ => {
                 return Err(ErrorQuetzal::nuevo(
@@ -796,11 +868,11 @@ impl Generador {
             }
             NodoExpresion::Identificador(nombre) => Ok(self.emitir_carga(trozo, nombre, ubicacion)),
             NodoExpresion::Esto => {
-                trozo.emitir(Instruccion::CargarEsto, ubicacion);
+                trozo.emitir(Instruccion::CargarEsto(), ubicacion);
                 Ok(TipoRapido::Otro)
             }
             NodoExpresion::Padre => {
-                trozo.emitir(Instruccion::CargarPadre, ubicacion);
+                trozo.emitir(Instruccion::CargarPadre(), ubicacion);
                 Ok(TipoRapido::Otro)
             }
             NodoExpresion::Binaria {
@@ -834,10 +906,10 @@ impl Generador {
                 let tipo = self.generar_expresion(trozo, operando)?;
                 let instruccion = match operador {
                     OperadorUnario::Negacion if tipo == TipoRapido::Entero => {
-                        Instruccion::NegarEntero
+                        Instruccion::NegarEntero()
                     }
-                    OperadorUnario::Negacion => Instruccion::Negar,
-                    OperadorUnario::NoLogico => Instruccion::NoLogico,
+                    OperadorUnario::Negacion => Instruccion::Negar(),
+                    OperadorUnario::NoLogico => Instruccion::NoLogico(),
                 };
                 trozo.emitir(instruccion, ubicacion);
                 Ok(match operador {
@@ -898,6 +970,12 @@ impl Generador {
                 }
             }
             NodoExpresion::AccesoMiembro { objeto, miembro } => {
+                if matches!(objeto.nodo, NodoExpresion::Esto)
+                    && let Some(&slot) = self.slots_esto.get(miembro)
+                {
+                    trozo.emitir(Instruccion::CargarEstoAtributo(slot), ubicacion);
+                    return Ok(TipoRapido::Otro);
+                }
                 self.generar_expresion(trozo, objeto)?;
                 let indice = self.indice_nombre(miembro);
                 trozo.emitir(Instruccion::CargarMiembro(indice), ubicacion);
@@ -906,7 +984,7 @@ impl Generador {
             NodoExpresion::Indexacion { objeto, indice } => {
                 self.generar_expresion(trozo, objeto)?;
                 self.generar_expresion(trozo, indice)?;
-                trozo.emitir(Instruccion::Indexar, ubicacion);
+                trozo.emitir(Instruccion::Indexar(), ubicacion);
                 Ok(TipoRapido::Otro)
             }
             NodoExpresion::Nuevo { clase, argumentos } => {
@@ -919,7 +997,7 @@ impl Generador {
             }
             NodoExpresion::Esperar(interior) => {
                 let tipo = self.generar_expresion(trozo, interior)?;
-                trozo.emitir(Instruccion::Esperar, ubicacion);
+                trozo.emitir(Instruccion::Esperar(), ubicacion);
                 Ok(tipo)
             }
         }
@@ -959,28 +1037,28 @@ fn instruccion_binaria(
 ) -> Instruccion {
     let enteros = izquierda == TipoRapido::Entero && derecha == TipoRapido::Entero;
     match operador {
-        OperadorBinario::Sumar if enteros => Instruccion::SumarEntero,
-        OperadorBinario::Restar if enteros => Instruccion::RestarEntero,
-        OperadorBinario::Multiplicar if enteros => Instruccion::MultiplicarEntero,
-        OperadorBinario::Dividir if enteros => Instruccion::DividirEntero,
-        OperadorBinario::Modulo if enteros => Instruccion::ModuloEntero,
-        OperadorBinario::Igual if enteros => Instruccion::IgualEntero,
-        OperadorBinario::Diferente if enteros => Instruccion::DiferenteEntero,
-        OperadorBinario::Mayor if enteros => Instruccion::MayorEntero,
-        OperadorBinario::Menor if enteros => Instruccion::MenorEntero,
-        OperadorBinario::MayorOIgual if enteros => Instruccion::MayorOIgualEntero,
-        OperadorBinario::MenorOIgual if enteros => Instruccion::MenorOIgualEntero,
-        OperadorBinario::Sumar => Instruccion::Sumar,
-        OperadorBinario::Restar => Instruccion::Restar,
-        OperadorBinario::Multiplicar => Instruccion::Multiplicar,
-        OperadorBinario::Dividir => Instruccion::Dividir,
-        OperadorBinario::Modulo => Instruccion::Modulo,
-        OperadorBinario::Igual => Instruccion::Igual,
-        OperadorBinario::Diferente => Instruccion::Diferente,
-        OperadorBinario::Mayor => Instruccion::Mayor,
-        OperadorBinario::Menor => Instruccion::Menor,
-        OperadorBinario::MayorOIgual => Instruccion::MayorOIgual,
-        OperadorBinario::MenorOIgual => Instruccion::MenorOIgual,
+        OperadorBinario::Sumar if enteros => Instruccion::SumarEntero(),
+        OperadorBinario::Restar if enteros => Instruccion::RestarEntero(),
+        OperadorBinario::Multiplicar if enteros => Instruccion::MultiplicarEntero(),
+        OperadorBinario::Dividir if enteros => Instruccion::DividirEntero(),
+        OperadorBinario::Modulo if enteros => Instruccion::ModuloEntero(),
+        OperadorBinario::Igual if enteros => Instruccion::IgualEntero(),
+        OperadorBinario::Diferente if enteros => Instruccion::DiferenteEntero(),
+        OperadorBinario::Mayor if enteros => Instruccion::MayorEntero(),
+        OperadorBinario::Menor if enteros => Instruccion::MenorEntero(),
+        OperadorBinario::MayorOIgual if enteros => Instruccion::MayorOIgualEntero(),
+        OperadorBinario::MenorOIgual if enteros => Instruccion::MenorOIgualEntero(),
+        OperadorBinario::Sumar => Instruccion::Sumar(),
+        OperadorBinario::Restar => Instruccion::Restar(),
+        OperadorBinario::Multiplicar => Instruccion::Multiplicar(),
+        OperadorBinario::Dividir => Instruccion::Dividir(),
+        OperadorBinario::Modulo => Instruccion::Modulo(),
+        OperadorBinario::Igual => Instruccion::Igual(),
+        OperadorBinario::Diferente => Instruccion::Diferente(),
+        OperadorBinario::Mayor => Instruccion::Mayor(),
+        OperadorBinario::Menor => Instruccion::Menor(),
+        OperadorBinario::MayorOIgual => Instruccion::MayorOIgual(),
+        OperadorBinario::MenorOIgual => Instruccion::MenorOIgual(),
         OperadorBinario::Y | OperadorBinario::O => unreachable!(),
     }
 }

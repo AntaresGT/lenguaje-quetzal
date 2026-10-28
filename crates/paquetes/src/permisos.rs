@@ -9,7 +9,7 @@ use nucleo::{CategoriaError, ErrorQuetzal, ResultadoQuetzal};
 use crate::manifiesto::normalizar_clave;
 
 /// Permisos del proyecto; todo deshabilitado por defecto.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct Permisos {
     pub red: PermisoRed,
     pub sistema_archivos: PermisoSistemaArchivos,
@@ -20,27 +20,27 @@ pub struct Permisos {
 ///
 /// `{"habilitado": true}` autoriza todas las operaciones de red del
 /// programa (conectarse como cliente y escuchar como servidor).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct PermisoRed {
     pub habilitado: bool,
 }
 
 /// Acceso al sistema de archivos por directorio.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct PermisoSistemaArchivos {
     pub habilitado: bool,
     pub directorios: Vec<DirectorioPermitido>,
 }
 
 /// Un directorio permitido con su nivel de acceso.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DirectorioPermitido {
     pub ruta: String,
     pub acceso: Acceso,
 }
 
 /// Nivel de acceso a un directorio.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Acceso {
     Lectura,
     Escritura,
@@ -48,7 +48,7 @@ pub enum Acceso {
 }
 
 /// Ejecución de programas externos por lista blanca.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct PermisoEjecucion {
     pub habilitado: bool,
     pub ejecutables: Vec<String>,

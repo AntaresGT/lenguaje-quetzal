@@ -20,7 +20,18 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Comando {
     /// Ejecuta un archivo o proyecto Quetzal.
-    Ejecutar { archivo: Option<String> },
+    Ejecutar {
+        archivo: Option<String>,
+        /// Intérprete puro: sin especialización ni cierres.
+        #[arg(long = "sin-optimizar")]
+        sin_optimizar: bool,
+    },
+    /// Genera un ejecutable único con bytecode verificado embebido.
+    Compilar {
+        entrada: String,
+        #[arg(short = 'o', long = "salida")]
+        salida: Option<String>,
+    },
     /// Analiza el código sin ejecutarlo.
     Revisar { archivo: Option<String> },
     /// Crea un nuevo proyecto.
@@ -62,6 +73,10 @@ pub fn traducir_aliases(mut argumentos: Vec<String>) -> Vec<String> {
         "--instalar" | "-i" => {
             argumentos[1] = "instalar".to_string();
         }
+        "--sin-optimizar" => {
+            argumentos[1] = "ejecutar".to_string();
+            argumentos.insert(2, "--sin-optimizar".to_string());
+        }
         _ => {
             // Un archivo .qz como primer argumento ejecuta directamente.
             if primero.ends_with(".qz") {
@@ -97,5 +112,14 @@ mod pruebas {
     fn traducir_aliases_deberia_convertir_nuevo_flag_en_subcomando() {
         let resultado = traducir_aliases(args(&["quetzal", "--nuevo", "mi-proyecto"]));
         assert_eq!(resultado, args(&["quetzal", "nuevo", "mi-proyecto"]));
+    }
+
+    #[test]
+    fn traducir_aliases_deberia_anteponer_ejecutar_a_sin_optimizar() {
+        let resultado = traducir_aliases(args(&["quetzal", "--sin-optimizar", "app.qz"]));
+        assert_eq!(
+            resultado,
+            args(&["quetzal", "ejecutar", "--sin-optimizar", "app.qz"])
+        );
     }
 }

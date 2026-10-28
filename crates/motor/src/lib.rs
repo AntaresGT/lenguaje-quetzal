@@ -1,6 +1,8 @@
 //! Motor del Lenguaje Quetzal: orquesta el pipeline completo y expone la
 //! API pública embebible para usar Quetzal desde otro programa Rust.
 
+#![forbid(unsafe_code)]
+
 mod cargador;
 pub mod configuracion;
 pub mod motor;

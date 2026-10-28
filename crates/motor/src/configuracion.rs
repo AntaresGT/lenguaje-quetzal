@@ -5,15 +5,28 @@
 pub struct ConfiguracionMotor {
     /// Si los reportes de error usan colores de terminal.
     pub colores: bool,
+    /// Especialización, caches en línea y cierres. `false` deja el intérprete puro.
+    pub optimizar: bool,
 }
 
 impl ConfiguracionMotor {
     pub fn por_defecto() -> Self {
-        Self { colores: true }
+        Self {
+            colores: true,
+            optimizar: true,
+        }
     }
 
     pub fn sin_colores() -> Self {
-        Self { colores: false }
+        Self {
+            colores: false,
+            optimizar: true,
+        }
+    }
+
+    pub fn sin_optimizar(mut self) -> Self {
+        self.optimizar = false;
+        self
     }
 }
 

@@ -58,7 +58,9 @@ logos = "0.15"
 thiserror = "2"
 
 # Serialización de quetzal.json, quetzal.bloquear y cache de bytecode.
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive", "rc"] }
+# Cache binaria de bytecode (Rust puro, sin JSON).
+postcard = { version = "1", features = ["use-std", "alloc"] }
 # preserve_order: los jsn de Quetzal conservan el orden de inserción de claves.
 serde_json = { version = "1", features = ["preserve_order"] }
 
@@ -125,7 +127,7 @@ tungstenite = "0.29"
 
 [profile.release]
 opt-level = 3
-lto = "thin"
+lto = "fat"
 codegen-units = 1
 panic = "abort"
 strip = "symbols"

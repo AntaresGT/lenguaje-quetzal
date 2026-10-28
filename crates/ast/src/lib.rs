@@ -4,6 +4,8 @@
 //! consumo del AST en `semantica` y `bytecode`. Cada nodo guarda su
 //! [`nucleo::Ubicacion`] para diagnósticos precisos.
 
+#![forbid(unsafe_code)]
+
 pub mod declaracion;
 pub mod expresion;
 pub mod modulo;

@@ -4,6 +4,8 @@
 //! multilínea cuando un bloque no cierra, historial y comandos especiales
 //! (`:ayuda`, `:limpiar`, `:cargar`, `:modulos`, `:estado`, `salir`).
 
+#![forbid(unsafe_code)]
+
 mod multilinea;
 mod prompt;
 

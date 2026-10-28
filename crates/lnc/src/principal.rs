@@ -3,6 +3,8 @@
 //! Este crate solo interpreta argumentos y delega en `motor`, `repl` y
 //! `paquetes`; no contiene lógica del lenguaje.
 
+#![forbid(unsafe_code)]
+
 mod argumentos;
 mod comandos;
 
@@ -10,6 +12,17 @@ use argumentos::{Cli, Comando};
 use clap::Parser;
 
 fn main() {
+    match paquetes::embebido::desde_ejecutable_actual() {
+        Ok(Some(carga)) => {
+            std::process::exit(comandos::compilar::ejecutar_embebido(carga));
+        }
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+    }
+
     let argumentos_traducidos = argumentos::traducir_aliases(std::env::args().collect());
 
     let cli = match Cli::try_parse_from(argumentos_traducidos) {
@@ -22,7 +35,13 @@ fn main() {
     };
 
     let codigo_salida = match cli.comando {
-        Some(Comando::Ejecutar { archivo }) => comandos::ejecutar::ejecutar(archivo.as_deref()),
+        Some(Comando::Ejecutar {
+            archivo,
+            sin_optimizar,
+        }) => comandos::ejecutar::ejecutar(archivo.as_deref(), sin_optimizar),
+        Some(Comando::Compilar { entrada, salida }) => {
+            comandos::compilar::compilar(&entrada, salida.as_deref())
+        }
         Some(Comando::Revisar { archivo }) => comandos::revisar::revisar(archivo.as_deref()),
         Some(Comando::Nuevo { nombre }) => comandos::nuevo::nuevo(&nombre),
         Some(Comando::Instalar { paquete }) => comandos::instalar::instalar(paquete.as_deref()),

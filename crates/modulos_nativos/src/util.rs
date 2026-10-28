@@ -36,7 +36,7 @@ pub fn arg_texto<'a>(
     indice: usize,
 ) -> Result<&'a str, Fallo> {
     match argumentos.get(indice) {
-        Some(Valor::Texto(texto)) => Ok(texto.as_str()),
+        Some(Valor::Texto(texto)) => Ok(texto.as_ref()),
         Some(otro) => Err(error(
             "E0406",
             format!(

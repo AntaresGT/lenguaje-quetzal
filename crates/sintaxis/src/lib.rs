@@ -4,6 +4,8 @@
 //! AST definido en el crate `ast` y reporta errores sintácticos como
 //! `ErrorQuetzal` con ubicación exacta.
 
+#![forbid(unsafe_code)]
+
 mod declaraciones;
 mod errores;
 mod expresiones;

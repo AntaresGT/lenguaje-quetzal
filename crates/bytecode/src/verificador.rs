@@ -327,7 +327,7 @@ fn validar_indices(
         {
             Err(error_verificacion(nombre, "ranura local fuera de rango"))
         }
-        CodigoOp::CargarLocalLocalSumarEntero
+        CodigoOp::CargarLocalLocalSumarEntero | CodigoOp::AjustarLocalConLocal
             if instruccion.ranura() >= ranuras || instruccion.ranura_derecha() >= ranuras =>
         {
             Err(error_verificacion(nombre, "ranura local fuera de rango"))
@@ -450,6 +450,7 @@ fn efecto_pila(instruccion: Instruccion, nombre: &str) -> Result<(u32, u32), Err
         CodigoOp::Saltar
         | CodigoOp::LimpiarLocales
         | CodigoOp::AjustarLocal
+        | CodigoOp::AjustarLocalConLocal
         | CodigoOp::RetornarLocal
         | CodigoOp::SalirIntentar => (0, 0),
         CodigoOp::SaltarSiFalsoYDejar

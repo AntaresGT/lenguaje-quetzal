@@ -99,6 +99,15 @@ fn ejecutar_deberia_fallar_con_desbordamiento_de_entero() {
 }
 
 #[test]
+fn ejecutar_deberia_conservar_overflow_al_sumar_locales() {
+    let error = intentar_ejecutar(
+        "entero desbordar() {\n    entero var a = 9223372036854775807\n    entero b = 1\n    a += b\n    retornar a\n}\nentero malo = desbordar()\n",
+    )
+    .expect_err("la superinstrucción debe conservar el desbordamiento");
+    assert_eq!(error.codigo, "E0402");
+}
+
+#[test]
 fn ejecutar_deberia_fallar_con_division_por_cero() {
     let error = intentar_ejecutar("entero malo = 10 / 0\n").expect_err("debe fallar");
     assert_eq!(error.codigo, "E0401");

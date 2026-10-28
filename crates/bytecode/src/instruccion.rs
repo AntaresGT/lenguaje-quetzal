@@ -89,6 +89,7 @@ pub enum CodigoOp {
     CargarLocalLocalSumarEntero,
     RetornarLocal,
     LlamarNativa,
+    AjustarLocalConLocal,
 }
 
 #[allow(non_snake_case)]
@@ -302,6 +303,9 @@ impl Instruccion {
             izquierda,
             derecha as u32,
         )
+    }
+    pub const fn AjustarLocalConLocal(ranura: u16, otra: u16) -> Self {
+        Self::nueva(CodigoOp::AjustarLocalConLocal, 0, ranura, otra as u32)
     }
     pub const fn RetornarLocal(ranura: u16) -> Self {
         Self::nueva(CodigoOp::RetornarLocal, 0, ranura, 0)

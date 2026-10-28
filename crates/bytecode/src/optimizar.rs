@@ -52,6 +52,7 @@ pub fn optimizar_trozo(trozo: Trozo, constantes: &mut Vec<Constante>) -> Trozo {
     while plegar_enteros(&mut ops, constantes) {}
     fusionar_ajustar_local(&mut ops);
     fusionar_superinstrucciones(&mut ops);
+    fusionar_sumar_en_local(&mut ops);
     let mut trozo = compactar(ops);
     redirigir_saltos_a_saltos(&mut trozo);
     trozo
@@ -240,6 +241,37 @@ fn fusionar_superinstrucciones(ops: &mut [Option<(Instruccion, Ubicacion)>]) {
                 i = a_pc + 1;
                 continue;
             }
+        }
+        i = a_pc + 1;
+    }
+}
+
+fn fusionar_sumar_en_local(ops: &mut [Option<(Instruccion, Ubicacion)>]) {
+    let destinos = destinos_salto(ops);
+    let mut i = 0;
+    while i < ops.len() {
+        let Some(a_pc) = siguiente_ocupada(ops, i) else {
+            break;
+        };
+        let Some(b_pc) = siguiente_ocupada(ops, a_pc + 1) else {
+            break;
+        };
+        let Some((a, ubicacion)) = ops[a_pc] else {
+            break;
+        };
+        let Some((b, _)) = ops[b_pc] else {
+            break;
+        };
+        if a.op == CodigoOp::CargarLocalLocalSumarEntero
+            && b.op == CodigoOp::GuardarLocal
+            && b.ranura() == a.ranura()
+            && !destinos.contains(&(b_pc as u32))
+        {
+            ops[a_pc] = Some((
+                Instruccion::AjustarLocalConLocal(a.ranura(), a.ranura_derecha()),
+                ubicacion,
+            ));
+            ops[b_pc] = None;
         }
         i = a_pc + 1;
     }
@@ -436,6 +468,24 @@ mod pruebas {
         assert_eq!(
             resultado.instrucciones,
             vec![Instruccion::AjustarLocal(0, 1)]
+        );
+    }
+
+    #[test]
+    fn fusion_deberia_sumar_un_local_sobre_otro() {
+        let mut constantes = Vec::new();
+        let resultado = optimizar_trozo(
+            trozo(vec![
+                Instruccion::CargarLocal(0),
+                Instruccion::CargarLocal(1),
+                Instruccion::SumarEntero(),
+                Instruccion::GuardarLocal(0),
+            ]),
+            &mut constantes,
+        );
+        assert_eq!(
+            resultado.instrucciones,
+            vec![Instruccion::AjustarLocalConLocal(0, 1)]
         );
     }
 

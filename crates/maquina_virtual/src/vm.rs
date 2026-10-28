@@ -993,6 +993,25 @@ impl Vm {
                     self.ubi(top),
                 )?);
             }
+            CodigoOp::AjustarLocalConLocal => {
+                let ranura = instruccion.ranura();
+                let izquierda = self.local(top, ranura)?;
+                let derecha = self.local(top, instruccion.ranura_derecha())?;
+                let Valor::Entero(a) = izquierda else {
+                    return Err(self.error_se_esperaba_entero(&izquierda, self.ubi(top)));
+                };
+                let Valor::Entero(b) = derecha else {
+                    return Err(self.error_se_esperaba_entero(&derecha, self.ubi(top)));
+                };
+                let Some(nuevo) = a.checked_add(b) else {
+                    return Err(self.excepcion(
+                        "E0402",
+                        format!("desbordamiento de entero al sumar {a} y {b}"),
+                        Some(self.ubi(top)),
+                    ));
+                };
+                self.set_local(top, ranura, Valor::Entero(nuevo))?;
+            }
             CodigoOp::RetornarLocal => {
                 let valor = self.local(top, instruccion.ranura())?;
                 return Ok(Flujo::Retornar(valor));

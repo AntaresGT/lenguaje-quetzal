@@ -7,7 +7,6 @@
 #![forbid(unsafe_code)]
 
 pub mod bucle_eventos;
-pub mod cierres;
 pub mod codigo;
 pub mod errores;
 pub mod nativos;

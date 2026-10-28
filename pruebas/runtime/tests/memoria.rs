@@ -1,11 +1,10 @@
 use std::rc::Rc;
 
-use bytecode::{Instruccion, ModuloCompilado, Trozo};
+use bytecode::ModuloCompilado;
 use indexmap::IndexMap;
-use maquina_virtual::codigo::CodigoRuntime;
 use maquina_virtual::valores::{EntornoModulo, Variable};
-use maquina_virtual::{Valor, Vm, cierres};
-use nucleo::{Fuente, Ubicacion};
+use maquina_virtual::{Valor, Vm};
+use nucleo::Fuente;
 
 fn compilar(nombre: &str, codigo: &str) -> ModuloCompilado {
     let fuente = Fuente::nueva(nombre, codigo);
@@ -22,24 +21,6 @@ fn global(entorno: &Rc<EntornoModulo>, nombre: &str) -> Valor {
         .expect("global presente")
         .valor
         .clone()
-}
-
-#[test]
-fn cierre_no_deberia_retener_su_propio_codigo() {
-    let codigo = CodigoRuntime::de_trozo(
-        &Trozo {
-            instrucciones: vec![Instruccion::CargarEntero(1), Instruccion::Retornar()],
-            ubicaciones: vec![Ubicacion::nueva(0, 1); 2],
-            max_pila: 1,
-        },
-        0,
-        None,
-    );
-    let debil = Rc::downgrade(&codigo);
-    let cierre = cierres::compilar(Rc::clone(&codigo)).expect("subconjunto compilable");
-    drop(codigo);
-    assert!(debil.upgrade().is_none());
-    drop(cierre);
 }
 
 #[test]

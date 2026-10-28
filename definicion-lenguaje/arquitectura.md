@@ -359,7 +359,7 @@ flowchart LR
 
 ## 9. VM rápida (cero `unsafe`)
 
-La VM es un intérprete de pila con **pila única**, marcos livianos, bytecode de 8 bytes y un verificador al cargar cache. No hay JIT a código máquina: se usa especialización (quickening) y compilación a cierres (`Box<dyn Fn>`) en Rust seguro. `#![forbid(unsafe_code)]` en todo el workspace.
+La VM es un intérprete de pila con **pila única**, marcos livianos, bytecode de 8 bytes y un verificador al cargar cache. No hay JIT a código máquina: se usa especialización adaptativa (quickening) y caches en línea en Rust seguro. `#![forbid(unsafe_code)]` se mantiene en `maquina_virtual`.
 
 ```mermaid
 flowchart LR
@@ -370,8 +370,7 @@ flowchart LR
     cacheBin --> verificador[Verificador]
     verificador --> interprete[Intérprete]
     interprete -->|"tipos observados"| especializado[Bytecode especializado]
-    interprete -->|"contador caliente"| cierres[Cierres compilados]
-    cierres -->|"guarda falla"| interprete
+    especializado -->|"guarda falla"| interprete
     verificador --> ejecutable["quetzal compilar"]
 ```
 
@@ -418,7 +417,7 @@ cargo pgo optimize -p lnc
 
 El perfil `release` usa `lto = "fat"`, `codegen-units = 1` y `panic = "abort"`. La cache de bytecode es binaria (`postcard` + sha2) y se verifica al cargar.
 
-`--sin-optimizar` deja el intérprete puro (sin especialización ni cierres) para depurar. `quetzal compilar entrada.qz -o app` anexa bytecode verificado y permisos al binario.
+`--sin-optimizar` deja el intérprete puro (sin especialización ni caches en línea) para depurar. `quetzal compilar entrada.qz -o app` anexa bytecode verificado y permisos al binario.
 
 ---
 

@@ -13,7 +13,6 @@ use nucleo::{ErrorQuetzal, Ubicacion};
 use rust_decimal::Decimal;
 
 use crate::bucle_eventos::{BucleEventos, CargaNativa, Mensaje};
-use crate::cierres::ControlCierre;
 use crate::codigo::{CacheSitio, CodigoRuntime, clave_clase, tipo_cache};
 use crate::errores::{DatosExcepcion, Fallo};
 use crate::nativos::{IdNativo, RegistroNativos};
@@ -797,26 +796,6 @@ impl Vm {
                 Flujo::Continuar
             }
             DestinoLlamada::Marco(marco) => Flujo::Llamar(marco),
-        }
-    }
-
-    pub(crate) fn ejecutar_op_cierre(
-        &mut self,
-        instruccion: Instruccion,
-        pc: u32,
-    ) -> Result<ControlCierre, Fallo> {
-        let top = self.marcos.len().saturating_sub(1);
-        if let Some(marco) = self.marcos.last_mut() {
-            marco.pc = pc;
-        }
-        match self.ejecutar_instruccion(instruccion, top)? {
-            Flujo::Continuar => Ok(ControlCierre::Continuar),
-            Flujo::SinAvanzar => {
-                let pc = self.marcos.get(top).map(|m| m.pc).unwrap_or(pc);
-                Ok(ControlCierre::Saltar(pc))
-            }
-            Flujo::Retornar(valor) => Ok(ControlCierre::Retornar(valor)),
-            Flujo::Llamar(_) => Ok(ControlCierre::Interpretar),
         }
     }
 

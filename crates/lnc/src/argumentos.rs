@@ -22,7 +22,7 @@ pub enum Comando {
     /// Ejecuta un archivo o proyecto Quetzal.
     Ejecutar {
         archivo: Option<String>,
-        /// Intérprete puro: sin especialización ni cierres.
+        /// Intérprete puro: sin especialización ni caches en línea.
         #[arg(long = "sin-optimizar")]
         sin_optimizar: bool,
     },

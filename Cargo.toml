@@ -9,6 +9,7 @@ members = [
     "crates/ast",
     "crates/semantica",
     "crates/bytecode",
+    "crates/compilador_jit",
     "crates/maquina_virtual",
     "crates/runtime",
     "crates/modulos_nativos",

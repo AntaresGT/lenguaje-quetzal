@@ -38,7 +38,8 @@ fn main() {
         Some(Comando::Ejecutar {
             archivo,
             sin_optimizar,
-        }) => comandos::ejecutar::ejecutar(archivo.as_deref(), sin_optimizar),
+            jit,
+        }) => comandos::ejecutar::ejecutar(archivo.as_deref(), sin_optimizar, jit),
         Some(Comando::Compilar { entrada, salida }) => {
             comandos::compilar::compilar(&entrada, salida.as_deref())
         }

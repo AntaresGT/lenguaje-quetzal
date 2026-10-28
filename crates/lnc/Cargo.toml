@@ -12,6 +12,10 @@ build = "compilar.rs"
 name = "quetzal"
 path = "src/principal.rs"
 
+[features]
+default = []
+jit = ["motor/jit"]
+
 [dependencies]
 nucleo = { workspace = true }
 diagnosticos = { workspace = true }

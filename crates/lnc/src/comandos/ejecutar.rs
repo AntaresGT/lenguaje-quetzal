@@ -4,8 +4,13 @@ use diagnosticos::colores::Paleta;
 use motor::{ConfiguracionMotor, MotorQuetzal};
 
 /// Ejecuta un archivo `.qz` o el proyecto actual (vía `quetzal.json`).
-pub fn ejecutar(archivo: Option<&str>, sin_optimizar: bool) -> i32 {
-    let mut configuracion = ConfiguracionMotor::por_defecto();
+pub fn ejecutar(archivo: Option<&str>, sin_optimizar: bool, jit: bool) -> i32 {
+    #[cfg(not(feature = "jit"))]
+    if jit {
+        eprintln!("este binario se compiló sin soporte JIT; usa la feature 'jit'");
+        return 2;
+    }
+    let mut configuracion = ConfiguracionMotor::por_defecto().con_jit(jit);
     if sin_optimizar {
         configuracion = configuracion.sin_optimizar();
     }

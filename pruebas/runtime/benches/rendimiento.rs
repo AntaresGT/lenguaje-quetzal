@@ -163,6 +163,29 @@ fn preparar_con_modo(codigo: &str, nombre: &str, optimizar: bool) -> Preparada {
     }
 }
 
+#[cfg(feature = "jit")]
+fn preparar_jit(codigo: &str, nombre: &str) -> Preparada {
+    let mut vm = Vm::nueva(Rc::new(modulos_nativos::crear_registro())).con_jit(true);
+    let (entorno, _) = vm
+        .cargar_modulo(Rc::new(compilar(codigo)), IndexMap::new())
+        .expect("el módulo del benchmark debe cargar");
+    let funcion = match &entorno
+        .globales
+        .borrow()
+        .get(nombre)
+        .expect("función global")
+        .valor
+    {
+        Valor::Funcion(datos) => Rc::clone(&datos.funcion),
+        otro => panic!("se esperaba función, se obtuvo {otro:?}"),
+    };
+    Preparada {
+        vm,
+        funcion,
+        entorno,
+    }
+}
+
 fn llamar(preparada: &mut Preparada, argumentos: Vec<Valor>) -> Valor {
     preparada
         .vm
@@ -184,6 +207,20 @@ fn fases(criterion: &mut Criterion) {
     criterion.bench_function("fases/inicializacion_vm", |b| {
         b.iter(|| black_box(Vm::nueva(Rc::clone(&registro))))
     });
+    #[cfg(feature = "jit")]
+    criterion.bench_function("fases/compilacion_jit", |b| {
+        b.iter_batched(
+            || {
+                let mut preparada = preparar_jit(BUCLE, "sumar_hasta");
+                for _ in 0..3 {
+                    black_box(llamar(&mut preparada, vec![Valor::Entero(1)]));
+                }
+                preparada
+            },
+            |mut preparada| black_box(llamar(&mut preparada, vec![Valor::Entero(1)])),
+            BatchSize::SmallInput,
+        )
+    });
 }
 
 fn ejecucion(criterion: &mut Criterion) {
@@ -197,6 +234,20 @@ fn ejecucion(criterion: &mut Criterion) {
             )
         });
     }
+    #[cfg(feature = "jit")]
+    criterion.bench_function("ejecucion/bucles_enteros_jit", |b| {
+        b.iter_batched(
+            || {
+                let mut preparada = preparar_jit(BUCLE, "sumar_hasta");
+                for _ in 0..4 {
+                    black_box(llamar(&mut preparada, vec![Valor::Entero(1)]));
+                }
+                preparada
+            },
+            |mut preparada| black_box(llamar(&mut preparada, vec![Valor::Entero(2_000_000)])),
+            BatchSize::SmallInput,
+        )
+    });
     criterion.bench_function("ejecucion/llamadas_recursivas", |b| {
         b.iter_batched(
             || preparar(FIBONACCI, "fib"),

@@ -116,6 +116,8 @@ impl MotorQuetzal {
 
     fn crear_vm(&self) -> maquina_virtual::Vm {
         let vm = maquina_virtual::Vm::nueva(Rc::clone(&self.nativos));
+        #[cfg(feature = "jit")]
+        let vm = vm.con_jit(self.configuracion.jit);
         if self.configuracion.optimizar {
             vm
         } else {

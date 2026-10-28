@@ -25,6 +25,9 @@ pub enum Comando {
         /// Intérprete puro: sin especialización ni caches en línea.
         #[arg(long = "sin-optimizar")]
         sin_optimizar: bool,
+        /// Activa el Baseline JIT para funciones enteras calientes.
+        #[arg(long = "jit")]
+        jit: bool,
     },
     /// Genera un ejecutable único con bytecode verificado embebido.
     Compilar {

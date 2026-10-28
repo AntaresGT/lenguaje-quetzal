@@ -1480,6 +1480,7 @@ name = "maquina_virtual"
 version = "0.0.2"
 dependencies = [
  "bytecode",
+ "compilador_jit",
  "indexmap",
  "nucleo",
  "rust_decimal",

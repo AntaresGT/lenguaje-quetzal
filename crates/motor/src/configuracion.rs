@@ -7,6 +7,8 @@ pub struct ConfiguracionMotor {
     pub colores: bool,
     /// Especialización y caches en línea. `false` deja el intérprete puro.
     pub optimizar: bool,
+    /// Compilación JIT selectiva. Desactivada por defecto.
+    pub jit: bool,
 }
 
 impl ConfiguracionMotor {
@@ -14,6 +16,7 @@ impl ConfiguracionMotor {
         Self {
             colores: true,
             optimizar: true,
+            jit: false,
         }
     }
 
@@ -21,11 +24,18 @@ impl ConfiguracionMotor {
         Self {
             colores: false,
             optimizar: true,
+            jit: false,
         }
+    }
+
+    pub fn con_jit(mut self, habilitado: bool) -> Self {
+        self.jit = habilitado;
+        self
     }
 
     pub fn sin_optimizar(mut self) -> Self {
         self.optimizar = false;
+        self.jit = false;
         self
     }
 }

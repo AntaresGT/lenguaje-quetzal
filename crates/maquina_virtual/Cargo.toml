@@ -7,9 +7,14 @@ repository.workspace = true
 homepage.workspace = true
 description = "Máquina virtual del Lenguaje Quetzal: ejecuta bytecode con pila y marcos."
 
+[features]
+default = []
+jit = ["dep:compilador_jit", "compilador_jit/nativo"]
+
 [dependencies]
 nucleo = { workspace = true }
 bytecode = { workspace = true }
+compilador_jit = { path = "../compilador_jit", optional = true }
 
 # Precisión decimal para el tipo número sin errores de acarreo.
 rust_decimal = { workspace = true }

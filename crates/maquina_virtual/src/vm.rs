@@ -8,11 +8,15 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use bytecode::{
     CodigoOp, Constante, FuncionCompilada, Instruccion, ModuloCompilado, ObjetoCompilado, Trozo,
 };
+#[cfg(feature = "jit")]
+use compilador_jit::{ContextoJit, ESTADO_DESBORDAMIENTO, ESTADO_DIVISION_CERO, ESTADO_EXITO};
 use indexmap::IndexMap;
 use nucleo::{ErrorQuetzal, Ubicacion};
 use rust_decimal::Decimal;
 
 use crate::bucle_eventos::{BucleEventos, CargaNativa, Mensaje};
+#[cfg(feature = "jit")]
+use crate::codigo::EstadoJit;
 use crate::codigo::{CacheSitio, CodigoRuntime, clave_clase, tipo_cache};
 use crate::errores::{DatosExcepcion, Fallo};
 use crate::nativos::{IdNativo, RegistroNativos};
@@ -37,6 +41,10 @@ pub struct Vm {
     bucle: BucleEventos,
     resultados_pendientes: RefCell<HashMap<u64, Result<CargaNativa, String>>>,
     despachadores: RefCell<HashMap<String, Despachador>>,
+    #[cfg(feature = "jit")]
+    jit: ContextoJit,
+    #[cfg(feature = "jit")]
+    jit_habilitado: bool,
 }
 
 struct Marco {
@@ -79,12 +87,31 @@ impl Vm {
             bucle: BucleEventos::nuevo(),
             resultados_pendientes: RefCell::new(HashMap::new()),
             despachadores: RefCell::new(HashMap::new()),
+            #[cfg(feature = "jit")]
+            jit: ContextoJit::default(),
+            #[cfg(feature = "jit")]
+            jit_habilitado: false,
         }
     }
 
     pub fn sin_optimizar(mut self) -> Self {
         self.optimizar = false;
+        #[cfg(feature = "jit")]
+        {
+            self.jit_habilitado = false;
+        }
         self
+    }
+
+    #[cfg(feature = "jit")]
+    pub fn con_jit(mut self, habilitado: bool) -> Self {
+        self.jit_habilitado = habilitado;
+        self
+    }
+
+    #[cfg(feature = "jit")]
+    pub fn estadisticas_jit(&self) -> compilador_jit::EstadisticasJit {
+        self.jit.estadisticas()
     }
 
     pub fn bucle(&self) -> &BucleEventos {
@@ -390,6 +417,13 @@ impl Vm {
         esto: Option<Valor>,
         ubicacion: Option<Ubicacion>,
     ) -> Result<Valor, Fallo> {
+        #[cfg(feature = "jit")]
+        if esto.is_none() && argumentos.len() == funcion.parametros.len() {
+            let codigo = self.runtime_de(funcion, entorno);
+            if let Some(resultado) = self.intentar_jit(&codigo, entorno, &argumentos, ubicacion) {
+                return resultado;
+            }
+        }
         let marco = self.preparar_marco_funcion(funcion, entorno, argumentos, esto, ubicacion)?;
         self.entrar_marco(marco, ubicacion)
     }
@@ -439,6 +473,74 @@ impl Vm {
             return Rc::clone(codigo);
         }
         CodigoRuntime::de_funcion(funcion)
+    }
+
+    #[cfg(feature = "jit")]
+    fn intentar_jit(
+        &mut self,
+        codigo: &Rc<CodigoRuntime>,
+        entorno: &Rc<EntornoModulo>,
+        argumentos: &[Valor],
+        ubicacion: Option<Ubicacion>,
+    ) -> Option<Result<Valor, Fallo>> {
+        if !self.jit_habilitado {
+            return None;
+        }
+        codigo.registrar_llamada();
+        if matches!(&*codigo.jit.borrow(), EstadoJit::Frio) && codigo.suficientemente_caliente() {
+            let compilado = codigo
+                .funcion
+                .as_ref()
+                .map(|funcion| self.jit.compilar_funcion(&entorno.modulo, funcion));
+            *codigo.jit.borrow_mut() = match compilado {
+                Some(Ok(funcion)) => EstadoJit::Compilado(Rc::new(funcion)),
+                _ => EstadoJit::NoElegible,
+            };
+        }
+        let funcion = {
+            let estado = codigo.jit.borrow();
+            match &*estado {
+                EstadoJit::Compilado(funcion) => Rc::clone(funcion),
+                _ => return None,
+            }
+        };
+        let enteros: Option<Vec<i64>> = argumentos
+            .iter()
+            .map(|argumento| match argumento {
+                Valor::Entero(valor) => Some(*valor),
+                _ => None,
+            })
+            .collect();
+        let enteros = enteros?;
+        let salida = match funcion.ejecutar(&enteros) {
+            Ok(salida) => salida,
+            Err(_) => {
+                *codigo.jit.borrow_mut() = EstadoJit::NoElegible;
+                return None;
+            }
+        };
+        let ubicacion = codigo
+            .ubicaciones
+            .get(salida.pc as usize)
+            .copied()
+            .or(ubicacion);
+        match salida.estado {
+            ESTADO_EXITO => Some(Ok(Valor::Entero(salida.valor))),
+            ESTADO_DIVISION_CERO => Some(Err(self.excepcion(
+                "E0401",
+                "división por cero".to_string(),
+                ubicacion,
+            ))),
+            ESTADO_DESBORDAMIENTO => Some(Err(self.excepcion(
+                "E0402",
+                "desbordamiento de entero en código nativo".to_string(),
+                ubicacion,
+            ))),
+            otro => Some(Err(Fallo::Error(Box::new(
+                ErrorQuetzal::interno(format!("estado JIT desconocido: {otro}"))
+                    .con_ubicacion(ubicacion.unwrap_or_default()),
+            )))),
+        }
     }
 
     fn preparar_marco_funcion(
@@ -524,7 +626,7 @@ impl Vm {
         &mut self,
         cantidad: usize,
         ubicacion: Ubicacion,
-    ) -> Result<Option<Marco>, Fallo> {
+    ) -> Result<Option<DestinoLlamada>, Fallo> {
         let Some(indice) = cantidad
             .checked_add(1)
             .and_then(|total| self.pila.len().checked_sub(total))
@@ -558,9 +660,21 @@ impl Vm {
             }
             _ => return Ok(None),
         };
+        #[cfg(feature = "jit")]
+        if esto.is_none() && cantidad == funcion.parametros.len() {
+            let argumentos = self.pila[indice + 1..].to_vec();
+            let codigo = self.runtime_de(&funcion, &entorno);
+            if let Some(resultado) =
+                self.intentar_jit(&codigo, &entorno, &argumentos, Some(ubicacion))
+            {
+                let valor = resultado?;
+                self.pila.truncate(indice);
+                return Ok(Some(DestinoLlamada::Valor(valor)));
+            }
+        }
         self.pila.remove(indice);
         self.preparar_marco_en_pila(&funcion, &entorno, cantidad, esto, Some(ubicacion))
-            .map(Some)
+            .map(|marco| Some(DestinoLlamada::Marco(marco)))
     }
 
     #[cold]
@@ -934,6 +1048,10 @@ impl Vm {
                 self.pila.push(Valor::Log(!logico));
             }
             CodigoOp::Saltar => {
+                #[cfg(feature = "jit")]
+                if instruccion.destino() < self.marcos[top].pc {
+                    self.marcos[top].codigo.registrar_retroceso();
+                }
                 self.marcos[top].pc = instruccion.destino();
                 return Ok(Flujo::SinAvanzar);
             }
@@ -1018,10 +1136,10 @@ impl Vm {
             }
             CodigoOp::Llamar => {
                 let cantidad = instruccion.cantidad() as usize;
-                if let Some(marco) =
+                if let Some(destino) =
                     self.preparar_llamada_sincrona_en_pila(cantidad, self.ubi(top))?
                 {
-                    return Ok(Flujo::Llamar(marco));
+                    return Ok(self.aplicar_destino(destino));
                 }
                 let argumentos = self.sacar_varios(cantidad)?;
                 let objetivo = self.sacar()?;

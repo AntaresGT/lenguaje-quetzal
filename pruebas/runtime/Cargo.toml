@@ -6,6 +6,10 @@ authors.workspace = true
 publish = false
 description = "Pruebas de integración de la máquina virtual de Quetzal."
 
+[features]
+default = []
+jit = ["maquina_virtual/jit"]
+
 [dependencies]
 nucleo = { workspace = true }
 sintaxis = { workspace = true }

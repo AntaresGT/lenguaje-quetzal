@@ -342,6 +342,8 @@ fn validar_indices(
         CodigoOp::CargarLocal
         | CodigoOp::GuardarLocal
         | CodigoOp::AjustarLocal
+        | CodigoOp::CargarLocalMiembro
+        | CodigoOp::CargarLocalAtributo
         | CodigoOp::RetornarLocal
             if instruccion.ranura() >= ranuras =>
         {
@@ -367,6 +369,7 @@ fn validar_indices(
         CodigoOp::CargarExterno
         | CodigoOp::GuardarExterno
         | CodigoOp::CargarMiembro
+        | CodigoOp::CargarLocalMiembro
         | CodigoOp::GuardarMiembro
         | CodigoOp::LlamarMetodo
             if instruccion.indice_nombre() as usize >= limites.nombres =>
@@ -378,6 +381,14 @@ fn validar_indices(
         }
         CodigoOp::CargarAtributo | CodigoOp::GuardarAtributo | CodigoOp::CargarEstoAtributo
             if slots.is_some_and(|total| instruccion.slot() as usize >= total) =>
+        {
+            Err(error_verificacion(
+                nombre,
+                "slot de atributo fuera de rango",
+            ))
+        }
+        CodigoOp::CargarLocalAtributo
+            if slots.is_some_and(|total| instruccion.slot_atributo() as usize >= total) =>
         {
             Err(error_verificacion(
                 nombre,
@@ -398,6 +409,8 @@ fn efecto_pila(instruccion: Instruccion, nombre: &str) -> Result<(u32, u32), Err
         | CodigoOp::CargarEsto
         | CodigoOp::CargarPadre
         | CodigoOp::CargarEstoAtributo
+        | CodigoOp::CargarLocalMiembro
+        | CodigoOp::CargarLocalAtributo
         | CodigoOp::CargarLocalLocalSumarEntero => (0, 1),
         CodigoOp::Duplicar => (1, 2),
         CodigoOp::Desechar

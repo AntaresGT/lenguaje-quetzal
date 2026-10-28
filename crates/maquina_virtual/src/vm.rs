@@ -1247,6 +1247,16 @@ impl Vm {
                 let miembro = self.cargar_miembro(objeto, &nombre, self.ubi(top))?;
                 self.pila.push(miembro);
             }
+            CodigoOp::CargarLocalMiembro => {
+                let nombre =
+                    Rc::clone(&self.marcos[top].entorno.nombres[instruccion.indice_u32() as usize]);
+                let objeto = self.local(top, instruccion.ranura())?;
+                if self.optimizar {
+                    self.cachear_miembro(top, instruccion, &objeto, &nombre);
+                }
+                let miembro = self.cargar_miembro(objeto, &nombre, self.ubi(top))?;
+                self.pila.push(miembro);
+            }
             CodigoOp::GuardarMiembro => {
                 let valor = self.sacar()?;
                 let objeto = self.sacar()?;
@@ -1276,6 +1286,31 @@ impl Vm {
                 }
                 let objeto = self.sacar()?;
                 let atributo = self.cargar_atributo(objeto, instruccion.slot(), self.ubi(top))?;
+                self.pila.push(atributo);
+            }
+            CodigoOp::CargarLocalAtributo => {
+                let pc = self.marcos[top].pc as usize;
+                let original = self.marcos[top].codigo.instrucciones[pc];
+                let objeto = self.local(top, instruccion.ranura())?;
+                if original.op == CodigoOp::CargarLocalMiembro {
+                    let clase_actual = match &objeto {
+                        Valor::Instancia(instancia) => Some(instancia.borrow().clase.id),
+                        _ => None,
+                    };
+                    let guarda = match self.marcos[top].codigo.caches[pc].get() {
+                        CacheSitio::Atributo { clase, slot } => {
+                            slot == instruccion.slot_atributo() && Some(clase) == clase_actual
+                        }
+                        _ => false,
+                    };
+                    if !guarda {
+                        self.marcos[top].codigo.desespecializar(pc);
+                        self.marcos[top].codigo.caches[pc].set(CacheSitio::Polimorfica);
+                        return self.ejecutar_instruccion(original, top);
+                    }
+                }
+                let atributo =
+                    self.cargar_atributo(objeto, instruccion.slot_atributo(), self.ubi(top))?;
                 self.pila.push(atributo);
             }
             CodigoOp::GuardarAtributo => {
@@ -1591,9 +1626,14 @@ impl Vm {
                 if let Some(&slot) = clase.slots.borrow().get(nombre) {
                     self.marcos[top].codigo.caches[pc]
                         .set(CacheSitio::Atributo { clase: clave, slot });
-                    self.marcos[top]
-                        .codigo
-                        .especializar(pc, Instruccion::CargarAtributo(slot));
+                    let especializada = match original.op {
+                        CodigoOp::CargarMiembro => Instruccion::CargarAtributo(slot),
+                        CodigoOp::CargarLocalMiembro => {
+                            Instruccion::CargarLocalAtributo(original.ranura(), slot)
+                        }
+                        _ => return,
+                    };
+                    self.marcos[top].codigo.especializar(pc, especializada);
                 }
             }
             CacheSitio::Atributo { clase: previa, .. } if previa != clave => {

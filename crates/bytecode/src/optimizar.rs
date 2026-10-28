@@ -213,6 +213,15 @@ fn fusionar_superinstrucciones(ops: &mut [Option<(Instruccion, Ubicacion)>]) {
                 i = a_pc + 1;
                 continue;
             }
+            if a.op == CodigoOp::CargarLocal && b.op == CodigoOp::CargarMiembro {
+                ops[a_pc] = Some((
+                    Instruccion::CargarLocalMiembro(a.ranura(), b.indice_u32()),
+                    ubicacion,
+                ));
+                ops[b_pc] = None;
+                i = a_pc + 1;
+                continue;
+            }
             if a.op == CodigoOp::CargarLocal && b.op == CodigoOp::Retornar {
                 ops[a_pc] = Some((Instruccion::RetornarLocal(a.ranura()), ubicacion));
                 ops[b_pc] = None;
@@ -486,6 +495,22 @@ mod pruebas {
         assert_eq!(
             resultado.instrucciones,
             vec![Instruccion::AjustarLocalConLocal(0, 1)]
+        );
+    }
+
+    #[test]
+    fn fusion_deberia_cargar_un_miembro_desde_local() {
+        let mut constantes = Vec::new();
+        let resultado = optimizar_trozo(
+            trozo(vec![
+                Instruccion::CargarLocal(2),
+                Instruccion::CargarMiembro(7),
+            ]),
+            &mut constantes,
+        );
+        assert_eq!(
+            resultado.instrucciones,
+            vec![Instruccion::CargarLocalMiembro(2, 7)]
         );
     }
 

@@ -90,6 +90,8 @@ pub enum CodigoOp {
     RetornarLocal,
     LlamarNativa,
     AjustarLocalConLocal,
+    CargarLocalMiembro,
+    CargarLocalAtributo,
 }
 
 #[allow(non_snake_case)]
@@ -307,6 +309,12 @@ impl Instruccion {
     pub const fn AjustarLocalConLocal(ranura: u16, otra: u16) -> Self {
         Self::nueva(CodigoOp::AjustarLocalConLocal, 0, ranura, otra as u32)
     }
+    pub const fn CargarLocalMiembro(ranura: u16, nombre: u32) -> Self {
+        Self::nueva(CodigoOp::CargarLocalMiembro, 0, ranura, nombre)
+    }
+    pub const fn CargarLocalAtributo(ranura: u16, slot: u16) -> Self {
+        Self::nueva(CodigoOp::CargarLocalAtributo, 0, ranura, slot as u32)
+    }
     pub const fn RetornarLocal(ranura: u16) -> Self {
         Self::nueva(CodigoOp::RetornarLocal, 0, ranura, 0)
     }
@@ -346,6 +354,9 @@ impl Instruccion {
     }
     pub fn slot(self) -> u16 {
         self.a
+    }
+    pub fn slot_atributo(self) -> u16 {
+        self.b as u16
     }
     pub fn ranura_derecha(self) -> u16 {
         self.b as u16

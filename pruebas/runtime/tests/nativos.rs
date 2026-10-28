@@ -89,6 +89,23 @@ fn metodos_de_texto_deberian_funcionar() {
 }
 
 #[test]
+fn metodos_unicode_deberian_conservar_indices_de_caracteres() {
+    let entorno = ejecutar(
+        "texto base = \"A🦜é\"\n\
+         texto primero = base[0]\n\
+         texto segundo = base[1]\n\
+         texto ultimo = base[-1]\n\
+         texto nativo = base.caracter_en(1)\n\
+         texto recorte = base.subtexto(1, 3)\n",
+    );
+    assert_eq!(texto_global(&entorno, "primero"), "A");
+    assert_eq!(texto_global(&entorno, "segundo"), "🦜");
+    assert_eq!(texto_global(&entorno, "ultimo"), "é");
+    assert_eq!(texto_global(&entorno, "nativo"), "🦜");
+    assert_eq!(texto_global(&entorno, "recorte"), "🦜é");
+}
+
+#[test]
 fn metodos_de_lista_deberian_funcionar() {
     let entorno = ejecutar(
         "lista<entero> var numeros = [3, 1, 4, 2]\n\

@@ -89,15 +89,24 @@ fn generar_deberia_procesar_todos_los_ejemplos() {
 
 #[test]
 fn generar_deberia_emitir_cargar_esto_atributo_para_esto() {
-    let modulo = generar(
-        "objeto Caja {\n    entero var n = 1\n    entero ver() { retornar esto.n }\n}\n",
-    );
+    let modulo =
+        generar("objeto Caja {\n    entero var n = 1\n    entero ver() { retornar esto.n }\n}\n");
     let metodo = &modulo.objetos[0].metodos[0].funcion.trozo.instrucciones;
     assert!(
-        metodo
-            .iter()
-            .any(|instruccion| instruccion.op == bytecode::CodigoOp::CargarEstoAtributo
-                || instruccion.op == bytecode::CodigoOp::CargarAtributo),
+        metodo.iter().any(
+            |instruccion| instruccion.op == bytecode::CodigoOp::CargarEstoAtributo
+                || instruccion.op == bytecode::CodigoOp::CargarAtributo
+        ),
         "esto.n debe usar slot, no CargarMiembro: {metodo:?}"
     );
+}
+
+#[test]
+fn generar_deberia_deduplicar_constantes_conservando_el_primer_indice() {
+    let modulo =
+        generar("texto a = \"mismo\"\ntexto b = \"mismo\"\nnúmero c = 0.1\nnúmero d = 0.1\n");
+    assert_eq!(modulo.constantes.len(), 2);
+    assert!(modulo.principal.instrucciones.iter().all(|instruccion| {
+        instruccion.op != bytecode::CodigoOp::CargarConstante || instruccion.indice_u32() < 2
+    }));
 }

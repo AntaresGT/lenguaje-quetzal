@@ -4,7 +4,11 @@
 //! magia (8) · longitud del payload (u64 LE) · sha256 (32) · payload postcard.
 //! Todo con `std::fs`; cero `unsafe`.
 
+use std::collections::HashSet;
+
 use bytecode::{ModuloCompilado, verificar_modulo_inmutable};
+
+const LIMITE_BYTES_EMBEBIDO: usize = 256 * 1024 * 1024;
 use nucleo::{CategoriaError, ErrorQuetzal, ResultadoQuetzal};
 use sha2::{Digest, Sha256};
 
@@ -25,14 +29,9 @@ pub struct CargaEmbebida {
 
 /// Anexa una carga verificada a una copia del binario anfitrión.
 pub fn anexar(anfitrion: &[u8], carga: &CargaEmbebida) -> ResultadoQuetzal<Vec<u8>> {
-    for (_, modulo) in &carga.modulos {
-        verificar_modulo_inmutable(modulo).map_err(|error| {
-            error_embebido(format!("bytecode inválido al embeber: {error}"))
-        })?;
-    }
-    let payload = postcard::to_allocvec(carga).map_err(|error| {
-        error_embebido(format!("no se pudo serializar la carga: {error}"))
-    })?;
+    validar_carga(carga)?;
+    let payload = postcard::to_allocvec(carga)
+        .map_err(|error| error_embebido(format!("no se pudo serializar la carga: {error}")))?;
     let hash = Sha256::digest(&payload);
     let mut salida =
         Vec::with_capacity(anfitrion.len() + payload.len() + hash.len() + 8 + MAGIA.len());
@@ -57,8 +56,17 @@ pub fn extraer(binario: &[u8]) -> ResultadoQuetzal<Option<CargaEmbebida>> {
     let len_bytes: [u8; 8] = binario[binario.len() - 16..binario.len() - 8]
         .try_into()
         .map_err(|_| error_embebido("cola de ejecutable corrupta"))?;
-    let len = u64::from_le_bytes(len_bytes) as usize;
-    if binario.len() < COLA + len {
+    let len = usize::try_from(u64::from_le_bytes(len_bytes))
+        .map_err(|_| error_embebido("la longitud embebida no cabe en esta plataforma"))?;
+    if len > LIMITE_BYTES_EMBEBIDO {
+        return Err(error_embebido(
+            "la carga embebida supera el límite permitido",
+        ));
+    }
+    let total = COLA
+        .checked_add(len)
+        .ok_or_else(|| error_embebido("la longitud embebida desborda el contador"))?;
+    if binario.len() < total {
         return Err(error_embebido(
             "la carga embebida declara un tamaño mayor al archivo",
         ));
@@ -74,14 +82,9 @@ pub fn extraer(binario: &[u8]) -> ResultadoQuetzal<Option<CargaEmbebida>> {
             "el hash sha2 de la carga embebida no coincide (archivo manipulado)",
         ));
     }
-    let carga: CargaEmbebida = postcard::from_bytes(payload).map_err(|error| {
-        error_embebido(format!("no se pudo leer la carga embebida: {error}"))
-    })?;
-    for (_, modulo) in &carga.modulos {
-        verificar_modulo_inmutable(modulo).map_err(|error| {
-            error_embebido(format!("bytecode embebido inválido: {error}"))
-        })?;
-    }
+    let carga: CargaEmbebida = postcard::from_bytes(payload)
+        .map_err(|error| error_embebido(format!("no se pudo leer la carga embebida: {error}")))?;
+    validar_carga(&carga)?;
     Ok(Some(carga))
 }
 
@@ -97,15 +100,12 @@ pub fn desde_ejecutable_actual() -> ResultadoQuetzal<Option<CargaEmbebida>> {
         error_embebido(format!("no se pudo leer el ejecutable actual: {error}"))
     })?;
     let mut archivo = std::fs::File::open(&ruta).map_err(|error| {
-        error_embebido(format!(
-            "no se pudo abrir '{}': {error}",
-            ruta.display()
-        ))
+        error_embebido(format!("no se pudo abrir '{}': {error}", ruta.display()))
     })?;
-    let total = archivo.metadata().map_err(|error| {
-        error_embebido(format!("no se pudo medir '{}': {error}", ruta.display()))
-    })?
-    .len();
+    let total = archivo
+        .metadata()
+        .map_err(|error| error_embebido(format!("no se pudo medir '{}': {error}", ruta.display())))?
+        .len();
     if total < COLA {
         return Ok(None);
     }
@@ -120,12 +120,30 @@ pub fn desde_ejecutable_actual() -> ResultadoQuetzal<Option<CargaEmbebida>> {
         return Ok(None);
     }
     let bytes = std::fs::read(&ruta).map_err(|error| {
-        error_embebido(format!(
-            "no se pudo leer '{}': {error}",
-            ruta.display()
-        ))
+        error_embebido(format!("no se pudo leer '{}': {error}", ruta.display()))
     })?;
     extraer(&bytes)
+}
+
+fn validar_carga(carga: &CargaEmbebida) -> ResultadoQuetzal<()> {
+    if !carga
+        .modulos
+        .iter()
+        .any(|(clave, _)| clave == &carga.entrada)
+    {
+        return Err(error_embebido("el módulo de entrada no está en la carga"));
+    }
+    let mut claves = HashSet::new();
+    for (clave, modulo) in &carga.modulos {
+        if !claves.insert(clave) {
+            return Err(error_embebido(format!(
+                "el módulo '{clave}' aparece más de una vez"
+            )));
+        }
+        verificar_modulo_inmutable(modulo)
+            .map_err(|error| error_embebido(format!("bytecode embebido inválido: {error}")))?;
+    }
+    Ok(())
 }
 
 fn error_embebido(mensaje: impl Into<String>) -> ErrorQuetzal {
@@ -154,5 +172,32 @@ mod pruebas {
     #[test]
     fn extraer_sin_magia_deberia_devolver_none() {
         assert!(extraer(b"solo un binario normal").expect("ok").is_none());
+    }
+
+    #[test]
+    fn extraer_deberia_rechazar_longitudes_desbordadas_sin_panic() {
+        let mut binario = vec![0u8; 48];
+        binario[32..40].copy_from_slice(&u64::MAX.to_le_bytes());
+        binario[40..48].copy_from_slice(&MAGIA);
+        assert!(extraer(&binario).is_err());
+    }
+
+    #[test]
+    fn anexar_deberia_rechazar_modulos_duplicados_y_entrada_ausente() {
+        let carga = CargaEmbebida {
+            entrada: "principal".into(),
+            modulos: vec![
+                ("principal".into(), ModuloCompilado::default()),
+                ("principal".into(), ModuloCompilado::default()),
+            ],
+            permisos: Permisos::default(),
+        };
+        assert!(anexar(b"HOST", &carga).is_err());
+        let ausente = CargaEmbebida {
+            entrada: "otro".into(),
+            modulos: vec![("principal".into(), ModuloCompilado::default())],
+            permisos: Permisos::default(),
+        };
+        assert!(anexar(b"HOST", &ausente).is_err());
     }
 }

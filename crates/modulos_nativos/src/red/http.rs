@@ -68,10 +68,7 @@ pub(crate) fn leer_peticion<L: BufRead>(lector: &mut L) -> Result<Option<Peticio
     let version = partes.next().unwrap_or("HTTP/1.1").trim().to_string();
 
     let mut cabeceras = Vec::new();
-    loop {
-        let Some(linea) = leer_linea(lector)? else {
-            break;
-        };
+    while let Some(linea) = leer_linea(lector)? {
         let linea = linea.trim_end_matches(['\r', '\n']);
         if linea.is_empty() {
             break;
@@ -155,10 +152,7 @@ fn leer_cuerpo<L: BufRead>(lector: &mut L, peticion: &PeticionCruda) -> Result<V
 
 fn leer_cuerpo_por_trozos<L: BufRead>(lector: &mut L) -> Result<Vec<u8>, String> {
     let mut cuerpo = Vec::new();
-    loop {
-        let Some(linea) = leer_linea(lector)? else {
-            break;
-        };
+    while let Some(linea) = leer_linea(lector)? {
         let tamano_texto = linea.trim().split(';').next().unwrap_or("").trim();
         if tamano_texto.is_empty() {
             continue;

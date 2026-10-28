@@ -94,7 +94,7 @@ pub fn arg_lista(
     funcion: &str,
     argumentos: &[Valor],
     indice: usize,
-) -> Result<Rc<RefCell<Vec<Valor>>>, Fallo> {
+) -> Result<Rc<RefCell<maquina_virtual::valores::ListaDatos>>, Fallo> {
     match argumentos.get(indice) {
         Some(Valor::Lista(lista)) => Ok(Rc::clone(lista)),
         Some(otro) => Err(error(

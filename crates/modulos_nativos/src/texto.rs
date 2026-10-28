@@ -98,14 +98,14 @@ pub fn registrar(registro: &mut RegistroNativos) {
     metodo(registro, "texto.subtexto", 2, |texto, argumentos| {
         let inicio = arg_entero("texto.subtexto", argumentos, 1)?;
         let fin = arg_entero("texto.subtexto", argumentos, 2)?;
-        let caracteres: Vec<char> = texto.chars().collect();
-        let inicio = usize::try_from(inicio.max(0))
-            .unwrap_or(0)
-            .min(caracteres.len());
-        let fin = usize::try_from(fin.max(0))
-            .unwrap_or(0)
-            .min(caracteres.len());
-        let recorte: String = caracteres[inicio..fin.max(inicio)].iter().collect();
+        let total = texto.chars().count();
+        let inicio = usize::try_from(inicio.max(0)).unwrap_or(0).min(total);
+        let fin = usize::try_from(fin.max(0)).unwrap_or(0).min(total);
+        let recorte: String = texto
+            .chars()
+            .skip(inicio)
+            .take(fin.max(inicio) - inicio)
+            .collect();
         Ok(Valor::texto(recorte))
     });
     metodo(registro, "texto.izquierda", 1, |texto, argumentos| {
@@ -169,10 +169,19 @@ pub fn registrar(registro: &mut RegistroNativos) {
     });
     metodo(registro, "texto.caracter_en", 1, |texto, argumentos| {
         let indice = arg_entero("texto.caracter_en", argumentos, 1)?;
-        let caracteres: Vec<char> = texto.chars().collect();
-        let real = indice_normalizado(indice, caracteres.len())
+        if indice >= 0
+            && let Ok(indice) = usize::try_from(indice)
+            && let Some(caracter) = texto.chars().nth(indice)
+        {
+            return Ok(Valor::texto(caracter.to_string()));
+        }
+        let real = indice_normalizado(indice, texto.chars().count())
             .ok_or_else(|| error("E0403", format!("el índice {indice} está fuera de rango")))?;
-        Ok(Valor::texto(caracteres[real].to_string()))
+        let caracter = texto
+            .chars()
+            .nth(real)
+            .ok_or_else(|| error("E0403", format!("el índice {indice} está fuera de rango")))?;
+        Ok(Valor::texto(caracter.to_string()))
     });
 }
 

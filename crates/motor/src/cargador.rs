@@ -133,7 +133,8 @@ impl<'vm> Cargador<'vm> {
     ) -> Result<(), Vec<ErrorQuetzal>> {
         for (clave, modulo) in &carga.modulos {
             let ruta = PathBuf::from(clave);
-            self.compilados.insert(ruta.clone(), Rc::new(modulo.clone()));
+            self.compilados
+                .insert(ruta.clone(), Rc::new(modulo.clone()));
             self.orden_compilados.push(ruta);
         }
         for (clave, _) in &carga.modulos {
@@ -142,7 +143,9 @@ impl<'vm> Cargador<'vm> {
                 continue;
             }
             let modulo = Rc::clone(self.compilados.get(&ruta).ok_or_else(|| {
-                vec![ErrorQuetzal::interno("módulo embebido ausente tras registrar")]
+                vec![ErrorQuetzal::interno(
+                    "módulo embebido ausente tras registrar",
+                )]
             })?);
             let importaciones = self.resolver_importaciones(&modulo, ruta.parent(), clave)?;
             if let Some(vm) = &mut self.vm {

@@ -142,7 +142,8 @@ impl MotorQuetzal {
 
     /// Ejecuta una carga embebida (bytecode ya verificado).
     pub fn ejecutar_carga(&self, carga: &paquetes::CargaEmbebida) -> ResultadoMultiple<()> {
-        self.permisos.configurar(carga.permisos.clone(), Path::new("."));
+        self.permisos
+            .configurar(carga.permisos.clone(), Path::new("."));
         let mut vm = self.crear_vm();
         let resultado = {
             let mut cargador = Cargador::nuevo(Some(&mut vm));

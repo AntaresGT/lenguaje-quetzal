@@ -707,7 +707,7 @@ fn ejecutar_sincrono(
                 };
                 if let Some((funcion, entorno, esto)) = manejador.and_then(Valor::partes_callable) {
                     let valor = instancia_progreso(&progreso.carga());
-                    vm.llamar_funcion(funcion, entorno, vec![valor], esto.cloned(), None)?;
+                    vm.llamar_funcion(funcion, &entorno, vec![valor], esto.cloned(), None)?;
                 }
             }
             Ok(Aviso::Fin(Ok(transferencia))) => return Ok(transferencia),
@@ -755,7 +755,7 @@ fn ejecutar_asincrono(
         if let Some((funcion, entorno, esto)) = manejador.as_ref().and_then(Valor::partes_callable)
         {
             let valor = instancia_progreso(&datos);
-            let _ = vm.llamar_funcion(funcion, entorno, vec![valor], esto.cloned(), None);
+            let _ = vm.llamar_funcion(funcion, &entorno, vec![valor], esto.cloned(), None);
         }
         CargaNativa::Nula
     });
@@ -995,7 +995,7 @@ fn aplicar_interceptores_peticion(
             continue;
         };
         let resultado =
-            vm.llamar_funcion(funcion, entorno, vec![actual.clone()], esto.cloned(), None)?;
+            vm.llamar_funcion(funcion, &entorno, vec![actual.clone()], esto.cloned(), None)?;
         if let Valor::Jsn(_) = resultado {
             actual = resultado;
         }
@@ -1021,7 +1021,7 @@ fn aplicar_interceptores_respuesta(
             continue;
         };
         let resultado =
-            vm.llamar_funcion(funcion, entorno, vec![actual.clone()], esto.cloned(), None)?;
+            vm.llamar_funcion(funcion, &entorno, vec![actual.clone()], esto.cloned(), None)?;
         if let Valor::InstanciaNativa(datos) = &resultado
             && &*datos.tipo == TIPO_RESPUESTA
         {

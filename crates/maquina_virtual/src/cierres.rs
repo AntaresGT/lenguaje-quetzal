@@ -60,8 +60,14 @@ pub fn compilar(codigo: Rc<CodigoRuntime>) -> Option<CierreCompilado> {
     if codigo.instrucciones.is_empty() || cubiertas * 2 < codigo.instrucciones.len() {
         return None;
     }
+    let debil = Rc::downgrade(&codigo);
     Some(CierreCompilado {
-        correr: Box::new(move |vm: &mut Vm, pc_inicio| correr_cierre(vm, &codigo, pc_inicio)),
+        correr: Box::new(move |vm: &mut Vm, pc_inicio| {
+            let Some(codigo) = debil.upgrade() else {
+                return Ok(ResultadoCierre::Interpretar { pc: pc_inicio });
+            };
+            correr_cierre(vm, &codigo, pc_inicio)
+        }),
     })
 }
 

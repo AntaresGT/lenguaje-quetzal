@@ -3,4 +3,3 @@
 //! **Estado: futuro.** Esqueleto declarado; se implementará en una fase
 //! posterior reutilizando `lexico`, `sintaxis` y `semantica`.
 #![forbid(unsafe_code)]
-

@@ -63,6 +63,7 @@ enum Destino {
 struct Generador {
     archivo: String,
     constantes: Vec<Constante>,
+    indice_constantes: HashMap<Constante, u32>,
     nombres: Vec<String>,
     indice_nombres: HashMap<String, u32>,
     bucles: Vec<ContextoBucle>,
@@ -83,6 +84,7 @@ impl Generador {
         Self {
             archivo: archivo.to_string(),
             constantes: Vec::new(),
+            indice_constantes: HashMap::new(),
             nombres: Vec::new(),
             indice_nombres: HashMap::new(),
             bucles: Vec::new(),
@@ -218,15 +220,13 @@ impl Generador {
     // ----- Tablas -----
 
     fn indice_constante(&mut self, constante: Constante) -> u32 {
-        if let Some(indice) = self
-            .constantes
-            .iter()
-            .position(|existente| existente == &constante)
-        {
-            return indice as u32;
+        if let Some(indice) = self.indice_constantes.get(&constante) {
+            return *indice;
         }
-        self.constantes.push(constante);
-        (self.constantes.len() - 1) as u32
+        let indice = self.constantes.len() as u32;
+        self.constantes.push(constante.clone());
+        self.indice_constantes.insert(constante, indice);
+        indice
     }
 
     fn indice_nombre(&mut self, nombre: &str) -> u32 {

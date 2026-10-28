@@ -99,7 +99,7 @@ pub fn registrar(registro: &mut RegistroNativos) {
         Ok(Valor::Nulo)
     });
     metodo(registro, "lista.ordenado", 0, |lista, _| {
-        let mut copia = lista.borrow().clone();
+        let mut copia = lista.borrow().to_vec();
         ordenar(&mut copia, false)?;
         Ok(Valor::lista(copia))
     });
@@ -208,13 +208,13 @@ pub fn registrar(registro: &mut RegistroNativos) {
     });
     metodo(registro, "lista.concatenar", 1, |lista, argumentos| {
         let otra = arg_lista("lista.concatenar", argumentos, 1)?;
-        let mut resultado = lista.borrow().clone();
+        let mut resultado = lista.borrow().to_vec();
         resultado.extend(otra.borrow().iter().cloned());
         Ok(Valor::lista(resultado))
     });
     metodo(registro, "lista.extender", 1, |lista, argumentos| {
         let otra = arg_lista("lista.extender", argumentos, 1)?;
-        let elementos_nuevos: Vec<Valor> = otra.borrow().clone();
+        let elementos_nuevos: Vec<Valor> = otra.borrow().to_vec();
         lista.borrow_mut().extend(elementos_nuevos);
         Ok(Valor::Nulo)
     });
@@ -248,7 +248,11 @@ fn metodo(
     registro: &mut RegistroNativos,
     nombre: &'static str,
     argumentos_extra: usize,
-    implementacion: impl Fn(Rc<RefCell<Vec<Valor>>>, &[Valor]) -> Result<Valor, Fallo> + 'static,
+    implementacion: impl Fn(
+        Rc<RefCell<maquina_virtual::valores::ListaDatos>>,
+        &[Valor],
+    ) -> Result<Valor, Fallo>
+    + 'static,
 ) {
     registro.registrar_funcion(
         nombre,

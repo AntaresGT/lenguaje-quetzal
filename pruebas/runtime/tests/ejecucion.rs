@@ -157,6 +157,27 @@ fn ejecutar_deberia_recorrer_listas_con_para() {
 }
 
 #[test]
+fn iterar_deberia_usar_una_instantanea_aunque_la_lista_cambie() {
+    let entorno = ejecutar(
+        "lista<entero> var numeros = [1, 2, 3]\nlista<entero> var recorridos = []\npara (entero n en numeros) {\n    recorridos.agregar(n)\n    si (n == 1) {\n        numeros[0] = 99\n        numeros.agregar(4)\n    }\n}\n",
+    );
+    match global(&entorno, "recorridos") {
+        Valor::Lista(elementos) => {
+            let valores: Vec<i64> = elementos.borrow().iter().map(como_entero).collect();
+            assert_eq!(valores, vec![1, 2, 3]);
+        }
+        otro => panic!("se esperaba lista, se obtuvo {otro:?}"),
+    }
+    match global(&entorno, "numeros") {
+        Valor::Lista(elementos) => {
+            let valores: Vec<i64> = elementos.borrow().iter().map(como_entero).collect();
+            assert_eq!(valores, vec![99, 2, 3, 4]);
+        }
+        otro => panic!("se esperaba lista, se obtuvo {otro:?}"),
+    }
+}
+
+#[test]
 fn ejecutar_deberia_indexar_con_negativos() {
     let entorno =
         ejecutar("lista<texto> letras = [\"a\", \"b\", \"c\"]\ntexto ultima = letras[-1]\n");

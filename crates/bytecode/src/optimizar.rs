@@ -88,7 +88,8 @@ fn plegar_enteros(
         let Some(op_pc) = siguiente_ocupada(ops, derecha_pc + 1) else {
             break;
         };
-        let Some(a) = entero_cargado(ops[izquierda_pc].as_ref().map(|par| par.0), constantes) else {
+        let Some(a) = entero_cargado(ops[izquierda_pc].as_ref().map(|par| par.0), constantes)
+        else {
             i = izquierda_pc + 1;
             continue;
         };
@@ -203,7 +204,10 @@ fn fusionar_superinstrucciones(ops: &mut [Option<(Instruccion, Ubicacion)>]) {
             && let Some((b, _)) = ops[b_pc]
         {
             if a.op == CodigoOp::MenorEntero && b.op == CodigoOp::SaltarSiFalso {
-                ops[a_pc] = Some((Instruccion::MenorEnteroSaltarSiFalso(b.destino()), ubicacion));
+                ops[a_pc] = Some((
+                    Instruccion::MenorEnteroSaltarSiFalso(b.destino()),
+                    ubicacion,
+                ));
                 ops[b_pc] = None;
                 i = a_pc + 1;
                 continue;

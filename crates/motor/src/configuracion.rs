@@ -5,7 +5,7 @@
 pub struct ConfiguracionMotor {
     /// Si los reportes de error usan colores de terminal.
     pub colores: bool,
-    /// Especialización, caches en línea y cierres. `false` deja el intérprete puro.
+    /// Especialización y caches en línea. `false` deja el intérprete puro.
     pub optimizar: bool,
 }
 

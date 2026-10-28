@@ -4,7 +4,10 @@
 //! Quetzal y la versión del formato de bytecode: cualquier cambio invalida la
 //! entrada automáticamente. El payload es binario (`postcard`).
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
+
+const LIMITE_BYTES_CACHE: u64 = 64 * 1024 * 1024;
 
 use bytecode::{ModuloCompilado, modulo::VERSION_FORMATO_BYTECODE, verificar_modulo_inmutable};
 use sha2::{Digest, Sha256};
@@ -34,7 +37,18 @@ impl CacheBytecode {
     /// Recupera un módulo compilado si hay una entrada válida y verificada.
     pub fn buscar(&self, contenido_fuente: &str) -> Option<ModuloCompilado> {
         let ruta = self.ruta_entrada(contenido_fuente);
-        let datos = std::fs::read(ruta).ok()?;
+        let archivo = std::fs::File::open(ruta).ok()?;
+        if archivo.metadata().ok()?.len() > LIMITE_BYTES_CACHE {
+            return None;
+        }
+        let mut datos = Vec::new();
+        archivo
+            .take(LIMITE_BYTES_CACHE + 1)
+            .read_to_end(&mut datos)
+            .ok()?;
+        if datos.len() as u64 > LIMITE_BYTES_CACHE {
+            return None;
+        }
         let modulo: ModuloCompilado = postcard::from_bytes(&datos).ok()?;
         verificar_modulo_inmutable(&modulo).ok()?;
         Some(modulo)

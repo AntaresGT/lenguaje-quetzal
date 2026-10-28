@@ -760,10 +760,10 @@ fn registrar_escucha(registro: &mut RegistroNativos, red: &RegistroRed) {
             vm.bucle().registrar_trabajo_activo();
 
             // Callback opcional de arranque, al estilo de `app.listen(puerto, fn)`.
-            if let Some(manejador) = manejador_arranque {
-                if let Some((funcion, entorno, esto)) = manejador.partes_callable() {
-                    vm.llamar_funcion(funcion, entorno, Vec::new(), esto.cloned(), None)?;
-                }
+            if let Some(manejador) = manejador_arranque
+                && let Some((funcion, entorno, esto)) = manejador.partes_callable()
+            {
+                vm.llamar_funcion(funcion, &entorno, Vec::new(), esto.cloned(), None)?;
             }
 
             Ok(argumentos[0].clone())
@@ -1081,7 +1081,7 @@ fn ejecutar_manejadores_error(
         let esperados = funcion.parametros.len();
         let argumentos = argumentos.into_iter().take(esperados.max(1)).collect();
         if vm
-            .llamar_funcion(funcion, entorno, argumentos, esto.cloned(), None)
+            .llamar_funcion(funcion, &entorno, argumentos, esto.cloned(), None)
             .is_err()
         {
             continue;
@@ -1253,7 +1253,7 @@ fn ejecutar_manejadores_parametro(
             ];
             let esperados = funcion.parametros.len().min(argumentos.len());
             let argumentos = argumentos.into_iter().take(esperados).collect();
-            vm.llamar_funcion(funcion, entorno, argumentos, esto.cloned(), None)?;
+            vm.llamar_funcion(funcion, &entorno, argumentos, esto.cloned(), None)?;
         }
     }
     Ok(())
@@ -1277,7 +1277,7 @@ fn ejecutar_cadena(
         let continuacion = instancia_continuacion();
         let mut argumentos = vec![peticion.clone(), respuesta.clone(), continuacion.clone()];
         argumentos.truncate(aridad.min(3));
-        vm.llamar_funcion(funcion, entorno, argumentos, esto.cloned(), None)?;
+        vm.llamar_funcion(funcion, &entorno, argumentos, esto.cloned(), None)?;
 
         if aridad < 3 {
             // Manejador final: no hay continuación, la ruta queda atendida.

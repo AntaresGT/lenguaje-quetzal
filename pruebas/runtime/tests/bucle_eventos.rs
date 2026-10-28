@@ -216,7 +216,8 @@ fn nativa_con_vm_puede_invocar_un_manejador_de_quetzal_por_referencia() {
             else {
                 panic!("se esperaba (funcion, argumento)");
             };
-            vm.llamar_funcion(&datos.funcion, &datos.entorno, vec![argumento], None, None)
+            let entorno = datos.entorno.resolver().expect("entorno vivo");
+            vm.llamar_funcion(&datos.funcion, &entorno, vec![argumento], None, None)
         }),
     );
 

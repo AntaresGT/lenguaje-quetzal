@@ -21,5 +21,17 @@ rust_decimal = { workspace = true }
 reqwest = { workspace = true }
 tungstenite = { workspace = true }
 
+[dev-dependencies]
+criterion = "0.5"
+motor = { workspace = true }
+
 [lib]
 path = "lib.rs"
+
+[[bench]]
+name = "rendimiento"
+harness = false
+
+[[bench]]
+name = "representacion"
+harness = false

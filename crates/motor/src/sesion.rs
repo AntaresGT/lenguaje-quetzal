@@ -86,6 +86,9 @@ impl SesionInteractiva {
             .cargar_modulo(Rc::new(modulo), globales)
             .map_err(|error| vec![con_archivo(error, &nombre)])?;
         self.globales = entorno.globales.borrow().clone();
+        self.vm
+            .modulos
+            .retain(|clave, _| clave == &nombre || !clave.starts_with("<repl:"));
 
         match valor {
             Valor::Nulo => Ok(None),
@@ -127,6 +130,9 @@ impl SesionInteractiva {
     /// Borra todas las variables acumuladas de la sesión.
     pub fn limpiar_estado(&mut self) {
         self.globales.clear();
+        self.vm
+            .modulos
+            .retain(|nombre, _| !nombre.starts_with("<repl:"));
     }
 
     /// Fuente de la última evaluación, para reportes con contexto.

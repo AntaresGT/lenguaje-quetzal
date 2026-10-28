@@ -59,11 +59,9 @@ fn generar_deberia_fusionar_incremento_local_en_ajustar() {
     let modulo = generar("entero contar() {\n    entero var i = 0\n    i++\n    retornar i\n}\n");
     let instrucciones = instrucciones_funcion(&modulo, "contar");
     assert!(
-        instrucciones
-            .iter()
-            .any(|instruccion| {
-                instruccion.op == bytecode::CodigoOp::AjustarLocal && instruccion.delta_ajuste() == 1
-            }),
+        instrucciones.iter().any(|instruccion| {
+            instruccion.op == bytecode::CodigoOp::AjustarLocal && instruccion.delta_ajuste() == 1
+        }),
         "i++ sobre un local debe fusionarse a AjustarLocal: {instrucciones:?}"
     );
 }

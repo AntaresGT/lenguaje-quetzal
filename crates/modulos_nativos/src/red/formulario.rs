@@ -321,7 +321,7 @@ pub(crate) fn campos_de(formulario: &Valor) -> Vec<(String, String)> {
 /// Partes de archivo en orden de inserción.
 pub(crate) fn partes_de(formulario: &Valor) -> Vec<Valor> {
     match campo(formulario, "archivos") {
-        Valor::Lista(lista) => lista.borrow().clone(),
+        Valor::Lista(lista) => lista.borrow().to_vec(),
         _ => Vec::new(),
     }
 }

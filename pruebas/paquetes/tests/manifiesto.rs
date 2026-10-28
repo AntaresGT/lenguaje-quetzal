@@ -119,3 +119,21 @@ fn cache_deberia_guardar_y_recuperar_bytecode() {
     assert!(cache.buscar(&fuente.contenido).is_none());
     let _ = std::fs::remove_dir_all(&temporal);
 }
+
+#[test]
+fn cache_deberia_rechazar_entradas_excesivas() {
+    let temporal =
+        std::env::temp_dir().join(format!("quetzal_cache_grande_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&temporal);
+    let fuente = "entero x = 1\n";
+    let cache = CacheBytecode::del_proyecto(&temporal);
+    let ruta = temporal
+        .join(".quetzal")
+        .join("cache")
+        .join(format!("{}.bytecode", CacheBytecode::clave(fuente)));
+    std::fs::create_dir_all(ruta.parent().expect("directorio")).expect("crear caché");
+    let archivo = std::fs::File::create(&ruta).expect("archivo grande");
+    archivo.set_len(64 * 1024 * 1024 + 1).expect("tamaño");
+    assert!(cache.buscar(fuente).is_none());
+    let _ = std::fs::remove_dir_all(&temporal);
+}

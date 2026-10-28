@@ -17,8 +17,8 @@ pub const TOPE_CIERRES: usize = 256;
 #[derive(Debug, Clone, Copy)]
 pub enum CacheSitio {
     Vacia,
-    Atributo { clase: usize, slot: u16 },
-    Metodo { clase: usize },
+    Atributo { clase: u64, slot: u16 },
+    Metodo { clase: u64 },
     Nativa { tipo: u8, id: IdNativo },
     Polimorfica,
 }
@@ -38,10 +38,13 @@ pub struct CodigoRuntime {
     pub cierre: RefCell<Option<Rc<CierreCompilado>>>,
 }
 
+type FuncionCierre =
+    dyn Fn(&mut crate::vm::Vm, u32) -> Result<ResultadoCierre, crate::errores::Fallo>;
+
 /// Función compilada a un cierre (nivel 1). El `u32` extra es el `pc` de
 /// arranque; si el cierre no puede seguir, devuelve ese pc para el intérprete.
 pub struct CierreCompilado {
-    pub correr: Box<dyn Fn(&mut crate::vm::Vm, u32) -> Result<ResultadoCierre, crate::errores::Fallo>>,
+    pub correr: Box<FuncionCierre>,
 }
 
 impl std::fmt::Debug for CierreCompilado {
@@ -125,8 +128,8 @@ impl CodigoRuntime {
     }
 }
 
-pub fn clave_clase(clase: &Rc<crate::valores::ClaseObjeto>) -> usize {
-    Rc::as_ptr(clase) as usize
+pub fn clave_clase(clase: &Rc<crate::valores::ClaseObjeto>) -> u64 {
+    clase.id
 }
 
 pub fn tipo_cache(nombre: &str) -> u8 {

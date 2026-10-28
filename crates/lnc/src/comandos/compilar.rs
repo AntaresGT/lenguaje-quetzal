@@ -19,14 +19,17 @@ pub fn compilar(entrada: &str, salida: Option<&str>) -> i32 {
         Ok(carga) => carga,
         Err(errores) => return reportar_errores(Some(&motor), &errores),
     };
-    let destino = salida.map(Path::new).map(Path::to_path_buf).unwrap_or_else(|| {
-        let origen = Path::new(entrada);
-        let nombre = origen
-            .file_stem()
-            .and_then(|nombre| nombre.to_str())
-            .unwrap_or("app");
-        Path::new(nombre).to_path_buf()
-    });
+    let destino = salida
+        .map(Path::new)
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| {
+            let origen = Path::new(entrada);
+            let nombre = origen
+                .file_stem()
+                .and_then(|nombre| nombre.to_str())
+                .unwrap_or("app");
+            Path::new(nombre).to_path_buf()
+        });
     match escribir_ejecutable(&carga, &destino) {
         Ok(()) => {
             println!("compilado: {}", destino.display());
@@ -48,10 +51,7 @@ pub fn ejecutar_embebido(carga: CargaEmbebida) -> i32 {
     }
 }
 
-fn escribir_ejecutable(
-    carga: &CargaEmbebida,
-    destino: &Path,
-) -> Result<(), nucleo::ErrorQuetzal> {
+fn escribir_ejecutable(carga: &CargaEmbebida, destino: &Path) -> Result<(), nucleo::ErrorQuetzal> {
     let anfitrion = std::env::current_exe().map_err(|error| {
         nucleo::ErrorQuetzal::nuevo(
             "E0411",
@@ -93,7 +93,10 @@ fn escribir_ejecutable(
                 nucleo::ErrorQuetzal::nuevo(
                     "E0411",
                     nucleo::CategoriaError::Interno,
-                    format!("no se pudo leer permisos de '{}': {error}", destino.display()),
+                    format!(
+                        "no se pudo leer permisos de '{}': {error}",
+                        destino.display()
+                    ),
                 )
             })?
             .permissions();

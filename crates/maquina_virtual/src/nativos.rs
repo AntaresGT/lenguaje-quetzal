@@ -107,7 +107,10 @@ impl RegistroNativos {
     pub fn metodo_de(&self, tipo: &str, nombre: &str) -> Option<IdNativo> {
         let tipo = normalizar_nombre(tipo);
         let nombre = normalizar_nombre(nombre);
-        self.metodos.get(tipo.as_str())?.get(nombre.as_str()).copied()
+        self.metodos
+            .get(tipo.as_str())?
+            .get(nombre.as_str())
+            .copied()
     }
 
     pub fn constante_miembro(&self, modulo: &str, nombre: &str) -> Option<Valor> {

@@ -2,7 +2,8 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::ops::{Deref, DerefMut};
+use std::rc::{Rc, Weak};
 use std::str::FromStr;
 
 use bytecode::{FuncionCompilada, ModuloCompilado, ObjetoCompilado};
@@ -31,6 +32,74 @@ pub struct EntornoModulo {
     pub runtimes: RefCell<HashMap<String, Rc<crate::codigo::CodigoRuntime>>>,
 }
 
+#[derive(Clone)]
+pub struct EnlaceEntorno {
+    debil: Weak<EntornoModulo>,
+    fuerte: Option<Rc<EntornoModulo>>,
+}
+
+impl EnlaceEntorno {
+    pub fn debil(entorno: &Rc<EntornoModulo>) -> Self {
+        Self {
+            debil: Rc::downgrade(entorno),
+            fuerte: None,
+        }
+    }
+
+    pub fn fuerte(entorno: &Rc<EntornoModulo>) -> Self {
+        Self {
+            debil: Rc::downgrade(entorno),
+            fuerte: Some(Rc::clone(entorno)),
+        }
+    }
+
+    pub fn con_fuerte(&self) -> Self {
+        Self {
+            debil: self.debil.clone(),
+            fuerte: self.debil.upgrade(),
+        }
+    }
+
+    pub fn resolver(&self) -> Option<Rc<EntornoModulo>> {
+        self.debil.upgrade()
+    }
+}
+
+impl std::fmt::Debug for EnlaceEntorno {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EnlaceEntorno")
+            .field("fuerte", &self.fuerte.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ListaDatos {
+    pub elementos: Rc<Vec<Valor>>,
+}
+
+impl ListaDatos {
+    pub fn nuevo(elementos: Vec<Valor>) -> Self {
+        Self {
+            elementos: Rc::new(elementos),
+        }
+    }
+}
+
+impl Deref for ListaDatos {
+    type Target = Vec<Valor>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.elementos
+    }
+}
+
+impl DerefMut for ListaDatos {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        Rc::make_mut(&mut self.elementos)
+    }
+}
+
 /// Un valor de Quetzal en ejecución.
 ///
 /// Las variantes pesadas (decimal, función, `padre`) van detrás de un `Rc`
@@ -45,7 +114,7 @@ pub enum Valor {
     Texto(Rc<str>),
     Log(bool),
     Nulo,
-    Lista(Rc<RefCell<Vec<Valor>>>),
+    Lista(Rc<RefCell<ListaDatos>>),
     Jsn(Rc<RefCell<IndexMap<String, Valor>>>),
     /// Función definida en Quetzal, junto a su entorno de módulo.
     Funcion(Rc<DatosFuncion>),
@@ -93,19 +162,35 @@ pub struct MetodoRuntime {
 /// Definición de objeto en runtime.
 #[derive(Debug)]
 pub struct ClaseObjeto {
+    pub id: u64,
     pub compilado: ObjetoCompilado,
-    pub entorno: Rc<EntornoModulo>,
+    pub entorno: EnlaceEntorno,
     /// Atributos `libre` compartidos (estado de la definición, no de instancias).
-    pub atributos_libres: RefCell<IndexMap<String, Variable>>,
+    pub atributos_libres: Rc<RefCell<IndexMap<String, Variable>>>,
     /// Métodos propios y heredados, indexados por nombre. Tras aplanar la
     /// herencia al cargar el módulo, la llamada caliente es un `get`.
-    pub metodos: RefCell<HashMap<String, MetodoRuntime>>,
+    pub metodos: Rc<RefCell<HashMap<String, MetodoRuntime>>>,
     /// Nombre de atributo de instancia → slot, aplanado con herencia.
-    pub slots: RefCell<IndexMap<Rc<str>, u16>>,
+    pub slots: Rc<RefCell<IndexMap<Rc<str>, u16>>>,
     /// Constructores propios, ya envueltos en `Rc`.
     pub constructores: Vec<Rc<FuncionCompilada>>,
     /// Código ejecutable de cada método, paralelo a `compilado.metodos`.
-    pub codigos_metodo: RefCell<HashMap<String, Rc<crate::codigo::CodigoRuntime>>>,
+    pub codigos_metodo: Rc<RefCell<HashMap<String, Rc<crate::codigo::CodigoRuntime>>>>,
+}
+
+impl ClaseObjeto {
+    fn con_entorno_fuerte(&self) -> Self {
+        Self {
+            id: self.id,
+            compilado: self.compilado.clone(),
+            entorno: self.entorno.con_fuerte(),
+            atributos_libres: Rc::clone(&self.atributos_libres),
+            metodos: Rc::clone(&self.metodos),
+            slots: Rc::clone(&self.slots),
+            constructores: self.constructores.clone(),
+            codigos_metodo: Rc::clone(&self.codigos_metodo),
+        }
+    }
 }
 
 /// Instancia de un objeto en runtime. Los atributos de toda la cadena de
@@ -114,6 +199,7 @@ pub struct ClaseObjeto {
 pub struct Instancia {
     pub clase: Rc<ClaseObjeto>,
     pub atributos: Vec<Variable>,
+    pub inicializando: bool,
 }
 
 /// Instancia de un objeto implementado en Rust (módulos nativos).
@@ -132,7 +218,7 @@ pub struct DatosInstanciaNativa {
 #[derive(Debug)]
 pub struct DatosFuncion {
     pub funcion: Rc<FuncionCompilada>,
-    pub entorno: Rc<EntornoModulo>,
+    pub entorno: EnlaceEntorno,
 }
 
 /// Vista `padre` de una instancia.
@@ -147,7 +233,7 @@ pub struct DatosPadre {
 #[derive(Debug)]
 pub struct DatosMetodoEnlazado {
     pub funcion: Rc<FuncionCompilada>,
-    pub entorno: Rc<EntornoModulo>,
+    pub entorno: EnlaceEntorno,
     /// Valor que se pasa como `esto` al invocar el método.
     pub receptor: Valor,
 }
@@ -156,7 +242,7 @@ pub struct DatosMetodoEnlazado {
 #[derive(Debug)]
 pub struct DatosTarea {
     pub funcion: Rc<FuncionCompilada>,
-    pub entorno: Rc<EntornoModulo>,
+    pub entorno: EnlaceEntorno,
     pub argumentos: Vec<Valor>,
     /// `esto` capturado si la tarea proviene de un método.
     pub instancia: Option<Valor>,
@@ -165,7 +251,7 @@ pub struct DatosTarea {
 /// Estado de un iterador de lista.
 #[derive(Debug)]
 pub struct EstadoIterador {
-    pub elementos: Vec<Valor>,
+    pub elementos: Rc<Vec<Valor>>,
     pub posicion: usize,
 }
 
@@ -196,7 +282,17 @@ impl Valor {
     }
 
     pub fn funcion(funcion: Rc<FuncionCompilada>, entorno: Rc<EntornoModulo>) -> Self {
-        Valor::Funcion(Rc::new(DatosFuncion { funcion, entorno }))
+        Valor::Funcion(Rc::new(DatosFuncion {
+            funcion,
+            entorno: EnlaceEntorno::fuerte(&entorno),
+        }))
+    }
+
+    pub fn funcion_local(funcion: Rc<FuncionCompilada>, entorno: &Rc<EntornoModulo>) -> Self {
+        Valor::Funcion(Rc::new(DatosFuncion {
+            funcion,
+            entorno: EnlaceEntorno::debil(entorno),
+        }))
     }
 
     pub fn padre(instancia: Rc<RefCell<Instancia>>, clase: Option<Rc<str>>) -> Self {
@@ -204,11 +300,33 @@ impl Valor {
     }
 
     pub fn lista(valores: Vec<Valor>) -> Self {
-        Valor::Lista(Rc::new(RefCell::new(valores)))
+        Valor::Lista(Rc::new(RefCell::new(ListaDatos::nuevo(valores))))
     }
 
     pub fn jsn(mapa: IndexMap<String, Valor>) -> Self {
         Valor::Jsn(Rc::new(RefCell::new(mapa)))
+    }
+
+    pub fn retener_entorno(&self) -> Self {
+        match self {
+            Valor::Funcion(datos) => Valor::Funcion(Rc::new(DatosFuncion {
+                funcion: Rc::clone(&datos.funcion),
+                entorno: datos.entorno.con_fuerte(),
+            })),
+            Valor::MetodoEnlazado(datos) => Valor::MetodoEnlazado(Rc::new(DatosMetodoEnlazado {
+                funcion: Rc::clone(&datos.funcion),
+                entorno: datos.entorno.con_fuerte(),
+                receptor: datos.receptor.clone(),
+            })),
+            Valor::Clase(clase) => Valor::Clase(Rc::new(clase.con_entorno_fuerte())),
+            Valor::Tarea(datos) => Valor::Tarea(Rc::new(DatosTarea {
+                funcion: Rc::clone(&datos.funcion),
+                entorno: datos.entorno.con_fuerte(),
+                argumentos: datos.argumentos.clone(),
+                instancia: datos.instancia.clone(),
+            })),
+            otro => otro.clone(),
+        }
     }
 
     /// Nombre del tipo en runtime, usado para despachar métodos nativos.
@@ -240,12 +358,14 @@ impl Valor {
     /// de la función antes de invocarla con [`crate::Vm::llamar_funcion`].
     pub fn partes_callable(
         &self,
-    ) -> Option<(&Rc<FuncionCompilada>, &Rc<EntornoModulo>, Option<&Valor>)> {
+    ) -> Option<(&Rc<FuncionCompilada>, Rc<EntornoModulo>, Option<&Valor>)> {
         match self {
-            Valor::Funcion(datos) => Some((&datos.funcion, &datos.entorno, None)),
-            Valor::MetodoEnlazado(datos) => {
-                Some((&datos.funcion, &datos.entorno, Some(&datos.receptor)))
-            }
+            Valor::Funcion(datos) => Some((&datos.funcion, datos.entorno.resolver()?, None)),
+            Valor::MetodoEnlazado(datos) => Some((
+                &datos.funcion,
+                datos.entorno.resolver()?,
+                Some(&datos.receptor),
+            )),
             _ => None,
         }
     }

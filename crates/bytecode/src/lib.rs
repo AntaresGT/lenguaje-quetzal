@@ -17,4 +17,4 @@ pub use modulo::{
     ObjetoCompilado,
 };
 pub use optimizar::optimizar_modulo;
-pub use verificador::{verificar_modulo, verificar_modulo_inmutable};
+pub use verificador::{verificar_funcion_inmutable, verificar_modulo, verificar_modulo_inmutable};

@@ -3,6 +3,7 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{Linkage, Module, default_libcall_names};
 
+use crate::compilados::FirmaNativa;
 use crate::{ErrorJit, FuncionNativa};
 
 pub(crate) fn compilar_trivial(valor: i64) -> Result<(FuncionNativa, usize), ErrorJit> {
@@ -58,6 +59,7 @@ pub(crate) fn compilar_trivial(valor: i64) -> Result<(FuncionNativa, usize), Err
             _modulo: modulo,
             puntero,
             aridad: 0,
+            firma: FirmaNativa::Trivial,
         },
         bytes,
     ))

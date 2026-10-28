@@ -49,6 +49,26 @@ pub fn verificar_modulo(modulo: &mut ModuloCompilado) -> Result<(), ErrorQuetzal
     Ok(())
 }
 
+/// Verifica una función con las tablas de su módulo sin alterar el bytecode.
+pub fn verificar_funcion_inmutable(
+    modulo: &ModuloCompilado,
+    funcion: &FuncionCompilada,
+) -> Result<(), ErrorQuetzal> {
+    if modulo.globales_mutables.len() != modulo.nombres_globales.len() {
+        return Err(error_verificacion(
+            &funcion.nombre,
+            "la mutabilidad de las globales no coincide con sus nombres",
+        ));
+    }
+    let limites = Limites {
+        constantes: modulo.constantes.len(),
+        nombres: modulo.nombres.len(),
+        globales: modulo.nombres_globales.len(),
+    };
+    let mut copia = funcion.clone();
+    verificar_funcion(&mut copia, limites, None)
+}
+
 fn verificar_funcion(
     funcion: &mut FuncionCompilada,
     limites: Limites,

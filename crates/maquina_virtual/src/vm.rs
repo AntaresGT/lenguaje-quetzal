@@ -625,6 +625,7 @@ impl Vm {
         &mut self,
         funcion: &Rc<FuncionCompilada>,
         entorno: &Rc<EntornoModulo>,
+        codigo: Rc<CodigoRuntime>,
         cantidad: usize,
         esto: Option<Valor>,
         ubicacion: Option<Ubicacion>,
@@ -641,7 +642,6 @@ impl Vm {
                 ubicacion,
             ));
         }
-        let codigo = self.runtime_de(funcion, entorno);
         let base = self.pila.len() - cantidad;
         let ranuras = funcion.ranuras_locales.max(cantidad as u16);
         let necesarios = base + ranuras as usize;
@@ -671,7 +671,7 @@ impl Vm {
         else {
             return Ok(None);
         };
-        let (funcion, entorno, esto) = match self.pila.get(indice) {
+        let (funcion, entorno, codigo, esto) = match self.pila.get(indice) {
             Some(Valor::Funcion(datos)) if !datos.funcion.asincrona => {
                 let entorno = datos.entorno.resolver().ok_or_else(|| {
                     self.excepcion(
@@ -680,7 +680,12 @@ impl Vm {
                         Some(ubicacion),
                     )
                 })?;
-                (Rc::clone(&datos.funcion), entorno, None)
+                (
+                    Rc::clone(&datos.funcion),
+                    entorno,
+                    Rc::clone(&datos.codigo),
+                    None,
+                )
             }
             Some(Valor::MetodoEnlazado(datos)) if !datos.funcion.asincrona => {
                 let entorno = datos.entorno.resolver().ok_or_else(|| {
@@ -690,9 +695,11 @@ impl Vm {
                         Some(ubicacion),
                     )
                 })?;
+                let codigo = self.runtime_de(&datos.funcion, &entorno);
                 (
                     Rc::clone(&datos.funcion),
                     entorno,
+                    codigo,
                     Some(datos.receptor.clone()),
                 )
             }
@@ -701,7 +708,6 @@ impl Vm {
         #[cfg(feature = "jit")]
         if self.jit_habilitado && esto.is_none() && cantidad == funcion.parametros.len() {
             let argumentos = self.pila[indice + 1..].to_vec();
-            let codigo = self.runtime_de(&funcion, &entorno);
             if let Some(resultado) =
                 self.intentar_jit(&codigo, &entorno, &argumentos, Some(ubicacion))
             {
@@ -711,7 +717,7 @@ impl Vm {
             }
         }
         self.pila.remove(indice);
-        self.preparar_marco_en_pila(&funcion, &entorno, cantidad, esto, Some(ubicacion))
+        self.preparar_marco_en_pila(&funcion, &entorno, codigo, cantidad, esto, Some(ubicacion))
             .map(|marco| Some(DestinoLlamada::Marco(marco)))
     }
 

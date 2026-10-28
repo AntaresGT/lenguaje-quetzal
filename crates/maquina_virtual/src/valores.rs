@@ -218,6 +218,7 @@ pub struct DatosInstanciaNativa {
 #[derive(Debug)]
 pub struct DatosFuncion {
     pub funcion: Rc<FuncionCompilada>,
+    pub codigo: Rc<crate::codigo::CodigoRuntime>,
     pub entorno: EnlaceEntorno,
 }
 
@@ -282,15 +283,29 @@ impl Valor {
     }
 
     pub fn funcion(funcion: Rc<FuncionCompilada>, entorno: Rc<EntornoModulo>) -> Self {
+        let codigo = entorno
+            .runtimes
+            .borrow()
+            .get(&funcion.nombre)
+            .cloned()
+            .unwrap_or_else(|| crate::codigo::CodigoRuntime::de_funcion(&funcion));
         Valor::Funcion(Rc::new(DatosFuncion {
             funcion,
+            codigo,
             entorno: EnlaceEntorno::fuerte(&entorno),
         }))
     }
 
     pub fn funcion_local(funcion: Rc<FuncionCompilada>, entorno: &Rc<EntornoModulo>) -> Self {
+        let codigo = entorno
+            .runtimes
+            .borrow()
+            .get(&funcion.nombre)
+            .cloned()
+            .unwrap_or_else(|| crate::codigo::CodigoRuntime::de_funcion(&funcion));
         Valor::Funcion(Rc::new(DatosFuncion {
             funcion,
+            codigo,
             entorno: EnlaceEntorno::debil(entorno),
         }))
     }
@@ -311,6 +326,7 @@ impl Valor {
         match self {
             Valor::Funcion(datos) => Valor::Funcion(Rc::new(DatosFuncion {
                 funcion: Rc::clone(&datos.funcion),
+                codigo: Rc::clone(&datos.codigo),
                 entorno: datos.entorno.con_fuerte(),
             })),
             Valor::MetodoEnlazado(datos) => Valor::MetodoEnlazado(Rc::new(DatosMetodoEnlazado {

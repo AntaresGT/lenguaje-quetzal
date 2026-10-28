@@ -21,6 +21,10 @@ impl ContextoJit {
         self.estadisticas
     }
 
+    pub fn registrar_fallback(&mut self) {
+        self.estadisticas.fallbacks = self.estadisticas.fallbacks.saturating_add(1);
+    }
+
     pub fn compilar_funcion(
         &mut self,
         modulo: &bytecode::ModuloCompilado,
@@ -33,7 +37,10 @@ impl ContextoJit {
             if self.estadisticas.funciones_compiladas >= self.configuracion.max_funciones {
                 return Err(ErrorJit::Limite("cantidad de funciones compiladas"));
             }
-            let (funcion, bytes) = crate::traductor::compilar(modulo, funcion)?;
+            let inicio = std::time::Instant::now();
+            let resultado = crate::traductor::compilar(modulo, funcion);
+            self.estadisticas.tiempo_compilacion += inicio.elapsed();
+            let (funcion, bytes) = resultado?;
             let total = self.estadisticas.bytes_codigo.saturating_add(bytes);
             if total > self.configuracion.max_bytes_codigo {
                 return Err(ErrorJit::Limite("memoria de código generado"));
@@ -221,6 +228,98 @@ mod pruebas {
         let salida = funcion.ejecutar(&[i64::MIN]).expect("error de lenguaje");
         assert_eq!(salida.estado, crate::ESTADO_DESBORDAMIENTO);
         assert_eq!(salida.pc, 2);
+    }
+
+    #[cfg(feature = "nativo")]
+    #[test]
+    fn baseline_deberia_ejecutar_condicionales() {
+        use bytecode::Instruccion;
+
+        let mut contexto = ContextoJit::default();
+        let (modulo, condicional) = funcion_manual(
+            vec![
+                Instruccion::CargarLocal(0),
+                Instruccion::CargarEntero(0),
+                Instruccion::IgualEntero(),
+                Instruccion::SaltarSiFalso(6),
+                Instruccion::CargarEntero(7),
+                Instruccion::Retornar(),
+                Instruccion::CargarEntero(9),
+                Instruccion::Retornar(),
+            ],
+            1,
+        );
+        let funcion = contexto
+            .compilar_funcion(&modulo, &condicional)
+            .expect("condicional compilable");
+        assert_eq!(funcion.ejecutar(&[0]).expect("rama verdadera").valor, 7);
+        assert_eq!(funcion.ejecutar(&[1]).expect("rama falsa").valor, 9);
+    }
+
+    #[cfg(feature = "nativo")]
+    #[test]
+    fn baseline_deberia_coincidir_con_operaciones_checked() {
+        use bytecode::{CodigoOp, Instruccion};
+
+        fn esperado(op: CodigoOp, a: i64, b: i64) -> Option<i64> {
+            match op {
+                CodigoOp::SumarEntero => a.checked_add(b),
+                CodigoOp::RestarEntero => a.checked_sub(b),
+                CodigoOp::MultiplicarEntero => a.checked_mul(b),
+                CodigoOp::DividirEntero => a.checked_div(b),
+                CodigoOp::ModuloEntero => a.checked_rem(b),
+                _ => unreachable!(),
+            }
+        }
+
+        let operaciones = [
+            CodigoOp::SumarEntero,
+            CodigoOp::RestarEntero,
+            CodigoOp::MultiplicarEntero,
+            CodigoOp::DividirEntero,
+            CodigoOp::ModuloEntero,
+        ];
+        let valores = [0, 1, 2, -5, i64::MAX, i64::MIN];
+        let mut contexto = ContextoJit::default();
+        for op in operaciones {
+            for a in valores {
+                for b in [0, 1, -1, 3] {
+                    let instruccion = match op {
+                        CodigoOp::SumarEntero => Instruccion::SumarEntero(),
+                        CodigoOp::RestarEntero => Instruccion::RestarEntero(),
+                        CodigoOp::MultiplicarEntero => Instruccion::MultiplicarEntero(),
+                        CodigoOp::DividirEntero => Instruccion::DividirEntero(),
+                        CodigoOp::ModuloEntero => Instruccion::ModuloEntero(),
+                        _ => unreachable!(),
+                    };
+                    let (modulo, funcion) = funcion_manual(
+                        vec![
+                            Instruccion::CargarLocal(0),
+                            Instruccion::CargarEntero(b),
+                            instruccion,
+                            Instruccion::Retornar(),
+                        ],
+                        1,
+                    );
+                    let nativa = contexto
+                        .compilar_funcion(&modulo, &funcion)
+                        .expect("operación compilable");
+                    let salida = nativa.ejecutar(&[a]).expect("ejecución nativa");
+                    match esperado(op, a, b as i64) {
+                        Some(valor) => {
+                            assert_eq!(salida.estado, crate::ESTADO_EXITO, "{op:?} {a} {b}");
+                            assert_eq!(salida.valor, valor, "{op:?} {a} {b}");
+                        }
+                        None if b == 0
+                            && matches!(op, CodigoOp::DividirEntero | CodigoOp::ModuloEntero) =>
+                        {
+                            assert_eq!(salida.estado, crate::ESTADO_DIVISION_CERO);
+                        }
+                        None => assert_eq!(salida.estado, crate::ESTADO_DESBORDAMIENTO),
+                    }
+                }
+            }
+        }
     }
 
     #[cfg(not(feature = "nativo"))]

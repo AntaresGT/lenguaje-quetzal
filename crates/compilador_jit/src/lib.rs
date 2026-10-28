@@ -21,7 +21,11 @@ mod traductor;
 pub use compilados::FuncionNativa;
 pub use configuracion::ConfiguracionJit;
 pub use contexto::ContextoJit;
-pub use enlaces::{ESTADO_DESBORDAMIENTO, ESTADO_DIVISION_CERO, ESTADO_EXITO, SalidaEntera};
+pub use enlaces::{
+    ESTADO_DESBORDAMIENTO, ESTADO_DIVISION_CERO, ESTADO_EXITO, OPERACION_AJUSTE,
+    OPERACION_DIVISION, OPERACION_MODULO, OPERACION_MULTIPLICACION, OPERACION_NEGACION,
+    OPERACION_NINGUNA, OPERACION_RESTA, OPERACION_SUMA, SalidaEntera,
+};
 pub use estadisticas::EstadisticasJit;
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]

@@ -357,9 +357,9 @@ flowchart LR
 
 
 
-## 9. VM rápida (cero `unsafe`)
+## 9. VM rápida y JIT opcional
 
-La VM es un intérprete de pila con **pila única**, marcos livianos, bytecode de 8 bytes y un verificador al cargar cache. No hay JIT a código máquina: se usa especialización adaptativa (quickening) y caches en línea en Rust seguro. `#![forbid(unsafe_code)]` se mantiene en `maquina_virtual`.
+La VM es un intérprete de pila con **pila única**, marcos livianos, bytecode de 8 bytes y un verificador al cargar cache. Usa especialización adaptativa (quickening) y caches en línea en Rust seguro. `#![forbid(unsafe_code)]` se mantiene en `maquina_virtual`. El crate independiente `compilador_jit` ofrece, con la feature `jit`, un Baseline JIT mediante Cranelift para funciones enteras elegibles; su pequeña frontera `unsafe` invoca código con una ABI interna y nunca recibe direcciones del programa Quetzal. El intérprete sigue disponible como fallback y el JIT está desactivado por defecto.
 
 ```mermaid
 flowchart LR
@@ -371,6 +371,8 @@ flowchart LR
     verificador --> interprete[Intérprete]
     interprete -->|"tipos observados"| especializado[Bytecode especializado]
     especializado -->|"guarda falla"| interprete
+    verificador -->|"función caliente elegible"| jit[Baseline JIT]
+    jit -->|"fallback"| interprete
     verificador --> ejecutable["quetzal compilar"]
 ```
 
@@ -417,7 +419,7 @@ cargo pgo optimize -p lnc
 
 El perfil `release` usa `lto = "fat"`, `codegen-units = 1` y `panic = "abort"`. La cache de bytecode es binaria (`postcard` + sha2) y se verifica al cargar.
 
-`--sin-optimizar` deja el intérprete puro (sin especialización ni caches en línea) para depurar. `quetzal compilar entrada.qz -o app` anexa bytecode verificado y permisos al binario.
+`--sin-optimizar` deja el intérprete puro (sin especialización ni caches en línea) para depurar. Con un binario compilado con la feature `jit`, `--jit` activa la compilación selectiva de funciones enteras calientes. `quetzal compilar entrada.qz -o app` anexa bytecode verificado y permisos al binario; ese mecanismo no es AOT a código máquina.
 
 ---
 

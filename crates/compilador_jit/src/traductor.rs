@@ -182,7 +182,7 @@ fn traducir_funcion(
                     .iconst(types::I64, instruccion.delta_ajuste() as i64);
                 let valor = operacion_overflow(
                     generador,
-                    CodigoOp::SumarEntero,
+                    instruccion.op,
                     actual,
                     delta,
                     direccion_salida,
@@ -200,7 +200,7 @@ fn traducir_funcion(
                 );
                 let valor = operacion_overflow(
                     generador,
-                    CodigoOp::SumarEntero,
+                    instruccion.op,
                     izquierda,
                     derecha,
                     direccion_salida,
@@ -218,7 +218,7 @@ fn traducir_funcion(
                 );
                 let valor = operacion_overflow(
                     generador,
-                    CodigoOp::SumarEntero,
+                    instruccion.op,
                     izquierda,
                     derecha,
                     direccion_salida,
@@ -254,6 +254,7 @@ fn traducir_funcion(
                     direccion_salida,
                     ESTADO_DESBORDAMIENTO,
                     pc as u32,
+                    detalle(CodigoOp::NegarEntero, valor, valor),
                 );
                 let negado = generador.ins().ineg(valor);
                 pila_guardar(
@@ -368,12 +369,12 @@ fn traducir_funcion(
             }
             CodigoOp::Retornar => {
                 let valor = pila_sacar(generador, &slots, funcion, &mut profundidad, puntero_tipo);
-                emitir_salida(generador, direccion_salida, valor, ESTADO_EXITO, 0);
+                emitir_salida(generador, direccion_salida, valor, ESTADO_EXITO, 0, None);
                 continue;
             }
             CodigoOp::RetornarLocal => {
                 let valor = local_cargar(generador, &slots, instruccion.ranura(), puntero_tipo);
-                emitir_salida(generador, direccion_salida, valor, ESTADO_EXITO, 0);
+                emitir_salida(generador, direccion_salida, valor, ESTADO_EXITO, 0, None);
                 continue;
             }
             _ => return Err(fallo_traduccion(pc, "instrucción no soportada")),
@@ -456,6 +457,33 @@ fn pila_guardar(
     *profundidad += 1;
 }
 
+#[derive(Clone, Copy)]
+struct DetalleError {
+    operacion: u32,
+    izquierda: Value,
+    derecha: Value,
+}
+
+fn detalle(op: CodigoOp, izquierda: Value, derecha: Value) -> DetalleError {
+    let operacion = match op {
+        CodigoOp::SumarEntero
+        | CodigoOp::CargarLocalLocalSumarEntero
+        | CodigoOp::AjustarLocalConLocal => crate::OPERACION_SUMA,
+        CodigoOp::RestarEntero => crate::OPERACION_RESTA,
+        CodigoOp::MultiplicarEntero => crate::OPERACION_MULTIPLICACION,
+        CodigoOp::DividirEntero => crate::OPERACION_DIVISION,
+        CodigoOp::ModuloEntero => crate::OPERACION_MODULO,
+        CodigoOp::AjustarLocal => crate::OPERACION_AJUSTE,
+        CodigoOp::NegarEntero => crate::OPERACION_NEGACION,
+        _ => crate::OPERACION_NINGUNA,
+    };
+    DetalleError {
+        operacion,
+        izquierda,
+        derecha,
+    }
+}
+
 fn operacion_aritmetica(
     generador: &mut FunctionBuilder,
     op: CodigoOp,
@@ -470,13 +498,27 @@ fn operacion_aritmetica(
         }
         CodigoOp::DividirEntero | CodigoOp::ModuloEntero => {
             let divisor_cero = generador.ins().icmp_imm_s(IntCC::Equal, derecha, 0);
-            ramificar_error(generador, divisor_cero, salida, ESTADO_DIVISION_CERO, pc);
+            ramificar_error(
+                generador,
+                divisor_cero,
+                salida,
+                ESTADO_DIVISION_CERO,
+                pc,
+                detalle(op, izquierda, derecha),
+            );
             let minimo = generador
                 .ins()
                 .icmp_imm_s(IntCC::Equal, izquierda, i64::MIN);
             let menos_uno = generador.ins().icmp_imm_s(IntCC::Equal, derecha, -1);
             let ambos = generador.ins().band(minimo, menos_uno);
-            ramificar_error(generador, ambos, salida, ESTADO_DESBORDAMIENTO, pc);
+            ramificar_error(
+                generador,
+                ambos,
+                salida,
+                ESTADO_DESBORDAMIENTO,
+                pc,
+                detalle(op, izquierda, derecha),
+            );
             if op == CodigoOp::DividirEntero {
                 generador.ins().sdiv(izquierda, derecha)
             } else {
@@ -496,12 +538,22 @@ fn operacion_overflow(
     pc: u32,
 ) -> Value {
     let (valor, overflow) = match op {
-        CodigoOp::SumarEntero => generador.ins().sadd_overflow(izquierda, derecha),
+        CodigoOp::SumarEntero
+        | CodigoOp::CargarLocalLocalSumarEntero
+        | CodigoOp::AjustarLocal
+        | CodigoOp::AjustarLocalConLocal => generador.ins().sadd_overflow(izquierda, derecha),
         CodigoOp::RestarEntero => generador.ins().ssub_overflow(izquierda, derecha),
         CodigoOp::MultiplicarEntero => generador.ins().smul_overflow(izquierda, derecha),
         _ => unreachable!("operación con overflow verificada"),
     };
-    ramificar_error(generador, overflow, salida, ESTADO_DESBORDAMIENTO, pc);
+    ramificar_error(
+        generador,
+        overflow,
+        salida,
+        ESTADO_DESBORDAMIENTO,
+        pc,
+        detalle(op, izquierda, derecha),
+    );
     valor
 }
 
@@ -511,13 +563,14 @@ fn ramificar_error(
     direccion_salida: Value,
     estado: u32,
     pc: u32,
+    detalle: DetalleError,
 ) {
     let error = generador.create_block();
     let continuar = generador.create_block();
     generador.ins().brif(condicion, error, &[], continuar, &[]);
     generador.switch_to_block(error);
     let cero = generador.ins().iconst(types::I64, 0);
-    emitir_salida(generador, direccion_salida, cero, estado, pc);
+    emitir_salida(generador, direccion_salida, cero, estado, pc, Some(detalle));
     generador.switch_to_block(continuar);
     generador.seal_block(error);
     generador.seal_block(continuar);
@@ -529,18 +582,33 @@ fn emitir_salida(
     valor: Value,
     estado: u32,
     pc: u32,
+    detalle: Option<DetalleError>,
 ) {
     generador
         .ins()
         .store(MemFlagsData::new(), valor, direccion_salida, 0);
+    let (izquierda, derecha, operacion) = match detalle {
+        Some(detalle) => (detalle.izquierda, detalle.derecha, detalle.operacion),
+        None => (valor, valor, crate::OPERACION_NINGUNA),
+    };
+    generador
+        .ins()
+        .store(MemFlagsData::new(), izquierda, direccion_salida, 8);
+    generador
+        .ins()
+        .store(MemFlagsData::new(), derecha, direccion_salida, 16);
     let estado = generador.ins().iconst(types::I32, estado as i64);
     generador
         .ins()
-        .store(MemFlagsData::new(), estado, direccion_salida, 8);
+        .store(MemFlagsData::new(), estado, direccion_salida, 24);
     let pc = generador.ins().iconst(types::I32, pc as i64);
     generador
         .ins()
-        .store(MemFlagsData::new(), pc, direccion_salida, 12);
+        .store(MemFlagsData::new(), pc, direccion_salida, 28);
+    let operacion = generador.ins().iconst(types::I32, operacion as i64);
+    generador
+        .ins()
+        .store(MemFlagsData::new(), operacion, direccion_salida, 32);
     generador.ins().return_(&[]);
 }
 

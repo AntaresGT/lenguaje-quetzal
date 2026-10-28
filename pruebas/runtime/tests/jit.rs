@@ -65,8 +65,10 @@ entero d = dividir(10, 2)
 entero resultado = dividir(1, 0)
 "#;
     let error = ejecutar(codigo, true).expect_err("debe fallar");
+    let interpretado = ejecutar(codigo, false).expect_err("debe fallar");
     assert_eq!(error.codigo, "E0401");
-    assert!(error.ubicacion.is_some());
+    assert_eq!(error.mensaje, interpretado.mensaje);
+    assert_eq!(error.ubicacion, interpretado.ubicacion);
 }
 
 #[test]
@@ -82,8 +84,41 @@ entero d = sumar(4, 5)
 entero resultado = sumar(9223372036854775807, 1)
 "#;
     let error = ejecutar(codigo, true).expect_err("debe fallar");
+    let interpretado = ejecutar(codigo, false).expect_err("debe fallar");
     assert_eq!(error.codigo, "E0402");
-    assert!(error.ubicacion.is_some());
+    assert_eq!(error.mensaje, interpretado.mensaje);
+    assert_eq!(error.ubicacion, interpretado.ubicacion);
+}
+
+#[test]
+fn jit_deberia_conservar_errores_de_negacion_y_ajuste() {
+    let negacion = r#"
+entero negar(entero n) { retornar -n }
+entero a = negar(1)
+entero b = negar(2)
+entero c = negar(3)
+entero d = negar(4)
+entero resultado = negar(-9223372036854775807 - 1)
+"#;
+    let ajuste = r#"
+entero ajustar(entero n) {
+    entero var a = n
+    a++
+    retornar a
+}
+entero a = ajustar(1)
+entero b = ajustar(2)
+entero c = ajustar(3)
+entero d = ajustar(4)
+entero resultado = ajustar(9223372036854775807)
+"#;
+    for codigo in [negacion, ajuste] {
+        let error = ejecutar(codigo, true).expect_err("debe fallar");
+        let interpretado = ejecutar(codigo, false).expect_err("debe fallar");
+        assert_eq!(error.codigo, "E0402");
+        assert_eq!(error.mensaje, interpretado.mensaje);
+        assert_eq!(error.ubicacion, interpretado.ubicacion);
+    }
 }
 
 #[test]
@@ -95,8 +130,13 @@ entero fib(entero n) {
 }
 entero resultado = fib(20)
 "#;
-    let entorno = ejecutar(codigo, true).expect("recursión interpretada");
+    let mut vm = Vm::nueva(Rc::new(modulos_nativos::crear_registro())).con_jit(true);
+    let (entorno, _) = vm
+        .cargar_modulo(Rc::new(compilar(codigo)), IndexMap::new())
+        .expect("recursión interpretada");
     assert!(global(&entorno, "resultado").es_igual(&Valor::Entero(6765)));
+    assert!(vm.estadisticas_jit().fallbacks > 0);
+    assert_eq!(vm.estadisticas_jit().desoptimizaciones, 0);
 }
 
 #[test]
@@ -115,4 +155,32 @@ entero resultado = identidad(5)
         .expect("módulo interpretado");
     assert!(global(&entorno, "resultado").es_igual(&Valor::Entero(5)));
     assert_eq!(vm.estadisticas_jit().funciones_compiladas, 0);
+}
+
+#[test]
+fn jit_deberia_liberar_codigo_al_soltar_su_runtime() {
+    let codigo = r#"
+entero sumar_hasta(entero limite) {
+    entero var suma = 0
+    para (entero var i = 0; i < limite; i++) { suma += i }
+    retornar suma
+}
+entero a = sumar_hasta(1)
+entero b = sumar_hasta(2)
+entero c = sumar_hasta(3)
+entero d = sumar_hasta(4)
+entero resultado = sumar_hasta(5)
+"#;
+    let entorno = ejecutar(codigo, true).expect("programa con JIT");
+    let debil = {
+        let runtimes = entorno.runtimes.borrow();
+        let codigo = runtimes.get("sumar_hasta").expect("runtime de función");
+        let estado = codigo.jit.borrow();
+        match &*estado {
+            maquina_virtual::codigo::EstadoJit::Compilado(funcion) => Rc::downgrade(funcion),
+            _ => panic!("la función debería estar compilada"),
+        }
+    };
+    drop(entorno);
+    assert!(debil.upgrade().is_none());
 }

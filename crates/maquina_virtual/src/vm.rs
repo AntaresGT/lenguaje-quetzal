@@ -9,7 +9,11 @@ use bytecode::{
     CodigoOp, Constante, FuncionCompilada, Instruccion, ModuloCompilado, ObjetoCompilado, Trozo,
 };
 #[cfg(feature = "jit")]
-use compilador_jit::{ContextoJit, ESTADO_DESBORDAMIENTO, ESTADO_DIVISION_CERO, ESTADO_EXITO};
+use compilador_jit::{
+    ContextoJit, ESTADO_DESBORDAMIENTO, ESTADO_DIVISION_CERO, ESTADO_EXITO, OPERACION_AJUSTE,
+    OPERACION_DIVISION, OPERACION_MODULO, OPERACION_MULTIPLICACION, OPERACION_NEGACION,
+    OPERACION_RESTA, OPERACION_SUMA,
+};
 use indexmap::IndexMap;
 use nucleo::{ErrorQuetzal, Ubicacion};
 use rust_decimal::Decimal;
@@ -501,7 +505,11 @@ impl Vm {
             let estado = codigo.jit.borrow();
             match &*estado {
                 EstadoJit::Compilado(funcion) => Rc::clone(funcion),
-                _ => return None,
+                EstadoJit::Frio => return None,
+                EstadoJit::NoElegible => {
+                    self.jit.registrar_fallback();
+                    return None;
+                }
             }
         };
         let enteros: Option<Vec<i64>> = argumentos
@@ -511,10 +519,14 @@ impl Vm {
                 _ => None,
             })
             .collect();
-        let enteros = enteros?;
+        let Some(enteros) = enteros else {
+            self.jit.registrar_fallback();
+            return None;
+        };
         let salida = match funcion.ejecutar(&enteros) {
             Ok(salida) => salida,
             Err(_) => {
+                self.jit.registrar_fallback();
                 *codigo.jit.borrow_mut() = EstadoJit::NoElegible;
                 return None;
             }
@@ -531,11 +543,37 @@ impl Vm {
                 "división por cero".to_string(),
                 ubicacion,
             ))),
-            ESTADO_DESBORDAMIENTO => Some(Err(self.excepcion(
-                "E0402",
-                "desbordamiento de entero en código nativo".to_string(),
-                ubicacion,
-            ))),
+            ESTADO_DESBORDAMIENTO => {
+                let mensaje = match salida.operacion {
+                    OPERACION_SUMA => format!(
+                        "desbordamiento de entero al sumar {} y {}",
+                        salida.izquierda, salida.derecha
+                    ),
+                    OPERACION_RESTA => format!(
+                        "desbordamiento de entero al restar {} y {}",
+                        salida.izquierda, salida.derecha
+                    ),
+                    OPERACION_MULTIPLICACION => format!(
+                        "desbordamiento de entero al multiplicar {} y {}",
+                        salida.izquierda, salida.derecha
+                    ),
+                    OPERACION_DIVISION => format!(
+                        "desbordamiento de entero al dividir {} y {}",
+                        salida.izquierda, salida.derecha
+                    ),
+                    OPERACION_MODULO => format!(
+                        "desbordamiento de entero al modulo {} y {}",
+                        salida.izquierda, salida.derecha
+                    ),
+                    OPERACION_AJUSTE => format!(
+                        "desbordamiento de entero al ajustar {} en {}",
+                        salida.izquierda, salida.derecha
+                    ),
+                    OPERACION_NEGACION => "desbordamiento al negar el entero".to_string(),
+                    _ => "desbordamiento de entero en código nativo".to_string(),
+                };
+                Some(Err(self.excepcion("E0402", mensaje, ubicacion)))
+            }
             otro => Some(Err(Fallo::Error(Box::new(
                 ErrorQuetzal::interno(format!("estado JIT desconocido: {otro}"))
                     .con_ubicacion(ubicacion.unwrap_or_default()),

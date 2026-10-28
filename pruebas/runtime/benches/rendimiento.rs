@@ -62,6 +62,65 @@ numero sumar_dinamico(jsn valores, entero limite) {
 }
 "#;
 
+const LLAMADAS: &str = r#"
+entero sumar_uno(entero n) {
+    retornar n + 1
+}
+entero llamar_repetido(entero limite) {
+    entero var suma = 0
+    para (entero var i = 0; i < limite; i++) {
+        suma = sumar_uno(suma)
+    }
+    retornar suma
+}
+"#;
+
+const JSN: &str = r#"
+entero sumar_jsn(jsn valores, entero limite) {
+    entero var suma = 0
+    para (entero var i = 0; i < limite; i++) {
+        suma += valores.a + valores.b
+    }
+    retornar suma
+}
+"#;
+
+const DECIMALES: &str = r#"
+numero sumar_decimales(entero limite) {
+    numero var suma = 0
+    para (entero var i = 0; i < limite; i++) {
+        suma += 0.1 + 0.2
+    }
+    retornar suma
+}
+"#;
+
+const UNICODE: &str = r#"
+entero recorrer_unicode(entero limite) {
+    texto contenido = "Quetzal🦜áéíóúQuetzal🦜áéíóúQuetzal🦜áéíóúQuetzal🦜áéíóúQuetzal🦜áéíóúQuetzal🦜áéíóúQuetzal🦜áéíóúQuetzal🦜áéíóúQuetzal🦜áéíóúQuetzal🦜áéíóúQuetzal🦜áéíóúQuetzal🦜áéíóúQuetzal🦜áéíóúQuetzal🦜áéíóúQuetzal🦜áéíóúQuetzal🦜áéíóúQuetzal🦜áéíóúQuetzal🦜áéíóúQuetzal🦜áéíóúQuetzal🦜áéíóú"
+    entero var suma = 0
+    para (entero var i = 0; i < limite; i++) {
+        suma += contenido[i % contenido.longitud()].longitud()
+    }
+    retornar suma
+}
+"#;
+
+const OBJETOS: &str = r#"
+objeto PuntoCreado {
+    publico:
+        entero var x = 3
+}
+entero crear_repetido(entero limite) {
+    entero var suma = 0
+    para (entero var i = 0; i < limite; i++) {
+        PuntoCreado punto = nuevo PuntoCreado()
+        suma += punto.x
+    }
+    retornar suma
+}
+"#;
+
 struct Preparada {
     vm: Vm,
     funcion: Rc<FuncionCompilada>,
@@ -76,7 +135,14 @@ fn compilar(codigo: &str) -> ModuloCompilado {
 }
 
 fn preparar(codigo: &str, nombre: &str) -> Preparada {
+    preparar_con_modo(codigo, nombre, true)
+}
+
+fn preparar_con_modo(codigo: &str, nombre: &str, optimizar: bool) -> Preparada {
     let mut vm = Vm::nueva(Rc::new(modulos_nativos::crear_registro()));
+    if !optimizar {
+        vm = vm.sin_optimizar();
+    }
     let (entorno, _) = vm
         .cargar_modulo(Rc::new(compilar(codigo)), IndexMap::new())
         .expect("el módulo del benchmark debe cargar");
@@ -121,17 +187,27 @@ fn fases(criterion: &mut Criterion) {
 }
 
 fn ejecucion(criterion: &mut Criterion) {
-    criterion.bench_function("ejecucion/bucles_enteros", |b| {
-        b.iter_batched(
-            || preparar(BUCLE, "sumar_hasta"),
-            |mut preparada| black_box(llamar(&mut preparada, vec![Valor::Entero(2_000_000)])),
-            BatchSize::SmallInput,
-        )
-    });
+    for (modo, optimizar) in [("puro", false), ("optimizado", true)] {
+        let nombre = format!("ejecucion/bucles_enteros_{modo}");
+        criterion.bench_function(&nombre, |b| {
+            b.iter_batched(
+                || preparar_con_modo(BUCLE, "sumar_hasta", optimizar),
+                |mut preparada| black_box(llamar(&mut preparada, vec![Valor::Entero(2_000_000)])),
+                BatchSize::SmallInput,
+            )
+        });
+    }
     criterion.bench_function("ejecucion/llamadas_recursivas", |b| {
         b.iter_batched(
             || preparar(FIBONACCI, "fib"),
             |mut preparada| black_box(llamar(&mut preparada, vec![Valor::Entero(25)])),
+            BatchSize::SmallInput,
+        )
+    });
+    criterion.bench_function("ejecucion/llamadas_pequenas", |b| {
+        b.iter_batched(
+            || preparar(LLAMADAS, "llamar_repetido"),
+            |mut preparada| black_box(llamar(&mut preparada, vec![Valor::Entero(200_000)])),
             BatchSize::SmallInput,
         )
     });
@@ -170,6 +246,46 @@ fn ejecucion(criterion: &mut Criterion) {
                 (preparada, datos)
             },
             |(mut preparada, datos)| black_box(llamar(&mut preparada, vec![datos])),
+            BatchSize::SmallInput,
+        )
+    });
+    criterion.bench_function("ejecucion/jsn", |b| {
+        b.iter_batched(
+            || {
+                let preparada = preparar(JSN, "sumar_jsn");
+                let valores = Valor::jsn(IndexMap::from([
+                    ("a".to_string(), Valor::Entero(20)),
+                    ("b".to_string(), Valor::Entero(22)),
+                ]));
+                (preparada, valores)
+            },
+            |(mut preparada, valores)| {
+                black_box(llamar(
+                    &mut preparada,
+                    vec![valores, Valor::Entero(100_000)],
+                ))
+            },
+            BatchSize::SmallInput,
+        )
+    });
+    criterion.bench_function("ejecucion/decimales", |b| {
+        b.iter_batched(
+            || preparar(DECIMALES, "sumar_decimales"),
+            |mut preparada| black_box(llamar(&mut preparada, vec![Valor::Entero(100_000)])),
+            BatchSize::SmallInput,
+        )
+    });
+    criterion.bench_function("ejecucion/unicode", |b| {
+        b.iter_batched(
+            || preparar(UNICODE, "recorrer_unicode"),
+            |mut preparada| black_box(llamar(&mut preparada, vec![Valor::Entero(100_000)])),
+            BatchSize::SmallInput,
+        )
+    });
+    criterion.bench_function("ejecucion/objetos", |b| {
+        b.iter_batched(
+            || preparar(OBJETOS, "crear_repetido"),
+            |mut preparada| black_box(llamar(&mut preparada, vec![Valor::Entero(100_000)])),
             BatchSize::SmallInput,
         )
     });

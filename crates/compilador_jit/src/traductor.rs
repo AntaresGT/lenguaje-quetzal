@@ -1,10 +1,9 @@
+use std::collections::BTreeSet;
+
 use bytecode::{CodigoOp, Constante, FuncionCompilada, ModuloCompilado};
 use cranelift_codegen::ir::condcodes::IntCC;
-use cranelift_codegen::ir::{
-    AbiParam, Block, InstBuilder, MemFlagsData, StackSlot, StackSlotData, StackSlotKind, Value,
-    types,
-};
-use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
+use cranelift_codegen::ir::{AbiParam, Block, InstBuilder, MemFlagsData, Value, types};
+use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{Linkage, Module, default_libcall_names};
 
@@ -44,8 +43,11 @@ pub(crate) fn compilar(
     let mut constructor_funcion = FunctionBuilderContext::new();
     {
         let mut generador = FunctionBuilder::new(&mut contexto.func, &mut constructor_funcion);
-        traducir_funcion(&mut generador, modulo, funcion, &analisis, puntero_tipo)?;
+        traducir_funcion(&mut generador, modulo, funcion, &analisis)?;
         generador.finalize(configuracion_objetivo);
+    }
+    if std::env::var_os("QUETZAL_JIT_IR").is_some() {
+        eprintln!("{}", contexto.func.display());
     }
     modulo_jit
         .define_function(id, &mut contexto)
@@ -75,48 +77,50 @@ fn traducir_funcion(
     modulo: &ModuloCompilado,
     funcion: &FuncionCompilada,
     analisis: &Analisis,
-    puntero_tipo: cranelift_codegen::ir::Type,
 ) -> Result<(), ErrorJit> {
     let n = funcion.trozo.instrucciones.len();
-    let bloques: Vec<Option<Block>> = analisis
-        .profundidades
-        .iter()
-        .map(|profundidad| profundidad.map(|_| generador.create_block()))
+    let lideres = lideres_cfg(funcion);
+    let bloques: Vec<Option<Block>> = (0..n)
+        .map(|pc| {
+            if lideres.contains(&pc) && analisis.profundidades[pc].is_some() {
+                Some(generador.create_block())
+            } else {
+                None
+            }
+        })
         .collect();
     let entrada = bloques[0].expect("la entrada fue analizada");
     generador.append_block_params_for_function_params(entrada);
-    let cantidad_slots = funcion.ranuras_locales as usize + analisis.max_pila as usize;
-    let slots: Vec<StackSlot> = (0..cantidad_slots)
-        .map(|_| {
-            generador.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3))
-        })
-        .collect();
+    let variables = VariablesSsa::nueva(generador, funcion, analisis);
     generador.switch_to_block(entrada);
     let parametros = generador.block_params(entrada).to_vec();
     let direccion_argumentos = parametros[0];
     let direccion_salida = parametros[2];
-    for slot in &slots {
+    for local in &variables.locales {
         let cero = generador.ins().iconst(types::I64, 0);
-        generador.ins().stack_store(puntero_tipo, cero, *slot, 0);
+        generador.def_var(*local, cero);
     }
-    for (indice, slot) in slots.iter().take(funcion.parametros.len()).enumerate() {
+    for (indice, local) in variables
+        .locales
+        .iter()
+        .take(funcion.parametros.len())
+        .enumerate()
+    {
         let argumento = generador.ins().load(
             types::I64,
             MemFlagsData::new(),
             direccion_argumentos,
             (indice * 8) as i32,
         );
-        generador
-            .ins()
-            .stack_store(puntero_tipo, argumento, *slot, 0);
+        generador.def_var(*local, argumento);
     }
 
     for pc in 0..n {
-        let Some(bloque) = bloques[pc] else {
+        if analisis.profundidades[pc].is_none() {
             continue;
-        };
-        if pc != 0 {
-            generador.switch_to_block(bloque);
+        }
+        if pc != 0 && lideres.contains(&pc) {
+            generador.switch_to_block(bloques[pc].expect("bloque básico"));
         }
         let instruccion = funcion.trozo.instrucciones[pc];
         let mut profundidad = analisis.profundidades[pc].expect("pc alcanzable") as usize;
@@ -125,14 +129,7 @@ fn traducir_funcion(
                 let valor = generador
                     .ins()
                     .iconst(types::I64, instruccion.entero_inmediato() as i64);
-                pila_guardar(
-                    generador,
-                    &slots,
-                    funcion,
-                    &mut profundidad,
-                    valor,
-                    puntero_tipo,
-                );
+                pila_guardar(generador, &variables, &mut profundidad, valor);
             }
             CodigoOp::CargarConstante => {
                 let valor = match &modulo.constantes[instruccion.indice_u32() as usize] {
@@ -141,42 +138,24 @@ fn traducir_funcion(
                     _ => return Err(fallo_traduccion(pc, "constante no entera")),
                 };
                 let valor = generador.ins().iconst(types::I64, valor);
-                pila_guardar(
-                    generador,
-                    &slots,
-                    funcion,
-                    &mut profundidad,
-                    valor,
-                    puntero_tipo,
-                );
+                pila_guardar(generador, &variables, &mut profundidad, valor);
             }
             CodigoOp::CargarLocal => {
-                let valor = local_cargar(generador, &slots, instruccion.ranura(), puntero_tipo);
-                pila_guardar(
-                    generador,
-                    &slots,
-                    funcion,
-                    &mut profundidad,
-                    valor,
-                    puntero_tipo,
-                );
+                let valor = local_cargar(generador, &variables, instruccion.ranura());
+                pila_guardar(generador, &variables, &mut profundidad, valor);
             }
             CodigoOp::GuardarLocal => {
-                let valor = pila_sacar(generador, &slots, funcion, &mut profundidad, puntero_tipo);
-                local_guardar(generador, &slots, instruccion.ranura(), valor, puntero_tipo);
+                let valor = pila_sacar(generador, &variables, &mut profundidad);
+                local_guardar(generador, &variables, instruccion.ranura(), valor);
             }
             CodigoOp::LimpiarLocales => {
-                for slot in slots
-                    .iter()
-                    .skip(instruccion.ranura() as usize)
-                    .take(funcion.ranuras_locales as usize - instruccion.ranura() as usize)
-                {
+                for local in variables.locales.iter().skip(instruccion.ranura() as usize) {
                     let cero = generador.ins().iconst(types::I64, 0);
-                    generador.ins().stack_store(puntero_tipo, cero, *slot, 0);
+                    generador.def_var(*local, cero);
                 }
             }
             CodigoOp::AjustarLocal => {
-                let actual = local_cargar(generador, &slots, instruccion.ranura(), puntero_tipo);
+                let actual = local_cargar(generador, &variables, instruccion.ranura());
                 let delta = generador
                     .ins()
                     .iconst(types::I64, instruccion.delta_ajuste() as i64);
@@ -188,16 +167,11 @@ fn traducir_funcion(
                     direccion_salida,
                     pc as u32,
                 );
-                local_guardar(generador, &slots, instruccion.ranura(), valor, puntero_tipo);
+                local_guardar(generador, &variables, instruccion.ranura(), valor);
             }
             CodigoOp::AjustarLocalConLocal => {
-                let izquierda = local_cargar(generador, &slots, instruccion.ranura(), puntero_tipo);
-                let derecha = local_cargar(
-                    generador,
-                    &slots,
-                    instruccion.ranura_derecha(),
-                    puntero_tipo,
-                );
+                let izquierda = local_cargar(generador, &variables, instruccion.ranura());
+                let derecha = local_cargar(generador, &variables, instruccion.ranura_derecha());
                 let valor = operacion_overflow(
                     generador,
                     instruccion.op,
@@ -206,16 +180,11 @@ fn traducir_funcion(
                     direccion_salida,
                     pc as u32,
                 );
-                local_guardar(generador, &slots, instruccion.ranura(), valor, puntero_tipo);
+                local_guardar(generador, &variables, instruccion.ranura(), valor);
             }
             CodigoOp::CargarLocalLocalSumarEntero => {
-                let izquierda = local_cargar(generador, &slots, instruccion.ranura(), puntero_tipo);
-                let derecha = local_cargar(
-                    generador,
-                    &slots,
-                    instruccion.ranura_derecha(),
-                    puntero_tipo,
-                );
+                let izquierda = local_cargar(generador, &variables, instruccion.ranura());
+                let derecha = local_cargar(generador, &variables, instruccion.ranura_derecha());
                 let valor = operacion_overflow(
                     generador,
                     instruccion.op,
@@ -224,29 +193,15 @@ fn traducir_funcion(
                     direccion_salida,
                     pc as u32,
                 );
-                pila_guardar(
-                    generador,
-                    &slots,
-                    funcion,
-                    &mut profundidad,
-                    valor,
-                    puntero_tipo,
-                );
+                pila_guardar(generador, &variables, &mut profundidad, valor);
             }
             CodigoOp::Duplicar => {
-                let valor = pila_cargar(generador, &slots, funcion, profundidad - 1, puntero_tipo);
-                pila_guardar(
-                    generador,
-                    &slots,
-                    funcion,
-                    &mut profundidad,
-                    valor,
-                    puntero_tipo,
-                );
+                let valor = pila_cargar(generador, &variables, profundidad - 1);
+                pila_guardar(generador, &variables, &mut profundidad, valor);
             }
             CodigoOp::Desechar => {}
             CodigoOp::NegarEntero => {
-                let valor = pila_sacar(generador, &slots, funcion, &mut profundidad, puntero_tipo);
+                let valor = pila_sacar(generador, &variables, &mut profundidad);
                 let minimo = generador.ins().icmp_imm_s(IntCC::Equal, valor, i64::MIN);
                 ramificar_error(
                     generador,
@@ -257,37 +212,21 @@ fn traducir_funcion(
                     detalle(CodigoOp::NegarEntero, valor, valor),
                 );
                 let negado = generador.ins().ineg(valor);
-                pila_guardar(
-                    generador,
-                    &slots,
-                    funcion,
-                    &mut profundidad,
-                    negado,
-                    puntero_tipo,
-                );
+                pila_guardar(generador, &variables, &mut profundidad, negado);
             }
             CodigoOp::NoLogico => {
-                let valor = pila_sacar(generador, &slots, funcion, &mut profundidad, puntero_tipo);
+                let valor = pila_sacar(generador, &variables, &mut profundidad);
                 let comparacion = generador.ins().icmp_imm_s(IntCC::Equal, valor, 0);
                 let negado = generador.ins().bmask(types::I64, comparacion);
-                pila_guardar(
-                    generador,
-                    &slots,
-                    funcion,
-                    &mut profundidad,
-                    negado,
-                    puntero_tipo,
-                );
+                pila_guardar(generador, &variables, &mut profundidad, negado);
             }
             CodigoOp::SumarEntero
             | CodigoOp::RestarEntero
             | CodigoOp::MultiplicarEntero
             | CodigoOp::DividirEntero
             | CodigoOp::ModuloEntero => {
-                let derecha =
-                    pila_sacar(generador, &slots, funcion, &mut profundidad, puntero_tipo);
-                let izquierda =
-                    pila_sacar(generador, &slots, funcion, &mut profundidad, puntero_tipo);
+                let derecha = pila_sacar(generador, &variables, &mut profundidad);
+                let izquierda = pila_sacar(generador, &variables, &mut profundidad);
                 let valor = operacion_aritmetica(
                     generador,
                     instruccion.op,
@@ -296,14 +235,7 @@ fn traducir_funcion(
                     direccion_salida,
                     pc as u32,
                 );
-                pila_guardar(
-                    generador,
-                    &slots,
-                    funcion,
-                    &mut profundidad,
-                    valor,
-                    puntero_tipo,
-                );
+                pila_guardar(generador, &variables, &mut profundidad, valor);
             }
             CodigoOp::IgualEntero
             | CodigoOp::DiferenteEntero
@@ -311,23 +243,14 @@ fn traducir_funcion(
             | CodigoOp::MenorEntero
             | CodigoOp::MayorOIgualEntero
             | CodigoOp::MenorOIgualEntero => {
-                let derecha =
-                    pila_sacar(generador, &slots, funcion, &mut profundidad, puntero_tipo);
-                let izquierda =
-                    pila_sacar(generador, &slots, funcion, &mut profundidad, puntero_tipo);
+                let derecha = pila_sacar(generador, &variables, &mut profundidad);
+                let izquierda = pila_sacar(generador, &variables, &mut profundidad);
                 let comparacion =
                     generador
                         .ins()
                         .icmp(condicion(instruccion.op), izquierda, derecha);
                 let valor = generador.ins().bmask(types::I64, comparacion);
-                pila_guardar(
-                    generador,
-                    &slots,
-                    funcion,
-                    &mut profundidad,
-                    valor,
-                    puntero_tipo,
-                );
+                pila_guardar(generador, &variables, &mut profundidad, valor);
             }
             CodigoOp::Saltar => {
                 generador.ins().jump(
@@ -337,8 +260,7 @@ fn traducir_funcion(
                 continue;
             }
             CodigoOp::SaltarSiFalso | CodigoOp::SaltarSiVerdadero => {
-                let condicion =
-                    pila_sacar(generador, &slots, funcion, &mut profundidad, puntero_tipo);
+                let condicion = pila_sacar(generador, &variables, &mut profundidad);
                 let destino = bloques[instruccion.destino() as usize].expect("destino analizado");
                 let siguiente = bloques[pc + 1].expect("siguiente analizado");
                 if instruccion.op == CodigoOp::SaltarSiFalso {
@@ -353,10 +275,8 @@ fn traducir_funcion(
                 continue;
             }
             CodigoOp::MenorEnteroSaltarSiFalso => {
-                let derecha =
-                    pila_sacar(generador, &slots, funcion, &mut profundidad, puntero_tipo);
-                let izquierda =
-                    pila_sacar(generador, &slots, funcion, &mut profundidad, puntero_tipo);
+                let derecha = pila_sacar(generador, &variables, &mut profundidad);
+                let izquierda = pila_sacar(generador, &variables, &mut profundidad);
                 let comparacion = generador
                     .ins()
                     .icmp(IntCC::SignedLessThan, izquierda, derecha);
@@ -368,92 +288,103 @@ fn traducir_funcion(
                 continue;
             }
             CodigoOp::Retornar => {
-                let valor = pila_sacar(generador, &slots, funcion, &mut profundidad, puntero_tipo);
+                let valor = pila_sacar(generador, &variables, &mut profundidad);
                 emitir_salida(generador, direccion_salida, valor, ESTADO_EXITO, 0, None);
                 continue;
             }
             CodigoOp::RetornarLocal => {
-                let valor = local_cargar(generador, &slots, instruccion.ranura(), puntero_tipo);
+                let valor = local_cargar(generador, &variables, instruccion.ranura());
                 emitir_salida(generador, direccion_salida, valor, ESTADO_EXITO, 0, None);
                 continue;
             }
             _ => return Err(fallo_traduccion(pc, "instrucción no soportada")),
         }
-        let siguiente = bloques
-            .get(pc + 1)
-            .and_then(|bloque| *bloque)
-            .ok_or_else(|| fallo_traduccion(pc, "camino sin sucesor nativo"))?;
-        generador.ins().jump(siguiente, &[]);
+        if let Some(siguiente) = bloques.get(pc + 1).and_then(|bloque| *bloque) {
+            generador.ins().jump(siguiente, &[]);
+        }
     }
-    for bloque in bloques.into_iter().flatten() {
+    for bloque in bloques.iter().flatten().copied().collect::<BTreeSet<_>>() {
         generador.seal_block(bloque);
     }
     Ok(())
 }
 
-fn local_cargar(
-    generador: &mut FunctionBuilder,
-    slots: &[StackSlot],
-    ranura: u16,
-    puntero_tipo: cranelift_codegen::ir::Type,
-) -> Value {
-    generador
-        .ins()
-        .stack_load(puntero_tipo, types::I64, slots[ranura as usize], 0)
+struct VariablesSsa {
+    locales: Vec<Variable>,
+    pila: Vec<Variable>,
+}
+
+impl VariablesSsa {
+    fn nueva(
+        generador: &mut FunctionBuilder,
+        funcion: &FuncionCompilada,
+        analisis: &Analisis,
+    ) -> Self {
+        let locales = (0..funcion.ranuras_locales)
+            .map(|_| generador.declare_var(types::I64))
+            .collect();
+        let pila = (0..analisis.max_pila)
+            .map(|_| generador.declare_var(types::I64))
+            .collect();
+        Self { locales, pila }
+    }
+}
+
+fn lideres_cfg(funcion: &FuncionCompilada) -> BTreeSet<usize> {
+    let n = funcion.trozo.instrucciones.len();
+    let mut lideres = BTreeSet::from([0]);
+    for (pc, instruccion) in funcion.trozo.instrucciones.iter().enumerate() {
+        if let Some(destino) = instruccion.destino_salto()
+            && (destino as usize) < n
+        {
+            lideres.insert(destino as usize);
+        }
+        if matches!(
+            instruccion.op,
+            CodigoOp::SaltarSiFalso
+                | CodigoOp::SaltarSiVerdadero
+                | CodigoOp::MenorEnteroSaltarSiFalso
+        ) && pc + 1 < n
+        {
+            lideres.insert(pc + 1);
+        }
+    }
+    lideres
+}
+
+fn local_cargar(generador: &mut FunctionBuilder, variables: &VariablesSsa, ranura: u16) -> Value {
+    generador.use_var(variables.locales[ranura as usize])
 }
 
 fn local_guardar(
     generador: &mut FunctionBuilder,
-    slots: &[StackSlot],
+    variables: &VariablesSsa,
     ranura: u16,
     valor: Value,
-    puntero_tipo: cranelift_codegen::ir::Type,
 ) {
-    generador
-        .ins()
-        .stack_store(puntero_tipo, valor, slots[ranura as usize], 0);
+    generador.def_var(variables.locales[ranura as usize], valor);
 }
 
-fn pila_cargar(
-    generador: &mut FunctionBuilder,
-    slots: &[StackSlot],
-    funcion: &FuncionCompilada,
-    indice: usize,
-    puntero_tipo: cranelift_codegen::ir::Type,
-) -> Value {
-    generador.ins().stack_load(
-        puntero_tipo,
-        types::I64,
-        slots[funcion.ranuras_locales as usize + indice],
-        0,
-    )
+fn pila_cargar(generador: &mut FunctionBuilder, variables: &VariablesSsa, indice: usize) -> Value {
+    generador.use_var(variables.pila[indice])
 }
 
 fn pila_sacar(
     generador: &mut FunctionBuilder,
-    slots: &[StackSlot],
-    funcion: &FuncionCompilada,
+    variables: &VariablesSsa,
     profundidad: &mut usize,
-    puntero_tipo: cranelift_codegen::ir::Type,
 ) -> Value {
     *profundidad -= 1;
-    pila_cargar(generador, slots, funcion, *profundidad, puntero_tipo)
+    pila_cargar(generador, variables, *profundidad)
 }
 
 fn pila_guardar(
     generador: &mut FunctionBuilder,
-    slots: &[StackSlot],
-    funcion: &FuncionCompilada,
+    variables: &VariablesSsa,
     profundidad: &mut usize,
     valor: Value,
-    puntero_tipo: cranelift_codegen::ir::Type,
 ) {
-    generador.ins().stack_store(
-        puntero_tipo,
-        valor,
-        slots[funcion.ranuras_locales as usize + *profundidad],
-        0,
-    );
+    generador.def_var(variables.pila[*profundidad], valor);
     *profundidad += 1;
 }
 

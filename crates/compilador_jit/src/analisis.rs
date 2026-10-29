@@ -4,12 +4,13 @@ use bytecode::{CodigoOp, Constante, FuncionCompilada, ModuloCompilado};
 
 use crate::ErrorJit;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum TipoAbstracto {
     Entero,
     Log,
     Nulo,
     Desconocido,
+    Funcion(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,8 +72,17 @@ pub(crate) fn analizar(
                 };
                 estado.pila.push(tipo);
             }
+            CodigoOp::CargarGlobal => {
+                let funcion =
+                    funcion_directa(modulo, instruccion.indice_u16()).ok_or_else(|| {
+                        fallo(pc, "la global no es una función entera conocida del módulo")
+                    })?;
+                estado
+                    .pila
+                    .push(TipoAbstracto::Funcion(funcion.nombre.clone()));
+            }
             CodigoOp::CargarLocal => {
-                let tipo = estado.locales[instruccion.ranura() as usize];
+                let tipo = estado.locales[instruccion.ranura() as usize].clone();
                 if matches!(tipo, TipoAbstracto::Nulo | TipoAbstracto::Desconocido) {
                     return Err(fallo(pc, "no se conoce el tipo del local"));
                 }
@@ -114,7 +124,7 @@ pub(crate) fn analizar(
                 estado.pila.push(TipoAbstracto::Entero);
             }
             CodigoOp::Duplicar => {
-                let Some(tipo) = estado.pila.last().copied() else {
+                let Some(tipo) = estado.pila.last().cloned() else {
                     return Err(fallo(pc, "pila vacía al duplicar"));
                 };
                 estado.pila.push(tipo);
@@ -158,6 +168,24 @@ pub(crate) fn analizar(
                     TipoAbstracto::Entero
                 };
                 estado.pila.push(tipo);
+            }
+            CodigoOp::Llamar => {
+                let cantidad = instruccion.cantidad() as usize;
+                for _ in 0..cantidad {
+                    exigir(sacar(&mut estado, pc)?, TipoAbstracto::Entero, pc)?;
+                }
+                let TipoAbstracto::Funcion(nombre) = sacar(&mut estado, pc)? else {
+                    return Err(fallo(
+                        pc,
+                        "el destino de llamada no es una función conocida",
+                    ));
+                };
+                let destino = funcion_por_nombre(modulo, &nombre)
+                    .ok_or_else(|| fallo(pc, "la función de destino no existe"))?;
+                if destino.parametros.len() != cantidad {
+                    return Err(fallo(pc, "la aridad no coincide con la función de destino"));
+                }
+                estado.pila.push(TipoAbstracto::Entero);
             }
             CodigoOp::Saltar => siguientes.push(instruccion.destino() as usize),
             CodigoOp::SaltarSiFalso | CodigoOp::SaltarSiVerdadero => {
@@ -217,6 +245,45 @@ pub(crate) fn analizar(
     })
 }
 
+pub(crate) fn funciones_directas(
+    modulo: &ModuloCompilado,
+    funcion: &FuncionCompilada,
+) -> Vec<String> {
+    funcion
+        .trozo
+        .instrucciones
+        .iter()
+        .filter(|instruccion| instruccion.op == CodigoOp::CargarGlobal)
+        .filter_map(|instruccion| {
+            modulo
+                .nombres_globales
+                .get(instruccion.indice_u16() as usize)
+                .filter(|nombre| {
+                    modulo
+                        .funciones
+                        .iter()
+                        .any(|funcion| funcion.nombre == nombre.as_str())
+                })
+                .cloned()
+        })
+        .collect()
+}
+
+fn funcion_directa(modulo: &ModuloCompilado, indice: u16) -> Option<&FuncionCompilada> {
+    let nombre = modulo.nombres_globales.get(indice as usize)?;
+    funcion_por_nombre(modulo, nombre)
+}
+
+fn funcion_por_nombre<'a>(
+    modulo: &'a ModuloCompilado,
+    nombre: &str,
+) -> Option<&'a FuncionCompilada> {
+    modulo
+        .funciones
+        .iter()
+        .find(|funcion| funcion.nombre == nombre)
+}
+
 fn encolar(
     pc: usize,
     estado: Estado,
@@ -261,7 +328,7 @@ fn exigir_local(
     let tipo = estado
         .locales
         .get(ranura as usize)
-        .copied()
+        .cloned()
         .ok_or_else(|| fallo(pc, "ranura local fuera de rango"))?;
     exigir(tipo, esperado, pc)
 }

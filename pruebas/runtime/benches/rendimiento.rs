@@ -291,6 +291,14 @@ fn ejecucion(criterion: &mut Criterion) {
             BatchSize::SmallInput,
         )
     });
+    #[cfg(feature = "jit")]
+    criterion.bench_function("ejecucion/llamadas_pequenas_jit", |b| {
+        b.iter_batched(
+            || preparar_jit(LLAMADAS, "llamar_repetido"),
+            |mut preparada| black_box(llamar(&mut preparada, vec![Valor::Entero(200_000)])),
+            BatchSize::SmallInput,
+        )
+    });
     criterion.bench_function("ejecucion/llamadas_pequenas", |b| {
         b.iter_batched(
             || preparar(LLAMADAS, "llamar_repetido"),

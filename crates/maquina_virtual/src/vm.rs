@@ -551,7 +551,7 @@ impl Vm {
             }
             let compilado = self.jit.compilar_funcion(&entorno.modulo, funcion);
             let estado = match compilado {
-                Ok(funcion_nativa) => EstadoJit::Compilado(Rc::new(funcion_nativa)),
+                Ok(funcion_nativa) => EstadoJit::Compilado(funcion_nativa),
                 Err(_) => EstadoJit::NoElegible,
             };
             if let Some(codigo) = entorno.runtimes.borrow().get(&funcion.nombre) {
@@ -578,7 +578,7 @@ impl Vm {
                 .as_ref()
                 .map(|funcion| self.jit.compilar_funcion(&entorno.modulo, funcion));
             *codigo.jit.borrow_mut() = match compilado {
-                Some(Ok(funcion)) => EstadoJit::Compilado(Rc::new(funcion)),
+                Some(Ok(funcion)) => EstadoJit::Compilado(funcion),
                 _ => EstadoJit::NoElegible,
             };
         }
@@ -606,10 +606,13 @@ impl Vm {
                 return None;
             }
         };
-        let ubicacion = codigo
-            .ubicaciones
-            .get(salida.pc as usize)
+        let ubicacion = entorno
+            .modulo
+            .funciones
+            .get(salida.funcion as usize)
+            .and_then(|funcion| funcion.trozo.ubicaciones.get(salida.pc as usize))
             .copied()
+            .or_else(|| codigo.ubicaciones.get(salida.pc as usize).copied())
             .or(ubicacion);
         match salida.estado {
             ESTADO_EXITO => Some(Ok(Valor::Entero(salida.valor))),

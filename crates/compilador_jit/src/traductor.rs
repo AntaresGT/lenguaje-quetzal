@@ -1,19 +1,26 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
+use std::rc::Rc;
 
 use bytecode::{CodigoOp, Constante, FuncionCompilada, ModuloCompilado};
 use cranelift_codegen::ir::condcodes::IntCC;
-use cranelift_codegen::ir::{AbiParam, Block, InstBuilder, MemFlagsData, Value, types};
+use cranelift_codegen::ir::{
+    AbiParam, Block, InstBuilder, MemFlagsData, StackSlotData, StackSlotKind, Value, types,
+};
+use cranelift_codegen::isa::CallConv;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{Linkage, Module, default_libcall_names};
 
 use crate::analisis::{Analisis, analizar};
 use crate::compilados::FirmaNativa;
+use crate::contexto::{ClaveFuncion, clave_funcion};
 use crate::{ESTADO_DESBORDAMIENTO, ESTADO_DIVISION_CERO, ESTADO_EXITO, ErrorJit, FuncionNativa};
 
 pub(crate) fn compilar(
     modulo: &ModuloCompilado,
     funcion: &FuncionCompilada,
+    compilados: &HashMap<ClaveFuncion, Rc<FuncionNativa>>,
+    id_modulo: usize,
 ) -> Result<(FuncionNativa, usize), ErrorJit> {
     let analisis = analizar(modulo, funcion)?;
     let constructor = JITBuilder::new(default_libcall_names())
@@ -43,7 +50,15 @@ pub(crate) fn compilar(
     let mut constructor_funcion = FunctionBuilderContext::new();
     {
         let mut generador = FunctionBuilder::new(&mut contexto.func, &mut constructor_funcion);
-        traducir_funcion(&mut generador, modulo, funcion, &analisis)?;
+        traducir_funcion(
+            &mut generador,
+            modulo,
+            funcion,
+            &analisis,
+            compilados,
+            id_modulo,
+            puntero_tipo,
+        )?;
         generador.finalize(configuracion_objetivo);
     }
     if std::env::var_os("QUETZAL_JIT_IR").is_some() {
@@ -83,8 +98,16 @@ fn traducir_funcion(
     modulo: &ModuloCompilado,
     funcion: &FuncionCompilada,
     analisis: &Analisis,
+    compilados: &HashMap<ClaveFuncion, Rc<FuncionNativa>>,
+    id_modulo: usize,
+    puntero_tipo: cranelift_codegen::ir::Type,
 ) -> Result<(), ErrorJit> {
     let n = funcion.trozo.instrucciones.len();
+    let id_funcion = modulo
+        .funciones
+        .iter()
+        .position(|candidata| candidata.nombre == funcion.nombre)
+        .unwrap_or(0) as u32;
     let lideres = lideres_cfg(funcion);
     let bloques: Vec<Option<Block>> = (0..n)
         .map(|pc| {
@@ -146,6 +169,15 @@ fn traducir_funcion(
                 let valor = generador.ins().iconst(types::I64, valor);
                 pila_guardar(generador, &variables, &mut profundidad, valor);
             }
+            CodigoOp::CargarGlobal => {
+                let nombre = &modulo.nombres_globales[instruccion.indice_u16() as usize];
+                let direccion = compilados
+                    .get(&clave_funcion(id_modulo, nombre))
+                    .ok_or_else(|| fallo_traduccion(pc, "función directa no compilada"))?
+                    .puntero as i64;
+                let valor = generador.ins().iconst(puntero_tipo, direccion);
+                pila_guardar(generador, &variables, &mut profundidad, valor);
+            }
             CodigoOp::CargarLocal => {
                 let valor = local_cargar(generador, &variables, instruccion.ranura());
                 pila_guardar(generador, &variables, &mut profundidad, valor);
@@ -172,6 +204,7 @@ fn traducir_funcion(
                     delta,
                     direccion_salida,
                     pc as u32,
+                    id_funcion,
                 );
                 local_guardar(generador, &variables, instruccion.ranura(), valor);
             }
@@ -185,6 +218,7 @@ fn traducir_funcion(
                     derecha,
                     direccion_salida,
                     pc as u32,
+                    id_funcion,
                 );
                 local_guardar(generador, &variables, instruccion.ranura(), valor);
             }
@@ -198,6 +232,7 @@ fn traducir_funcion(
                     derecha,
                     direccion_salida,
                     pc as u32,
+                    id_funcion,
                 );
                 pila_guardar(generador, &variables, &mut profundidad, valor);
             }
@@ -216,6 +251,7 @@ fn traducir_funcion(
                     ESTADO_DESBORDAMIENTO,
                     pc as u32,
                     detalle(CodigoOp::NegarEntero, valor, valor),
+                    id_funcion,
                 );
                 let negado = generador.ins().ineg(valor);
                 pila_guardar(generador, &variables, &mut profundidad, negado);
@@ -240,6 +276,7 @@ fn traducir_funcion(
                     derecha,
                     direccion_salida,
                     pc as u32,
+                    id_funcion,
                 );
                 pila_guardar(generador, &variables, &mut profundidad, valor);
             }
@@ -257,6 +294,17 @@ fn traducir_funcion(
                         .icmp(condicion(instruccion.op), izquierda, derecha);
                 let valor = generador.ins().bmask(types::I64, comparacion);
                 pila_guardar(generador, &variables, &mut profundidad, valor);
+            }
+            CodigoOp::Llamar => {
+                llamar_directa(
+                    generador,
+                    &variables,
+                    &mut profundidad,
+                    instruccion.cantidad() as usize,
+                    direccion_salida,
+                    puntero_tipo,
+                    CallConv::SystemV,
+                );
             }
             CodigoOp::Saltar => {
                 generador.ins().jump(
@@ -295,12 +343,28 @@ fn traducir_funcion(
             }
             CodigoOp::Retornar => {
                 let valor = pila_sacar(generador, &variables, &mut profundidad);
-                emitir_salida(generador, direccion_salida, valor, ESTADO_EXITO, 0, None);
+                emitir_salida(
+                    generador,
+                    direccion_salida,
+                    valor,
+                    ESTADO_EXITO,
+                    0,
+                    None,
+                    id_funcion,
+                );
                 continue;
             }
             CodigoOp::RetornarLocal => {
                 let valor = local_cargar(generador, &variables, instruccion.ranura());
-                emitir_salida(generador, direccion_salida, valor, ESTADO_EXITO, 0, None);
+                emitir_salida(
+                    generador,
+                    direccion_salida,
+                    valor,
+                    ESTADO_EXITO,
+                    0,
+                    None,
+                    id_funcion,
+                );
                 continue;
             }
             _ => return Err(fallo_traduccion(pc, "instrucción no soportada")),
@@ -394,6 +458,67 @@ fn pila_guardar(
     *profundidad += 1;
 }
 
+/// Emite una llamada a una función compilada por este mismo contexto. La
+/// dirección nunca procede del programa y el registro conserva su módulo vivo.
+fn llamar_directa(
+    generador: &mut FunctionBuilder,
+    variables: &VariablesSsa,
+    profundidad: &mut usize,
+    cantidad: usize,
+    direccion_salida: Value,
+    puntero_tipo: cranelift_codegen::ir::Type,
+    convencion: CallConv,
+) {
+    let mut argumentos = Vec::with_capacity(cantidad);
+    for _ in 0..cantidad {
+        argumentos.push(pila_sacar(generador, variables, profundidad));
+    }
+    argumentos.reverse();
+    let objetivo = pila_sacar(generador, variables, profundidad);
+    let slot = generador.create_sized_stack_slot(StackSlotData::new(
+        StackSlotKind::ExplicitSlot,
+        (cantidad.max(1) * 8) as u32,
+        3,
+    ));
+    for (indice, argumento) in argumentos.into_iter().enumerate() {
+        generador
+            .ins()
+            .stack_store(puntero_tipo, argumento, slot, (indice * 8) as i32);
+    }
+    let direccion_argumentos = generador.ins().stack_addr(puntero_tipo, slot, 0);
+    let cantidad_nativa = generador.ins().iconst(types::I64, cantidad as i64);
+    let mut firma = cranelift_codegen::ir::Signature::new(convencion);
+    firma.params.push(AbiParam::new(puntero_tipo));
+    firma.params.push(AbiParam::new(types::I64));
+    firma.params.push(AbiParam::new(puntero_tipo));
+    let firma = generador.import_signature(firma);
+    generador.ins().call_indirect(
+        firma,
+        objetivo,
+        &[direccion_argumentos, cantidad_nativa, direccion_salida],
+    );
+    let estado = generador
+        .ins()
+        .load(types::I32, MemFlagsData::new(), direccion_salida, 24);
+    let exito = generador.ins().icmp_imm_s(IntCC::Equal, estado, 0);
+    ramificar_retorno_error(generador, exito);
+    let valor = generador
+        .ins()
+        .load(types::I64, MemFlagsData::new(), direccion_salida, 0);
+    pila_guardar(generador, variables, profundidad, valor);
+}
+
+fn ramificar_retorno_error(generador: &mut FunctionBuilder, exito: Value) {
+    let continuar = generador.create_block();
+    let error = generador.create_block();
+    generador.ins().brif(exito, continuar, &[], error, &[]);
+    generador.switch_to_block(error);
+    generador.ins().return_(&[]);
+    generador.switch_to_block(continuar);
+    generador.seal_block(error);
+    generador.seal_block(continuar);
+}
+
 #[derive(Clone, Copy)]
 struct DetalleError {
     operacion: u32,
@@ -428,10 +553,11 @@ fn operacion_aritmetica(
     derecha: Value,
     salida: Value,
     pc: u32,
+    id_funcion: u32,
 ) -> Value {
     match op {
         CodigoOp::SumarEntero | CodigoOp::RestarEntero | CodigoOp::MultiplicarEntero => {
-            operacion_overflow(generador, op, izquierda, derecha, salida, pc)
+            operacion_overflow(generador, op, izquierda, derecha, salida, pc, id_funcion)
         }
         CodigoOp::DividirEntero | CodigoOp::ModuloEntero => {
             let divisor_cero = generador.ins().icmp_imm_s(IntCC::Equal, derecha, 0);
@@ -442,6 +568,7 @@ fn operacion_aritmetica(
                 ESTADO_DIVISION_CERO,
                 pc,
                 detalle(op, izquierda, derecha),
+                id_funcion,
             );
             let minimo = generador
                 .ins()
@@ -455,6 +582,7 @@ fn operacion_aritmetica(
                 ESTADO_DESBORDAMIENTO,
                 pc,
                 detalle(op, izquierda, derecha),
+                id_funcion,
             );
             if op == CodigoOp::DividirEntero {
                 generador.ins().sdiv(izquierda, derecha)
@@ -473,6 +601,7 @@ fn operacion_overflow(
     derecha: Value,
     salida: Value,
     pc: u32,
+    id_funcion: u32,
 ) -> Value {
     let (valor, overflow) = match op {
         CodigoOp::SumarEntero
@@ -490,6 +619,7 @@ fn operacion_overflow(
         ESTADO_DESBORDAMIENTO,
         pc,
         detalle(op, izquierda, derecha),
+        id_funcion,
     );
     valor
 }
@@ -501,13 +631,22 @@ fn ramificar_error(
     estado: u32,
     pc: u32,
     detalle: DetalleError,
+    id_funcion: u32,
 ) {
     let error = generador.create_block();
     let continuar = generador.create_block();
     generador.ins().brif(condicion, error, &[], continuar, &[]);
     generador.switch_to_block(error);
     let cero = generador.ins().iconst(types::I64, 0);
-    emitir_salida(generador, direccion_salida, cero, estado, pc, Some(detalle));
+    emitir_salida(
+        generador,
+        direccion_salida,
+        cero,
+        estado,
+        pc,
+        Some(detalle),
+        id_funcion,
+    );
     generador.switch_to_block(continuar);
     generador.seal_block(error);
     generador.seal_block(continuar);
@@ -520,6 +659,7 @@ fn emitir_salida(
     estado: u32,
     pc: u32,
     detalle: Option<DetalleError>,
+    id_funcion: u32,
 ) {
     generador
         .ins()
@@ -546,6 +686,10 @@ fn emitir_salida(
     generador
         .ins()
         .store(MemFlagsData::new(), operacion, direccion_salida, 32);
+    let id_funcion = generador.ins().iconst(types::I32, id_funcion as i64);
+    generador
+        .ins()
+        .store(MemFlagsData::new(), id_funcion, direccion_salida, 36);
     generador.ins().return_(&[]);
 }
 

@@ -242,3 +242,48 @@ fn jit_deberia_volver_al_interprete_con_tipo_incompatible() {
         .expect("fallback interpretado");
     assert!(resultado.es_igual(&Valor::texto("texto")));
 }
+
+#[test]
+fn jit_deberia_ejecutar_llamadas_directas_en_un_bucle() {
+    let codigo = r#"
+entero sumar_uno(entero n) {
+    retornar n + 1
+}
+entero llamar_repetido(entero limite) {
+    entero var suma = 0
+    para (entero var i = 0; i < limite; i++) {
+        suma = sumar_uno(suma)
+    }
+    retornar suma
+}
+entero resultado = llamar_repetido(10000)
+"#;
+    let mut vm = Vm::nueva(Rc::new(modulos_nativos::crear_registro())).con_jit(true);
+    let (entorno, _) = vm
+        .cargar_modulo(Rc::new(compilar(codigo)), IndexMap::new())
+        .expect("llamadas directas");
+    assert!(global(&entorno, "resultado").es_igual(&Valor::Entero(10_000)));
+    assert_eq!(vm.estadisticas_jit().funciones_compiladas, 2);
+}
+
+#[test]
+fn jit_deberia_propagar_errores_de_llamadas_directas() {
+    let codigo = r#"
+entero dividir(entero a, entero b) {
+    retornar a / b
+}
+entero aplicar(entero a, entero b) {
+    retornar dividir(a, b)
+}
+entero a = aplicar(10, 2)
+entero b = aplicar(10, 2)
+entero c = aplicar(10, 2)
+entero d = aplicar(10, 2)
+entero resultado = aplicar(1, 0)
+"#;
+    let error = ejecutar(codigo, true).expect_err("debe fallar");
+    let interpretado = ejecutar(codigo, false).expect_err("debe fallar");
+    assert_eq!(error.codigo, "E0401");
+    assert_eq!(error.mensaje, interpretado.mensaje);
+    assert_eq!(error.ubicacion, interpretado.ubicacion);
+}

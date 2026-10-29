@@ -20,6 +20,7 @@ pub struct SalidaEntera {
     pub estado: u32,
     pub pc: u32,
     pub operacion: u32,
+    pub funcion: u32,
 }
 
 impl SalidaEntera {
@@ -31,6 +32,7 @@ impl SalidaEntera {
             estado: ESTADO_EXITO,
             pc: 0,
             operacion: OPERACION_NINGUNA,
+            funcion: 0,
         }
     }
 }

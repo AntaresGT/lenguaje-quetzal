@@ -1,8 +1,31 @@
+#[cfg(feature = "nativo")]
+use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
+
 use crate::{ConfiguracionJit, ErrorJit, EstadisticasJit, FuncionNativa};
+
+#[cfg(feature = "nativo")]
+pub(crate) type ClaveFuncion = (usize, String);
+
+#[cfg(feature = "nativo")]
+pub(crate) fn clave_funcion(id_modulo: usize, nombre: &str) -> ClaveFuncion {
+    (id_modulo, nombre.to_string())
+}
+
+#[cfg(feature = "nativo")]
+type IdsModulos = HashMap<usize, (usize, Rc<bytecode::ModuloCompilado>)>;
 
 pub struct ContextoJit {
     configuracion: ConfiguracionJit,
     estadisticas: EstadisticasJit,
+    #[cfg(feature = "nativo")]
+    compilados: HashMap<ClaveFuncion, Rc<FuncionNativa>>,
+    #[cfg(feature = "nativo")]
+    visitando: HashSet<ClaveFuncion>,
+    #[cfg(feature = "nativo")]
+    ids_modulos: IdsModulos,
+    #[cfg(feature = "nativo")]
+    siguiente_id_modulo: usize,
 }
 
 impl ContextoJit {
@@ -10,6 +33,14 @@ impl ContextoJit {
         Self {
             configuracion,
             estadisticas: EstadisticasJit::default(),
+            #[cfg(feature = "nativo")]
+            compilados: HashMap::new(),
+            #[cfg(feature = "nativo")]
+            visitando: HashSet::new(),
+            #[cfg(feature = "nativo")]
+            ids_modulos: HashMap::new(),
+            #[cfg(feature = "nativo")]
+            siguiente_id_modulo: 0,
         }
     }
 
@@ -65,35 +96,99 @@ impl ContextoJit {
         }
     }
 
+    #[cfg(feature = "nativo")]
+    fn id_modulo(&mut self, modulo: &bytecode::ModuloCompilado) -> usize {
+        let direccion = modulo as *const _ as usize;
+        if let Some((id, existente)) = self.ids_modulos.get(&direccion)
+            && existente.as_ref() == modulo
+        {
+            return *id;
+        }
+        let id = self.siguiente_id_modulo;
+        self.siguiente_id_modulo += 1;
+        self.ids_modulos
+            .insert(direccion, (id, Rc::new(modulo.clone())));
+        id
+    }
+
+    #[cfg(feature = "nativo")]
+    fn clave_de_funcion(
+        &mut self,
+        modulo: &bytecode::ModuloCompilado,
+        nombre: &str,
+    ) -> ClaveFuncion {
+        (self.id_modulo(modulo), nombre.to_string())
+    }
+
     pub fn compilar_funcion(
         &mut self,
         modulo: &bytecode::ModuloCompilado,
         funcion: &bytecode::FuncionCompilada,
-    ) -> Result<FuncionNativa, ErrorJit> {
+    ) -> Result<Rc<FuncionNativa>, ErrorJit> {
         #[cfg(feature = "nativo")]
         {
-            bytecode::verificar_funcion_inmutable(modulo, funcion)
-                .map_err(|error| ErrorJit::Bytecode(error.to_string()))?;
-            if self.estadisticas.funciones_compiladas >= self.configuracion.max_funciones {
-                return Err(ErrorJit::Limite("cantidad de funciones compiladas"));
+            let clave = self.clave_de_funcion(modulo, &funcion.nombre);
+            if !self.visitando.insert(clave.clone()) {
+                return Err(ErrorJit::NoElegible(
+                    "la recursión directa o indirecta queda en el intérprete".to_string(),
+                ));
             }
-            let inicio = std::time::Instant::now();
-            let resultado = crate::traductor::compilar(modulo, funcion);
-            self.estadisticas.tiempo_compilacion += inicio.elapsed();
-            let (funcion, bytes) = resultado?;
-            let total = self.estadisticas.bytes_codigo.saturating_add(bytes);
-            if total > self.configuracion.max_bytes_codigo {
-                return Err(ErrorJit::Limite("memoria de código generado"));
-            }
-            self.estadisticas.funciones_compiladas += 1;
-            self.estadisticas.bytes_codigo = total;
-            Ok(funcion)
+            let resultado = self.compilar_funcion_y_dependencias(modulo, funcion);
+            self.visitando.remove(&clave);
+            resultado
         }
         #[cfg(not(feature = "nativo"))]
         {
             let _ = (modulo, funcion);
             Err(ErrorJit::NoDisponible)
         }
+    }
+
+    #[cfg(feature = "nativo")]
+    fn compilar_funcion_y_dependencias(
+        &mut self,
+        modulo: &bytecode::ModuloCompilado,
+        funcion: &bytecode::FuncionCompilada,
+    ) -> Result<Rc<FuncionNativa>, ErrorJit> {
+        bytecode::verificar_funcion_inmutable(modulo, funcion)
+            .map_err(|error| ErrorJit::Bytecode(error.to_string()))?;
+        if self.estadisticas.funciones_compiladas >= self.configuracion.max_funciones {
+            return Err(ErrorJit::Limite("cantidad de funciones compiladas"));
+        }
+        for nombre in crate::analisis::funciones_directas(modulo, funcion) {
+            let clave = self.clave_de_funcion(modulo, &nombre);
+            if self.visitando.contains(&clave) {
+                return Err(ErrorJit::NoElegible(
+                    "la recursión directa o indirecta queda en el intérprete".to_string(),
+                ));
+            }
+            if self.compilados.contains_key(&clave) {
+                continue;
+            }
+            let dependencia = modulo
+                .funciones
+                .iter()
+                .find(|candidata| candidata.nombre == nombre)
+                .ok_or_else(|| {
+                    ErrorJit::NoElegible(format!("no se encontró la función '{nombre}'"))
+                })?;
+            self.compilar_funcion(modulo, dependencia)?;
+        }
+        let clave = self.clave_de_funcion(modulo, &funcion.nombre);
+        let id_modulo = self.id_modulo(modulo);
+        let inicio = std::time::Instant::now();
+        let resultado = crate::traductor::compilar(modulo, funcion, &self.compilados, id_modulo);
+        self.estadisticas.tiempo_compilacion += inicio.elapsed();
+        let (funcion, bytes) = resultado?;
+        let total = self.estadisticas.bytes_codigo.saturating_add(bytes);
+        if total > self.configuracion.max_bytes_codigo {
+            return Err(ErrorJit::Limite("memoria de código generado"));
+        }
+        self.estadisticas.funciones_compiladas += 1;
+        self.estadisticas.bytes_codigo = total;
+        let funcion = Rc::new(funcion);
+        self.compilados.insert(clave, Rc::clone(&funcion));
+        Ok(funcion)
     }
 
     pub fn compilar_trivial(&mut self, valor: i64) -> Result<FuncionNativa, ErrorJit> {
@@ -213,6 +308,35 @@ mod pruebas {
         let salida = funcion.ejecutar(&[10_000]).expect("bucle nativo");
         assert_eq!(salida.valor, 49_995_000);
         assert_eq!(salida.estado, crate::ESTADO_EXITO);
+    }
+
+    #[cfg(feature = "nativo")]
+    #[test]
+    fn baseline_deberia_llamar_funciones_directas() {
+        use bytecode::Instruccion;
+
+        let (mut modulo, identidad) = funcion_manual(vec![Instruccion::RetornarLocal(0)], 1);
+        let (_otro_modulo, llamada) = funcion_manual(
+            vec![
+                Instruccion::CargarGlobal(0),
+                Instruccion::CargarLocal(0),
+                Instruccion::Llamar(1),
+                Instruccion::Retornar(),
+            ],
+            1,
+        );
+        modulo.nombres_globales = vec!["identidad".to_string()];
+        modulo.globales_mutables = vec![false];
+        modulo.funciones = vec![identidad, llamada];
+        modulo.funciones[0].nombre = "identidad".to_string();
+        let mut contexto = ContextoJit::default();
+        let funcion = contexto
+            .compilar_funcion(&modulo, &modulo.funciones[1])
+            .expect("llamada directa compilable");
+        let salida = funcion.ejecutar(&[42]).expect("llamada directa nativa");
+        assert_eq!(salida.valor, 42);
+        assert_eq!(salida.estado, crate::ESTADO_EXITO);
+        assert_eq!(contexto.estadisticas().funciones_compiladas, 2);
     }
 
     #[cfg(feature = "nativo")]

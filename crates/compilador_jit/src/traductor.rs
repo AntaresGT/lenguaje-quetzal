@@ -56,6 +56,12 @@ pub(crate) fn compilar(
         .compiled_code()
         .map(|codigo| codigo.code_buffer().len())
         .unwrap_or(0);
+    if let Some(ruta) = std::env::var_os("QUETZAL_JIT_BIN")
+        && let Some(codigo) = contexto.compiled_code()
+    {
+        std::fs::write(&ruta, codigo.code_buffer())
+            .map_err(|error| ErrorJit::Compilacion(error.to_string()))?;
+    }
     modulo_jit.clear_context(&mut contexto);
     modulo_jit.finalize_definitions().map_err(|error| {
         ErrorJit::Compilacion(format!("no se pudo finalizar el módulo: {error:?}"))

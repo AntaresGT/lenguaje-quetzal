@@ -205,3 +205,40 @@ entero resultado = sumar_hasta(5)
     drop(entorno);
     assert!(debil.upgrade().is_none());
 }
+
+#[test]
+fn jit_deberia_aceptar_mas_de_cuatro_argumentos() {
+    let codigo = r#"
+entero sumar_cinco(entero a, entero b, entero c, entero d, entero e) {
+    retornar a + b + c + d + e
+}
+entero a = sumar_cinco(1, 2, 3, 4, 5)
+entero b = sumar_cinco(1, 2, 3, 4, 5)
+entero c = sumar_cinco(1, 2, 3, 4, 5)
+entero d = sumar_cinco(1, 2, 3, 4, 5)
+entero resultado = sumar_cinco(1, 2, 3, 4, 5)
+"#;
+    let entorno = ejecutar(codigo, true).expect("cinco argumentos");
+    assert!(global(&entorno, "resultado").es_igual(&Valor::Entero(15)));
+}
+
+#[test]
+fn jit_deberia_volver_al_interprete_con_tipo_incompatible() {
+    let codigo = "entero identidad(entero n) { retornar n }\n";
+    let mut vm = Vm::nueva(Rc::new(modulos_nativos::crear_registro())).con_jit(true);
+    let (entorno, _) = vm
+        .cargar_modulo(Rc::new(compilar(codigo)), IndexMap::new())
+        .expect("módulo cargado");
+    let funcion = match &global(&entorno, "identidad") {
+        Valor::Funcion(datos) => Rc::clone(&datos.funcion),
+        otro => panic!("se esperaba función: {otro:?}"),
+    };
+    for _ in 0..4 {
+        vm.llamar_funcion(&funcion, &entorno, vec![Valor::Entero(1)], None, None)
+            .expect("calentamiento");
+    }
+    let resultado = vm
+        .llamar_funcion(&funcion, &entorno, vec![Valor::texto("texto")], None, None)
+        .expect("fallback interpretado");
+    assert!(resultado.es_igual(&Valor::texto("texto")));
+}

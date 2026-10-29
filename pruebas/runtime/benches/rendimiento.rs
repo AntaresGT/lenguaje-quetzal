@@ -26,6 +26,13 @@ entero fib(entero n) {
 }
 "#;
 
+#[cfg(feature = "jit")]
+const IDENTIDAD: &str = r#"
+entero identidad(entero n) {
+    retornar n
+}
+"#;
+
 const ATRIBUTOS: &str = r#"
 objeto Punto {
     publico:
@@ -256,6 +263,24 @@ fn ejecucion(criterion: &mut Criterion) {
                 preparada
             },
             |mut preparada| black_box(llamar(&mut preparada, vec![Valor::Entero(2_000_000)])),
+            BatchSize::SmallInput,
+        )
+    });
+    #[cfg(feature = "jit")]
+    criterion.bench_function("ejecucion/llamada_nativa_pequena", |b| {
+        b.iter_batched(
+            || {
+                let mut preparada = preparar_jit(IDENTIDAD, "identidad");
+                for _ in 0..4 {
+                    black_box(llamar(&mut preparada, vec![Valor::Entero(1)]));
+                }
+                preparada
+            },
+            |mut preparada| {
+                for _ in 0..200_000 {
+                    black_box(llamar(&mut preparada, vec![Valor::Entero(7)]));
+                }
+            },
             BatchSize::SmallInput,
         )
     });

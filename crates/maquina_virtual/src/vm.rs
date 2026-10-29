@@ -80,6 +80,54 @@ enum Flujo {
     Llamar(Marco),
 }
 
+#[cfg(feature = "jit")]
+struct ArgumentosNativos {
+    en_linea: [i64; 4],
+    dinamicos: Vec<i64>,
+    cantidad: usize,
+}
+
+#[cfg(feature = "jit")]
+impl ArgumentosNativos {
+    fn nuevo(argumentos: &[Valor]) -> Option<Self> {
+        let cantidad = argumentos.len();
+        if cantidad > 4 {
+            let dinamicos = argumentos
+                .iter()
+                .map(|argumento| match argumento {
+                    Valor::Entero(valor) => Some(*valor),
+                    _ => None,
+                })
+                .collect::<Option<Vec<_>>>()?;
+            return Some(Self {
+                en_linea: [0; 4],
+                dinamicos,
+                cantidad,
+            });
+        }
+        let mut en_linea = [0; 4];
+        for (indice, argumento) in argumentos.iter().enumerate() {
+            let Valor::Entero(valor) = argumento else {
+                return None;
+            };
+            en_linea[indice] = *valor;
+        }
+        Some(Self {
+            en_linea,
+            dinamicos: Vec::new(),
+            cantidad,
+        })
+    }
+
+    fn como_slice(&self) -> &[i64] {
+        if self.cantidad <= 4 {
+            &self.en_linea[..self.cantidad]
+        } else {
+            &self.dinamicos
+        }
+    }
+}
+
 impl Vm {
     pub fn nueva(nativos: Rc<RegistroNativos>) -> Self {
         Self {
@@ -545,18 +593,12 @@ impl Vm {
                 }
             }
         };
-        let enteros: Option<Vec<i64>> = argumentos
-            .iter()
-            .map(|argumento| match argumento {
-                Valor::Entero(valor) => Some(*valor),
-                _ => None,
-            })
-            .collect();
+        let enteros = ArgumentosNativos::nuevo(argumentos);
         let Some(enteros) = enteros else {
             self.jit.registrar_fallback();
             return None;
         };
-        let salida = match funcion.ejecutar(&enteros) {
+        let salida = match funcion.ejecutar(enteros.como_slice()) {
             Ok(salida) => salida,
             Err(_) => {
                 self.jit.registrar_fallback();
@@ -740,13 +782,14 @@ impl Vm {
         };
         #[cfg(feature = "jit")]
         if self.jit_habilitado && esto.is_none() && cantidad == funcion.parametros.len() {
-            let argumentos = self.pila[indice + 1..].to_vec();
-            if let Some(resultado) =
-                self.intentar_jit(&codigo, &entorno, &argumentos, Some(ubicacion))
-            {
-                let valor = resultado?;
-                self.pila.truncate(indice);
-                return Ok(Some(DestinoLlamada::Valor(valor)));
+            let argumentos = self.pila.split_off(indice + 1);
+            match self.intentar_jit(&codigo, &entorno, &argumentos, Some(ubicacion)) {
+                Some(Ok(valor)) => {
+                    self.pila.truncate(indice);
+                    return Ok(Some(DestinoLlamada::Valor(valor)));
+                }
+                Some(Err(fallo)) => return Err(fallo),
+                None => drop(self.pila.splice(indice + 1.., argumentos)),
             }
         }
         self.pila.remove(indice);

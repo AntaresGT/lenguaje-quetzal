@@ -50,6 +50,12 @@ entero resultado = sumar_hasta(10000)
 "#;
     let entorno = ejecutar(codigo, true).expect("programa con JIT");
     assert!(global(&entorno, "resultado").es_igual(&Valor::Entero(49_995_000)));
+    let runtimes = entorno.runtimes.borrow();
+    let codigo = runtimes.get("sumar_hasta").expect("runtime de función");
+    assert!(matches!(
+        &*codigo.jit.borrow(),
+        maquina_virtual::codigo::EstadoJit::Compilado(_)
+    ));
 }
 
 #[test]
@@ -155,6 +161,21 @@ entero resultado = identidad(5)
         .expect("módulo interpretado");
     assert!(global(&entorno, "resultado").es_igual(&Valor::Entero(5)));
     assert_eq!(vm.estadisticas_jit().funciones_compiladas, 0);
+}
+
+#[test]
+fn jit_no_deberia_anticipar_funciones_sin_bucle() {
+    let codigo = "entero identidad(entero n) { retornar n }\n";
+    let mut vm = Vm::nueva(Rc::new(modulos_nativos::crear_registro())).con_jit(true);
+    let (entorno, _) = vm
+        .cargar_modulo(Rc::new(compilar(codigo)), IndexMap::new())
+        .expect("módulo interpretado");
+    let runtimes = entorno.runtimes.borrow();
+    let codigo = runtimes.get("identidad").expect("runtime de función");
+    assert!(matches!(
+        &*codigo.jit.borrow(),
+        maquina_virtual::codigo::EstadoJit::Frio
+    ));
 }
 
 #[test]

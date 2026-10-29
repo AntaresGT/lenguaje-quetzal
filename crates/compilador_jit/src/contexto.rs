@@ -25,6 +25,46 @@ impl ContextoJit {
         self.estadisticas.fallbacks = self.estadisticas.fallbacks.saturating_add(1);
     }
 
+    pub fn deberia_anticipar(&self, funcion: &bytecode::FuncionCompilada) -> bool {
+        #[cfg(feature = "nativo")]
+        {
+            if !self.configuracion.anticipacion {
+                return false;
+            }
+            let cantidad = funcion.trozo.instrucciones.len();
+            if cantidad == 0 || cantidad > self.configuracion.max_instrucciones_anticipacion {
+                return false;
+            }
+            let costo =
+                cantidad.saturating_add((funcion.trozo.max_pila as usize).saturating_mul(2));
+            if costo > self.configuracion.max_costo_estimado_anticipacion {
+                return false;
+            }
+            if self.estadisticas.funciones_compiladas > 0 {
+                let promedio = self.estadisticas.tiempo_compilacion
+                    / self.estadisticas.funciones_compiladas as u32;
+                if promedio > self.configuracion.max_tiempo_compilacion_anticipacion {
+                    return false;
+                }
+            }
+            funcion
+                .trozo
+                .instrucciones
+                .iter()
+                .enumerate()
+                .any(|(pc, instruccion)| {
+                    instruccion
+                        .destino_salto()
+                        .is_some_and(|destino| destino < pc as u32)
+                })
+        }
+        #[cfg(not(feature = "nativo"))]
+        {
+            let _ = funcion;
+            false
+        }
+    }
+
     pub fn compilar_funcion(
         &mut self,
         modulo: &bytecode::ModuloCompilado,
@@ -320,6 +360,43 @@ mod pruebas {
                 }
             }
         }
+    }
+
+    #[cfg(feature = "nativo")]
+    #[test]
+    fn anticipacion_deberia_exigir_bucles_y_respetar_limites() {
+        use bytecode::Instruccion;
+
+        let contexto = ContextoJit::default();
+        let (_modulo, bucle) = funcion_manual(
+            vec![
+                Instruccion::CargarEntero(0),
+                Instruccion::GuardarLocal(1),
+                Instruccion::CargarLocal(1),
+                Instruccion::CargarLocal(0),
+                Instruccion::MenorEnteroSaltarSiFalso(7),
+                Instruccion::AjustarLocal(1, 1),
+                Instruccion::Saltar(2),
+                Instruccion::RetornarLocal(1),
+            ],
+            2,
+        );
+        assert!(contexto.deberia_anticipar(&bucle));
+
+        let (_modulo, identidad) = funcion_manual(vec![Instruccion::RetornarLocal(0)], 1);
+        assert!(!contexto.deberia_anticipar(&identidad));
+
+        let sin_anticipacion = ContextoJit::nuevo(ConfiguracionJit {
+            anticipacion: false,
+            ..ConfiguracionJit::default()
+        });
+        assert!(!sin_anticipacion.deberia_anticipar(&bucle));
+
+        let limitado = ContextoJit::nuevo(ConfiguracionJit {
+            max_instrucciones_anticipacion: 2,
+            ..ConfiguracionJit::default()
+        });
+        assert!(!limitado.deberia_anticipar(&bucle));
     }
 
     #[cfg(not(feature = "nativo"))]

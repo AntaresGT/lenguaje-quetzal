@@ -211,13 +211,16 @@ fn fases(criterion: &mut Criterion) {
     criterion.bench_function("fases/compilacion_jit", |b| {
         b.iter_batched(
             || {
-                let mut preparada = preparar_jit(BUCLE, "sumar_hasta");
-                for _ in 0..3 {
-                    black_box(llamar(&mut preparada, vec![Valor::Entero(1)]));
-                }
-                preparada
+                let modulo = Rc::new(compilar(BUCLE));
+                let vm = Vm::nueva(Rc::new(modulos_nativos::crear_registro())).con_jit(true);
+                (vm, modulo)
             },
-            |mut preparada| black_box(llamar(&mut preparada, vec![Valor::Entero(1)])),
+            |(mut vm, modulo)| {
+                black_box(
+                    vm.cargar_modulo(modulo, IndexMap::new())
+                        .expect("carga y compilación JIT"),
+                )
+            },
             BatchSize::SmallInput,
         )
     });
@@ -234,6 +237,14 @@ fn ejecucion(criterion: &mut Criterion) {
             )
         });
     }
+    #[cfg(feature = "jit")]
+    criterion.bench_function("ejecucion/bucles_enteros_jit_primera", |b| {
+        b.iter_batched(
+            || preparar_jit(BUCLE, "sumar_hasta"),
+            |mut preparada| black_box(llamar(&mut preparada, vec![Valor::Entero(2_000_000)])),
+            BatchSize::SmallInput,
+        )
+    });
     #[cfg(feature = "jit")]
     criterion.bench_function("ejecucion/bucles_enteros_jit", |b| {
         b.iter_batched(

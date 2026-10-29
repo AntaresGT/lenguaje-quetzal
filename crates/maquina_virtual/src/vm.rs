@@ -114,6 +114,17 @@ impl Vm {
     }
 
     #[cfg(feature = "jit")]
+    pub fn con_configuracion_jit(
+        mut self,
+        configuracion: compilador_jit::ConfiguracionJit,
+        habilitado: bool,
+    ) -> Self {
+        self.jit = ContextoJit::nuevo(configuracion);
+        self.jit_habilitado = habilitado;
+        self
+    }
+
+    #[cfg(feature = "jit")]
     pub fn estadisticas_jit(&self) -> compilador_jit::EstadisticasJit {
         self.jit.estadisticas()
     }
@@ -248,6 +259,8 @@ impl Vm {
             CodigoRuntime::de_trozo(&modulo.principal, modulo.ranuras_locales_principal, None),
         );
         *entorno.runtimes.borrow_mut() = runtimes;
+        #[cfg(feature = "jit")]
+        self.anticipar_funciones_jit(&entorno);
 
         let funciones: HashMap<&str, &FuncionCompilada> = modulo
             .funciones
@@ -477,6 +490,26 @@ impl Vm {
             return Rc::clone(codigo);
         }
         CodigoRuntime::de_funcion(funcion)
+    }
+
+    #[cfg(feature = "jit")]
+    fn anticipar_funciones_jit(&mut self, entorno: &Rc<EntornoModulo>) {
+        if !self.jit_habilitado {
+            return;
+        }
+        for funcion in &entorno.modulo.funciones {
+            if !self.jit.deberia_anticipar(funcion) {
+                continue;
+            }
+            let compilado = self.jit.compilar_funcion(&entorno.modulo, funcion);
+            let estado = match compilado {
+                Ok(funcion_nativa) => EstadoJit::Compilado(Rc::new(funcion_nativa)),
+                Err(_) => EstadoJit::NoElegible,
+            };
+            if let Some(codigo) = entorno.runtimes.borrow().get(&funcion.nombre) {
+                *codigo.jit.borrow_mut() = estado;
+            }
+        }
     }
 
     #[cfg(feature = "jit")]

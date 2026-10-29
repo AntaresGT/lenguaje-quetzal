@@ -55,7 +55,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Obtener código
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Instalar Rust estable
         uses: dtolnay/rust-toolchain@stable
@@ -162,7 +162,7 @@ jobs:
         run: ${{ matrix.paquetes }}
 
       - name: Obtener código
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Instalar Rust estable
         uses: dtolnay/rust-toolchain@stable
@@ -197,7 +197,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Obtener código
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Instalar Rust estable
         uses: dtolnay/rust-toolchain@stable

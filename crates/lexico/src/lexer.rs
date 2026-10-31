@@ -98,10 +98,27 @@ enum TokenCrudo {
     PuntoYComa,
 }
 
+/// Resultado del análisis léxico tolerante a errores.
+#[derive(Debug)]
+pub struct ResultadoTokens {
+    pub tokens: Vec<Token>,
+    pub errores: Vec<ErrorQuetzal>,
+}
+
 /// Convierte el código fuente en una lista de tokens terminada en [`TipoToken::Fin`].
 pub fn tokenizar(fuente: &Fuente) -> Result<Vec<Token>, ErrorQuetzal> {
+    let resultado = tokenizar_para_editor(fuente);
+    match resultado.errores.into_iter().next() {
+        Some(error) => Err(error),
+        None => Ok(resultado.tokens),
+    }
+}
+
+/// Tokeniza sin detenerse en el primer error para herramientas de edición.
+pub fn tokenizar_para_editor(fuente: &Fuente) -> ResultadoTokens {
     let mut lexer = TokenCrudo::lexer(&fuente.contenido);
     let mut tokens = Vec::new();
+    let mut errores = Vec::new();
 
     while let Some(resultado) = lexer.next() {
         let rango = lexer.span();
@@ -110,25 +127,31 @@ pub fn tokenizar(fuente: &Fuente) -> Result<Vec<Token>, ErrorQuetzal> {
 
         let crudo = match resultado {
             Ok(crudo) => crudo,
-            Err(()) => return Err(error_lexico(fuente, ubicacion, texto)),
+            Err(()) => {
+                errores.push(error_lexico(fuente, ubicacion, texto));
+                continue;
+            }
         };
 
         let tipo = match crudo {
             TokenCrudo::Identificador => palabras_reservadas::clasificar(texto)
                 .unwrap_or_else(|| TipoToken::Identificador(texto.to_string())),
-            TokenCrudo::Entero => {
-                let valor = texto.parse::<i64>().map_err(|_| {
-                    ErrorQuetzal::nuevo(
-                        diagnosticos_codigo_numero(),
-                        CategoriaError::Lexico,
-                        format!("el entero '{texto}' es demasiado grande"),
-                    )
-                    .con_ubicacion(ubicacion)
-                    .con_archivo(&fuente.nombre)
-                    .con_etiqueta("este número no cabe en un entero de 64 bits")
-                })?;
-                TipoToken::LiteralEntero(valor)
-            }
+            TokenCrudo::Entero => match texto.parse::<i64>() {
+                Ok(valor) => TipoToken::LiteralEntero(valor),
+                Err(_) => {
+                    errores.push(
+                        ErrorQuetzal::nuevo(
+                            diagnosticos_codigo_numero(),
+                            CategoriaError::Lexico,
+                            format!("el entero '{texto}' es demasiado grande"),
+                        )
+                        .con_ubicacion(ubicacion)
+                        .con_archivo(&fuente.nombre)
+                        .con_etiqueta("este número no cabe en un entero de 64 bits"),
+                    );
+                    continue;
+                }
+            },
             TokenCrudo::Numero => TipoToken::LiteralNumero(texto.to_string()),
             TokenCrudo::Texto => {
                 let interior = &texto[1..texto.len() - 1];
@@ -184,7 +207,7 @@ pub fn tokenizar(fuente: &Fuente) -> Result<Vec<Token>, ErrorQuetzal> {
         ubicacion: Ubicacion::nueva(fin, fin),
     });
 
-    Ok(tokens)
+    ResultadoTokens { tokens, errores }
 }
 
 /// Resuelve las secuencias de escape estándar de un texto.

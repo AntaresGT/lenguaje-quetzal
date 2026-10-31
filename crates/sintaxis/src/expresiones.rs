@@ -225,16 +225,29 @@ impl Parser<'_> {
         let mut argumentos = Vec::new();
         if !self.comprobar(&TipoToken::ParentesisDerecho) {
             loop {
-                argumentos.push(self.parsear_expresion()?);
+                match self.parsear_expresion() {
+                    Ok(argumento) => argumentos.push(argumento),
+                    Err(error) if self.modo_editor => {
+                        self.errores.push(error);
+                        return Ok(argumentos);
+                    }
+                    Err(error) => return Err(error),
+                }
                 if !self.consumir_si(&TipoToken::Coma) {
                     break;
                 }
             }
         }
-        self.esperar(
+        if let Err(error) = self.esperar(
             &TipoToken::ParentesisDerecho,
             "')' para cerrar los argumentos",
-        )?;
+        ) {
+            if self.modo_editor {
+                self.errores.push(error);
+                return Ok(argumentos);
+            }
+            return Err(error);
+        }
         Ok(argumentos)
     }
 

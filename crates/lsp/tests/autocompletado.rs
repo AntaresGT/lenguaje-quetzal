@@ -159,3 +159,66 @@ fn completion_deberia_aceptar_posiciones_al_final_de_linea() {
     );
     terminar(cliente, hilo);
 }
+
+#[test]
+fn completion_deberia_ofrecer_metodos_de_texto_tras_punto() {
+    let (cliente, hilo, _) = inicializar();
+    abrir(&cliente, "texto hola = \"Hola\"\nhola.");
+    let elementos = completar(&cliente, 1, 5);
+    assert!(
+        elementos
+            .iter()
+            .any(|elemento| elemento["label"] == "longitud")
+    );
+    assert!(!elementos.iter().any(|elemento| elemento["label"] == "si"));
+    terminar(cliente, hilo);
+}
+
+#[test]
+fn completion_deberia_filtrar_metodos_de_texto_por_prefijo() {
+    let (cliente, hilo, _) = inicializar();
+    abrir(&cliente, "texto hola = \"Hola\"\nhola.lon");
+    let elementos = completar(&cliente, 1, 8);
+    assert_eq!(elementos.len(), 1);
+    assert_eq!(elementos[0]["label"], "longitud");
+    terminar(cliente, hilo);
+}
+
+#[test]
+fn completion_deberia_ofrecer_funciones_de_consola() {
+    let (cliente, hilo, _) = inicializar();
+    abrir(&cliente, "consola.");
+    let elementos = completar(&cliente, 0, 8);
+    assert!(
+        elementos
+            .iter()
+            .any(|elemento| elemento["label"] == "mostrar")
+    );
+    terminar(cliente, hilo);
+}
+
+#[test]
+fn completion_deberia_ofrecer_solo_miembros_publicos_de_instancia() {
+    let (cliente, hilo, _) = inicializar();
+    abrir(
+        &cliente,
+        "objeto Usuario {\n    privado:\n        texto secreto\n    publico:\n        texto nombre\n        texto obtener_nombre() { retornar nombre }\n}\nUsuario usuario = nuevo Usuario()\nusuario.",
+    );
+    let elementos = completar(&cliente, 8, 8);
+    assert!(
+        elementos
+            .iter()
+            .any(|elemento| elemento["label"] == "obtener_nombre")
+    );
+    assert!(
+        elementos
+            .iter()
+            .any(|elemento| elemento["label"] == "nombre")
+    );
+    assert!(
+        !elementos
+            .iter()
+            .any(|elemento| elemento["label"] == "secreto")
+    );
+    terminar(cliente, hilo);
+}

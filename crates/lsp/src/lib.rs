@@ -4,4 +4,5 @@
 //! máquina virtual, del JIT o de la generación de ejecutables.
 #![forbid(unsafe_code)]
 
+pub mod documentos;
 pub mod servidor;

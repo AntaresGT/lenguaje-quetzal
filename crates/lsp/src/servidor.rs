@@ -1,9 +1,14 @@
 //! Transporte JSON-RPC y ciclo de vida del servidor LSP.
 
-use lsp_server::{Connection, ErrorCode, Message, ProtocolError, Request, Response};
+use lsp_server::{Connection, ErrorCode, Message, Notification, ProtocolError, Request, Response};
 use lsp_types::{
-    InitializeParams, InitializeResult, PositionEncodingKind, ServerCapabilities, ServerInfo,
+    DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
+    DidSaveTextDocumentParams, InitializeParams, InitializeResult, PositionEncodingKind,
+    SaveOptions, ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
+    TextDocumentSyncOptions, TextDocumentSyncSaveOptions,
 };
+
+use crate::documentos::{AlmacenDocumentos, DocumentoAbierto};
 
 /// Error de transporte o inicialización del servidor.
 #[derive(Debug, thiserror::Error)]
@@ -37,6 +42,7 @@ pub fn ejecutar(conexion: Connection) -> Result<(), ErrorServidor> {
     };
     conexion.initialize_finish(id, serde_json::to_value(resultado)?)?;
 
+    let mut documentos = AlmacenDocumentos::default();
     for mensaje in &conexion.receiver {
         match mensaje {
             Message::Request(solicitud) => {
@@ -45,7 +51,10 @@ pub fn ejecutar(conexion: Connection) -> Result<(), ErrorServidor> {
                 }
                 responder_metodo_desconocido(&conexion, solicitud);
             }
-            Message::Notification(_) | Message::Response(_) => {}
+            Message::Notification(notificacion) => {
+                procesar_notificacion(&mut documentos, notificacion);
+            }
+            Message::Response(_) => {}
         }
     }
 
@@ -55,7 +64,63 @@ pub fn ejecutar(conexion: Connection) -> Result<(), ErrorServidor> {
 fn capacidades() -> ServerCapabilities {
     ServerCapabilities {
         position_encoding: Some(PositionEncodingKind::UTF16),
+        text_document_sync: Some(TextDocumentSyncCapability::Options(
+            TextDocumentSyncOptions {
+                open_close: Some(true),
+                change: Some(TextDocumentSyncKind::FULL),
+                save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
+                    include_text: Some(false),
+                })),
+                ..TextDocumentSyncOptions::default()
+            },
+        )),
         ..ServerCapabilities::default()
+    }
+}
+
+fn procesar_notificacion(documentos: &mut AlmacenDocumentos, notificacion: Notification) {
+    let resultado = match notificacion.method.as_str() {
+        "textDocument/didOpen" => serde_json::from_value::<DidOpenTextDocumentParams>(
+            notificacion.params,
+        )
+        .map(|parametros| {
+            let documento = parametros.text_document;
+            documentos.abrir(DocumentoAbierto::nuevo(
+                documento.uri.to_string(),
+                documento.version,
+                documento.text,
+            ));
+        }),
+        "textDocument/didChange" => serde_json::from_value::<DidChangeTextDocumentParams>(
+            notificacion.params,
+        )
+        .map(|parametros| {
+            let uri = parametros.text_document.uri.to_string();
+            let version = parametros.text_document.version;
+            match parametros.content_changes.as_slice() {
+                [cambio] if cambio.range.is_none() => {
+                    documentos.cambiar_completo(&uri, version, cambio.text.clone());
+                }
+                _ => eprintln!("Cambio LSP ignorado: se esperaba contenido completo"),
+            }
+        }),
+        "textDocument/didSave" => serde_json::from_value::<DidSaveTextDocumentParams>(
+            notificacion.params,
+        )
+        .map(|parametros| {
+            documentos.guardar(&parametros.text_document.uri.to_string(), parametros.text);
+        }),
+        "textDocument/didClose" => serde_json::from_value::<DidCloseTextDocumentParams>(
+            notificacion.params,
+        )
+        .map(|parametros| {
+            documentos.cerrar(&parametros.text_document.uri.to_string());
+        }),
+        _ => return,
+    };
+
+    if let Err(error) = resultado {
+        eprintln!("Notificación LSP inválida: {error}");
     }
 }
 

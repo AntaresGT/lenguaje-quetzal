@@ -443,6 +443,11 @@ fn efecto_pila(instruccion: Instruccion, nombre: &str) -> Result<(u32, u32), Err
         | CodigoOp::MenorEntero
         | CodigoOp::MayorOIgualEntero
         | CodigoOp::MenorOIgualEntero
+        | CodigoOp::SumarNumero
+        | CodigoOp::RestarNumero
+        | CodigoOp::MultiplicarNumero
+        | CodigoOp::DividirNumero
+        | CodigoOp::ModuloNumero
         | CodigoOp::Indexar => (2, 1),
         CodigoOp::CargarMiembro
         | CodigoOp::CargarAtributo
@@ -576,6 +581,18 @@ mod pruebas {
     #[test]
     fn verificar_deberia_rechazar_salto_fuera_de_rango() {
         assert!(verificar(vec![Instruccion::Saltar(99)]).is_err());
+    }
+
+    #[test]
+    fn aritmetica_decimal_deberia_exigir_dos_operandos() {
+        assert!(verificar(vec![Instruccion::SumarNumero()]).is_err());
+        let maxima = verificar(vec![
+            Instruccion::CargarEntero(1),
+            Instruccion::CargarEntero(2),
+            Instruccion::SumarNumero(),
+        ])
+        .expect("suma decimal válida");
+        assert_eq!(maxima, 2);
     }
 
     #[test]

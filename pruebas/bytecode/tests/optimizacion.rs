@@ -76,3 +76,21 @@ fn generar_no_deberia_plegar_division_por_cero() {
             .contains(&bytecode::Instruccion::DividirEntero())
     );
 }
+
+#[test]
+fn generar_sin_procesar_deberia_permitir_medir_cada_fase_una_vez() {
+    let fuente = Fuente::nueva(
+        "prueba.qz",
+        "entero contar() {\n    entero var i = 0\n    i++\n    retornar i\n}\n",
+    );
+    let ast = sintaxis::parsear_modulo(&fuente).expect("el código debe parsear");
+    let crudo = bytecode::generar_modulo_sin_procesar(&ast).expect("debe generar bytecode crudo");
+    let mut procesado = crudo.clone();
+    bytecode::optimizar_modulo(&mut procesado);
+    bytecode::verificar_modulo(&mut procesado).expect("el bytecode debe ser válido");
+    assert_ne!(crudo, procesado);
+    assert_eq!(
+        bytecode::generar_modulo(&ast).expect("debe ejecutar el flujo completo"),
+        procesado
+    );
+}

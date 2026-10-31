@@ -30,9 +30,11 @@ pub enum EstadoJit {
 pub enum CacheSitio {
     Vacia,
     Atributo { clase: u64, slot: u16 },
+    AtributosPolimorficos { clases: [u64; 2], slots: [u16; 2] },
     Metodo { clase: u64 },
     Nativa { tipo: u8, id: IdNativo },
-    Polimorfica,
+    Externa { id: IdNativo },
+    Generica { clase: u64, repeticiones: u16 },
 }
 
 /// Bytecode de una función o trozo, con tablas laterales de runtime.

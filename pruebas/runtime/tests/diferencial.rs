@@ -4,12 +4,14 @@
 use std::rc::Rc;
 
 use indexmap::IndexMap;
+use maquina_virtual::codigo::CacheSitio;
 use maquina_virtual::{Valor, Vm};
 use nucleo::Fuente;
 
-fn intentar_entorno(
+fn intentar_entorno_con_modo(
     codigo: &str,
     optimizar: bool,
+    despacho_rapido: bool,
 ) -> Result<Rc<maquina_virtual::valores::EntornoModulo>, nucleo::ErrorQuetzal> {
     let fuente = Fuente::nueva("diferencial.qz", codigo);
     let ast = sintaxis::parsear_modulo(&fuente).expect("debe parsear");
@@ -19,8 +21,18 @@ fn intentar_entorno(
     if !optimizar {
         vm = vm.sin_optimizar();
     }
+    if !despacho_rapido {
+        vm = vm.sin_despacho_rapido();
+    }
     vm.cargar_modulo(Rc::new(modulo), IndexMap::new())
         .map(|(entorno, _)| entorno)
+}
+
+fn intentar_entorno(
+    codigo: &str,
+    optimizar: bool,
+) -> Result<Rc<maquina_virtual::valores::EntornoModulo>, nucleo::ErrorQuetzal> {
+    intentar_entorno_con_modo(codigo, optimizar, true)
 }
 
 fn entorno(codigo: &str, optimizar: bool) -> Rc<maquina_virtual::valores::EntornoModulo> {
@@ -37,15 +49,31 @@ fn global(entorno: &maquina_virtual::valores::EntornoModulo, nombre: &str) -> Va
         .clone()
 }
 
+fn comprobar_globales(codigo: &str, esperados: &[(&str, Valor)]) {
+    for (optimizar, despacho_rapido) in [(true, true), (false, true), (true, false)] {
+        let entorno = intentar_entorno_con_modo(codigo, optimizar, despacho_rapido)
+            .expect("debe ejecutar en los tres modos");
+        for (nombre, esperado) in esperados {
+            let actual = global(&entorno, nombre);
+            assert!(
+                actual.es_igual(esperado),
+                "global '{nombre}' difiere con optimizar={optimizar} y rapido={despacho_rapido}: actual={actual:?} esperado={esperado:?}"
+            );
+        }
+    }
+}
+
 fn mismos_globales(codigo: &str, nombres: &[&str]) {
     let con = entorno(codigo, true);
     let sin = entorno(codigo, false);
+    let generico = intentar_entorno_con_modo(codigo, true, false).expect("debe ejecutar");
     for nombre in nombres {
         let a = global(&con, nombre);
         let b = global(&sin, nombre);
+        let esperado = global(&generico, nombre);
         assert!(
-            a.es_igual(&b),
-            "global '{nombre}' difiere: optimizar={a:?} puro={b:?}"
+            a.es_igual(&esperado) && b.es_igual(&esperado),
+            "global '{nombre}' difiere: optimizar={a:?} puro={b:?} generico={esperado:?}"
         );
     }
 }
@@ -59,9 +87,16 @@ fn mismos_errores(codigo: &str) {
         Ok(_) => panic!("el intérprete puro debe fallar"),
         Err(error) => error,
     };
-    assert_eq!(con.codigo, sin.codigo);
-    assert_eq!(con.categoria, sin.categoria);
-    assert_eq!(con.mensaje, sin.mensaje);
+    let generico = match intentar_entorno_con_modo(codigo, true, false) {
+        Ok(_) => panic!("el despachador general debe fallar"),
+        Err(error) => error,
+    };
+    for error in [&con, &sin] {
+        assert_eq!(error.codigo, generico.codigo);
+        assert_eq!(error.categoria, generico.categoria);
+        assert_eq!(error.mensaje, generico.mensaje);
+        assert_eq!(error.ubicacion, generico.ubicacion);
+    }
 }
 
 #[test]
@@ -289,4 +324,389 @@ entero recuperado = recuperar(41)
 "#,
         &["normal", "recursivo", "recuperado"],
     );
+}
+
+#[test]
+fn diferencial_desbordamiento_del_camino_rapido_deberia_ser_capturable() {
+    comprobar_globales(
+        r#"
+texto var mensaje = "sin capturar"
+vacio provocar() {
+    entero var contador = 9223372036854775807
+    intentar {
+        contador++
+    } capturar (excepcion e) {
+        mensaje = e.mensaje
+    }
+}
+provocar()
+"#,
+        &[(
+            "mensaje",
+            Valor::texto("desbordamiento de entero al ajustar 9223372036854775807 en 1"),
+        )],
+    );
+}
+
+#[test]
+fn diferencial_error_de_tipo_del_camino_rapido_deberia_ser_capturable() {
+    comprobar_globales(
+        r#"
+entero var capturas = 0
+vacio provocar() {
+    jsn valores = { condicion: 1 }
+    intentar {
+        si (valores.condicion) {
+            capturas = 10
+        }
+    } capturar (excepcion e) {
+        capturas += 1
+    }
+}
+provocar()
+"#,
+        &[("capturas", Valor::Entero(1))],
+    );
+}
+
+#[test]
+fn diferencial_division_por_cero_deberia_conservar_la_captura() {
+    comprobar_globales(
+        r#"
+texto var mensaje = ""
+vacio provocar() {
+    entero divisor = 0
+    intentar {
+        entero resultado = 10 / divisor
+    } capturar (excepcion e) {
+        mensaje = e.mensaje
+    }
+}
+provocar()
+"#,
+        &[("mensaje", Valor::texto("división por cero"))],
+    );
+}
+
+#[test]
+fn diferencial_excepciones_anidadas_deberian_conservar_el_orden() {
+    comprobar_globales(
+        r#"
+texto var mensaje = ""
+vacio provocar() {
+    entero var contador = 9223372036854775807
+    intentar {
+        intentar {
+            contador++
+        } capturar (excepcion e) {
+            mensaje = "interna"
+            lanzar "externa"
+        }
+    } capturar (excepcion e) {
+        mensaje += ":" + e.mensaje
+    }
+}
+provocar()
+"#,
+        &[("mensaje", Valor::texto("interna:externa"))],
+    );
+}
+
+#[test]
+fn diferencial_excepcion_en_funcion_llamada_deberia_limpiar_su_marco() {
+    comprobar_globales(
+        r#"
+entero var resultado = 0
+vacio fallar() {
+    entero var contador = 9223372036854775807
+    contador++
+}
+vacio llamar() {
+    intentar {
+        fallar()
+    } capturar (excepcion e) {
+        resultado = 42
+    }
+}
+llamar()
+"#,
+        &[("resultado", Valor::Entero(42))],
+    );
+}
+
+#[test]
+fn diferencial_excepciones_en_bucle_deberian_permitir_continuar() {
+    comprobar_globales(
+        r#"
+entero var capturas = 0
+vacio provocar() {
+    entero var contador = 9223372036854775807
+    entero delta = 1
+    para (entero var i = 0; i < 3; i++) {
+        intentar {
+            contador += delta
+        } capturar (excepcion e) {
+            capturas += 1
+        }
+    }
+}
+provocar()
+"#,
+        &[("capturas", Valor::Entero(3))],
+    );
+}
+
+#[test]
+fn diferencial_retorno_despues_de_excepcion_deberia_usar_locales_validos() {
+    comprobar_globales(
+        r#"
+entero recuperar() {
+    entero var contador = 9223372036854775807
+    entero var resultado = 41
+    intentar {
+        contador++
+    } capturar (excepcion e) {
+        resultado += 1
+    }
+    retornar resultado
+}
+entero resultado = recuperar()
+"#,
+        &[("resultado", Valor::Entero(42))],
+    );
+}
+
+#[test]
+fn diferencial_captura_deberia_limpiar_los_locales_de_la_iteracion() {
+    comprobar_globales(
+        r#"
+entero recuperar() {
+    entero var resultado = 7
+    para (entero var i = 0; i < 1; i++) {
+        entero var contador = 9223372036854775807
+        intentar {
+            contador++
+        } capturar (excepcion e) {
+            resultado += 1
+        }
+    }
+    entero posterior = 34
+    retornar resultado + posterior
+}
+entero resultado = recuperar()
+"#,
+        &[("resultado", Valor::Entero(42))],
+    );
+}
+
+#[test]
+fn diferencial_excepcion_deberia_limpiar_los_marcos_recursivos() {
+    comprobar_globales(
+        r#"
+entero descender(entero n) {
+    si (n == 0) {
+        entero var contador = 9223372036854775807
+        contador++
+        retornar 0
+    }
+    retornar descender(n - 1)
+}
+entero recuperar() {
+    intentar {
+        retornar descender(8)
+    } capturar (excepcion e) {
+        retornar 108
+    }
+}
+entero resultado = recuperar()
+"#,
+        &[("resultado", Valor::Entero(108))],
+    );
+}
+
+#[test]
+fn diferencial_ejecucion_deberia_continuar_despues_de_capturar() {
+    comprobar_globales(
+        r#"
+entero var resultado = 1
+vacio provocar() {
+    entero var contador = 9223372036854775807
+    intentar {
+        contador++
+    } capturar (excepcion e) {
+        resultado += 10
+    }
+    resultado += 100
+}
+provocar()
+resultado += 1000
+"#,
+        &[("resultado", Valor::Entero(1111))],
+    );
+}
+
+#[test]
+fn diferencial_suma_de_locales_deberia_conservar_el_desbordamiento() {
+    comprobar_globales(
+        r#"
+texto var mensaje = ""
+vacio provocar() {
+    entero izquierda = 9223372036854775807
+    entero derecha = 1
+    intentar {
+        entero resultado = izquierda + derecha
+    } capturar (excepcion e) {
+        mensaje = e.mensaje
+    }
+}
+provocar()
+"#,
+        &[(
+            "mensaje",
+            Valor::texto("desbordamiento de entero al sumar 9223372036854775807 y 1"),
+        )],
+    );
+}
+
+#[test]
+fn diferencial_atributos_deberian_conservar_dos_entradas_inline() {
+    let entorno = entorno(
+        r#"
+objeto A { publico: entero var valor = 11 }
+objeto B { publico: entero var otro = 22 entero var valor = 33 }
+A primero = nuevo A()
+B segundo = nuevo B()
+entero ejecutar() {
+    jsn var actual = { objeto: primero }
+    entero var suma = 0
+    para (entero var i = 0; i < 100; i++) {
+        si (i % 2 == 0) { actual.objeto = primero } sino { actual.objeto = segundo }
+        suma += actual.objeto.valor
+    }
+    retornar suma
+}
+entero resultado = ejecutar()
+"#,
+        true,
+    );
+    assert!(global(&entorno, "resultado").es_igual(&Valor::Entero(2200)));
+    let runtimes = entorno.runtimes.borrow();
+    let codigo = runtimes.get("ejecutar").expect("runtime de ejecutar");
+    assert!(
+        codigo
+            .caches
+            .iter()
+            .any(|cache| matches!(cache.get(), CacheSitio::AtributosPolimorficos { .. }))
+    );
+}
+
+#[test]
+fn diferencial_atributos_deberian_recuperar_especializacion_tras_tercera_clase() {
+    let entorno = entorno(
+        r#"
+objeto A { publico: entero var valor = 11 }
+objeto B { publico: entero var otro = 22 entero var valor = 33 }
+objeto C { publico: entero var x = 44 entero var extra = 55 entero var valor = 66 }
+A primero = nuevo A()
+B segundo = nuevo B()
+C tercero = nuevo C()
+entero ejecutar() {
+    jsn var actual = { objeto: primero }
+    entero var resultado = 0
+    para (entero var i = 0; i < 90; i++) {
+        si (i % 3 == 0) {
+            actual.objeto = primero
+        } sino si (i % 3 == 1) {
+            actual.objeto = segundo
+        } sino {
+            actual.objeto = tercero
+        }
+        resultado = actual.objeto.valor
+    }
+    para (entero var i = 0; i < 64; i++) {
+        actual.objeto = primero
+        resultado = actual.objeto.valor
+    }
+    retornar resultado
+}
+entero resultado = ejecutar()
+"#,
+        true,
+    );
+    assert!(global(&entorno, "resultado").es_igual(&Valor::Entero(11)));
+    let runtimes = entorno.runtimes.borrow();
+    let codigo = runtimes.get("ejecutar").expect("runtime de ejecutar");
+    assert!(
+        codigo
+            .caches
+            .iter()
+            .any(|cache| matches!(cache.get(), CacheSitio::Atributo { .. }))
+    );
+}
+
+#[test]
+fn diferencial_decimales_deberian_conservar_precision_en_operaciones_especializadas() {
+    comprobar_globales(
+        r#"
+número var valor = 10.0
+valor += 0.5
+valor *= 2.0
+valor -= 1.0
+valor /= 4.0
+valor %= 2.0
+número exacto = 0.1 + 0.2
+"#,
+        &[
+            (
+                "valor",
+                Valor::numero("1.0".parse().expect("decimal válido")),
+            ),
+            (
+                "exacto",
+                Valor::numero("0.3".parse().expect("decimal válido")),
+            ),
+        ],
+    );
+}
+
+#[test]
+fn diferencial_division_decimal_por_cero_deberia_conservar_el_error() {
+    mismos_errores("número resultado = 1.0 / 0.0\n");
+}
+
+#[test]
+fn diferencial_modulo_decimal_por_cero_deberia_conservar_el_error() {
+    mismos_errores("número resultado = 1.0 % 0.0\n");
+}
+
+#[test]
+fn diferencial_nombres_nativos_deberian_conservar_su_valor_y_cache() {
+    let codigo = r#"
+entero ejecutar() {
+    entero var total = 0
+    para (entero var i = 0; i < 10; i++) {
+        si (rango == rango) {
+            total += 100
+        }
+        total += rango(1, 3).longitud()
+    }
+    retornar total
+}
+entero resultado = ejecutar()
+"#;
+    comprobar_globales(codigo, &[("resultado", Valor::Entero(30))]);
+    let entorno = entorno(codigo, true);
+    let runtimes = entorno.runtimes.borrow();
+    let runtime = runtimes.get("ejecutar").expect("runtime de ejecutar");
+    assert!(
+        runtime
+            .caches
+            .iter()
+            .any(|cache| matches!(cache.get(), CacheSitio::Externa { .. }))
+    );
+}
+
+#[test]
+fn diferencial_cache_sitio_deberia_permanecer_compacta() {
+    assert_eq!(std::mem::size_of::<CacheSitio>(), 24);
 }

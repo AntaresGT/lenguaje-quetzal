@@ -1,5 +1,7 @@
-//! Servidor de lenguaje (LSP) del Lenguaje Quetzal.
+//! Servidor de lenguaje oficial del Lenguaje Quetzal.
 //!
-//! **Estado: futuro.** Esqueleto declarado; se implementará en una fase
-//! posterior reutilizando `lexico`, `sintaxis` y `semantica`.
+//! Analiza código fuente sin ejecutar programas Quetzal ni depender de la
+//! máquina virtual, del JIT o de la generación de ejecutables.
 #![forbid(unsafe_code)]
+
+pub mod servidor;

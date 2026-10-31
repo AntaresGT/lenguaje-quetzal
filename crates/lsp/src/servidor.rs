@@ -4,11 +4,14 @@ use lsp_server::{Connection, ErrorCode, Message, Notification, ProtocolError, Re
 use lsp_types::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
     DidSaveTextDocumentParams, InitializeParams, InitializeResult, PositionEncodingKind,
-    SaveOptions, ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextDocumentSyncOptions, TextDocumentSyncSaveOptions,
+    PublishDiagnosticsParams, SaveOptions, ServerCapabilities, ServerInfo,
+    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
+    TextDocumentSyncSaveOptions,
 };
 
+use crate::analisis::analizar_documento;
 use crate::documentos::{AlmacenDocumentos, DocumentoAbierto};
+use crate::servicios::diagnosticos::convertir_diagnosticos;
 
 /// Error de transporte o inicialización del servidor.
 #[derive(Debug, thiserror::Error)]
@@ -52,7 +55,7 @@ pub fn ejecutar(conexion: Connection) -> Result<(), ErrorServidor> {
                 responder_metodo_desconocido(&conexion, solicitud);
             }
             Message::Notification(notificacion) => {
-                procesar_notificacion(&mut documentos, notificacion);
+                procesar_notificacion(&conexion, &mut documentos, notificacion);
             }
             Message::Response(_) => {}
         }
@@ -78,18 +81,26 @@ fn capacidades() -> ServerCapabilities {
     }
 }
 
-fn procesar_notificacion(documentos: &mut AlmacenDocumentos, notificacion: Notification) {
+fn procesar_notificacion(
+    conexion: &Connection,
+    documentos: &mut AlmacenDocumentos,
+    notificacion: Notification,
+) {
     let resultado = match notificacion.method.as_str() {
         "textDocument/didOpen" => serde_json::from_value::<DidOpenTextDocumentParams>(
             notificacion.params,
         )
         .map(|parametros| {
             let documento = parametros.text_document;
+            let uri = documento.uri.to_string();
             documentos.abrir(DocumentoAbierto::nuevo(
-                documento.uri.to_string(),
+                uri.clone(),
                 documento.version,
                 documento.text,
             ));
+            if let Some(documento) = documentos.obtener(&uri) {
+                publicar_diagnosticos(conexion, documento);
+            }
         }),
         "textDocument/didChange" => serde_json::from_value::<DidChangeTextDocumentParams>(
             notificacion.params,
@@ -99,7 +110,11 @@ fn procesar_notificacion(documentos: &mut AlmacenDocumentos, notificacion: Notif
             let version = parametros.text_document.version;
             match parametros.content_changes.as_slice() {
                 [cambio] if cambio.range.is_none() => {
-                    documentos.cambiar_completo(&uri, version, cambio.text.clone());
+                    if documentos.cambiar_completo(&uri, version, cambio.text.clone())
+                        && let Some(documento) = documentos.obtener(&uri)
+                    {
+                        publicar_diagnosticos(conexion, documento);
+                    }
                 }
                 _ => eprintln!("Cambio LSP ignorado: se esperaba contenido completo"),
             }
@@ -108,19 +123,67 @@ fn procesar_notificacion(documentos: &mut AlmacenDocumentos, notificacion: Notif
             notificacion.params,
         )
         .map(|parametros| {
-            documentos.guardar(&parametros.text_document.uri.to_string(), parametros.text);
+            let uri = parametros.text_document.uri.to_string();
+            if documentos.guardar(&uri, parametros.text)
+                && let Some(documento) = documentos.obtener(&uri)
+            {
+                publicar_diagnosticos(conexion, documento);
+            }
         }),
         "textDocument/didClose" => serde_json::from_value::<DidCloseTextDocumentParams>(
             notificacion.params,
         )
         .map(|parametros| {
-            documentos.cerrar(&parametros.text_document.uri.to_string());
+            let uri = parametros.text_document.uri.to_string();
+            if documentos.cerrar(&uri).is_some() {
+                limpiar_diagnosticos(conexion, &uri);
+            }
         }),
         _ => return,
     };
 
     if let Err(error) = resultado {
         eprintln!("Notificación LSP inválida: {error}");
+    }
+}
+
+fn publicar_diagnosticos(conexion: &Connection, documento: &DocumentoAbierto) {
+    let Ok(uri) = documento.uri.parse() else {
+        eprintln!("URI de documento inválida: {}", documento.uri);
+        return;
+    };
+    let errores = analizar_documento(&documento.uri, &documento.contenido);
+    let diagnostics = convertir_diagnosticos(&uri, &documento.contenido, errores);
+    let parametros = PublishDiagnosticsParams {
+        uri,
+        diagnostics,
+        version: Some(documento.version),
+    };
+    if conexion
+        .sender
+        .send(Notification::new("textDocument/publishDiagnostics".to_string(), parametros).into())
+        .is_err()
+    {
+        eprintln!("No se pudieron publicar diagnósticos: canal desconectado");
+    }
+}
+
+fn limpiar_diagnosticos(conexion: &Connection, uri: &str) {
+    let Ok(uri) = uri.parse() else {
+        eprintln!("URI de documento inválida: {uri}");
+        return;
+    };
+    let parametros = PublishDiagnosticsParams {
+        uri,
+        diagnostics: Vec::new(),
+        version: None,
+    };
+    if conexion
+        .sender
+        .send(Notification::new("textDocument/publishDiagnostics".to_string(), parametros).into())
+        .is_err()
+    {
+        eprintln!("No se pudieron limpiar diagnósticos: canal desconectado");
     }
 }
 

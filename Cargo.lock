@@ -1478,7 +1478,9 @@ dependencies = [
  "lsp-server",
  "lsp-types",
  "nucleo",
+ "semantica",
  "serde_json",
+ "sintaxis",
  "thiserror",
 ]
 
@@ -1882,6 +1884,7 @@ dependencies = [
 name = "pruebas_semantica"
 version = "0.0.2"
 dependencies = [
+ "ast",
  "nucleo",
  "semantica",
  "sintaxis",

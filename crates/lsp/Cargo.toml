@@ -13,6 +13,8 @@ path = "src/principal.rs"
 
 [dependencies]
 nucleo = { workspace = true }
+sintaxis = { workspace = true }
+semantica = { workspace = true }
 lsp-server = "0.10.0"
 lsp-types = "0.97.0"
 serde_json = { workspace = true }

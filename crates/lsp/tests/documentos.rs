@@ -80,13 +80,16 @@ fn cambios_rapidos_deberian_conservar_la_ultima_version() {
 }
 
 fn recibir_respuesta(conexion: &Connection) -> Response {
-    match conexion
-        .receiver
-        .recv_timeout(Duration::from_secs(2))
-        .expect("debe recibir respuesta")
-    {
-        Message::Response(respuesta) => respuesta,
-        otro => panic!("se esperaba respuesta, se recibió: {otro:?}"),
+    loop {
+        match conexion
+            .receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("debe recibir respuesta")
+        {
+            Message::Response(respuesta) => return respuesta,
+            Message::Notification(_) => {}
+            otro => panic!("se esperaba respuesta, se recibió: {otro:?}"),
+        }
     }
 }
 

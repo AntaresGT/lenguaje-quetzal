@@ -13,9 +13,11 @@
 //! código de Quetzal en sí siga siendo de un solo hilo.
 
 use std::cell::Cell;
-use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
+
+use crate::errores::Fallo;
 
 /// Datos que pueden cruzar del hilo de fondo al hilo de la VM: nada de `Rc`
 /// ni de `Valor` (no son `Send`). El módulo `crate::valores` sabe convertir
@@ -68,7 +70,7 @@ pub enum Mensaje {
 #[derive(Clone)]
 pub struct ManijaBucle {
     entrada: Sender<Mensaje>,
-    runtime: Arc<tokio::runtime::Runtime>,
+    runtime: Arc<OnceLock<Result<tokio::runtime::Runtime, String>>>,
 }
 
 impl ManijaBucle {
@@ -78,11 +80,25 @@ impl ManijaBucle {
         let _ = self.entrada.send(mensaje);
     }
 
-    /// El runtime de tokio compartido: los módulos nativos lo usan para
-    /// lanzar futuros de E/S, por ejemplo
-    /// `manija.runtime().spawn(async move { ... })`.
-    pub fn runtime(&self) -> &tokio::runtime::Runtime {
-        &self.runtime
+    /// Obtiene el runtime compartido, construyéndolo una única vez en el
+    /// primer uso. Las manijas clonadas conservan su propiedad y, con ella,
+    /// la vida del runtime mientras exista trabajo que lo necesite.
+    pub fn runtime(&self) -> Result<&tokio::runtime::Runtime, Fallo> {
+        match self.runtime.get_or_init(|| {
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .thread_name("quetzal-red")
+                .build()
+                .map_err(|error| error.to_string())
+        }) {
+            Ok(runtime) => Ok(runtime),
+            Err(mensaje) => Err(Fallo::excepcion(
+                "E0702",
+                format!("no se pudo crear el runtime asincrónico de Quetzal: {mensaje}"),
+                Vec::new(),
+                None,
+            )),
+        }
     }
 }
 
@@ -106,16 +122,11 @@ impl Default for BucleEventos {
 impl BucleEventos {
     pub fn nuevo() -> Self {
         let (entrada, salida) = mpsc::channel();
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .thread_name("quetzal-red")
-            .build()
-            .expect("no se pudo crear el runtime asincrónico de Quetzal");
         Self {
             salida,
             manija: ManijaBucle {
                 entrada,
-                runtime: Arc::new(runtime),
+                runtime: Arc::new(OnceLock::new()),
             },
             trabajo_activo: Cell::new(0),
             siguiente_id: Cell::new(1),
@@ -164,5 +175,56 @@ impl BucleEventos {
     /// periódicamente si sigue habiendo trabajo activo.
     pub fn recibir_con_limite(&self, limite: Duration) -> Option<Mensaje> {
         self.salida.recv_timeout(limite).ok()
+    }
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    #[test]
+    fn nuevo_no_deberia_inicializar_el_runtime() {
+        for _ in 0..4 {
+            let bucle = BucleEventos::nuevo();
+            assert!(bucle.manija.runtime.get().is_none());
+        }
+    }
+
+    #[test]
+    fn manijas_deberian_compartir_la_primera_inicializacion() {
+        let bucle = BucleEventos::nuevo();
+        let primera = bucle.manija();
+        let segunda = primera.clone();
+        assert!(primera.runtime.get().is_none());
+
+        let runtime_a = primera.runtime().expect("runtime disponible");
+        let runtime_b = segunda.runtime().expect("runtime ya inicializado");
+        assert!(std::ptr::eq(runtime_a, runtime_b));
+        assert!(primera.runtime.get().is_some());
+    }
+
+    #[test]
+    fn accesos_concurrentes_deberian_obtener_el_mismo_runtime() {
+        let bucle = BucleEventos::nuevo();
+        let direcciones = std::thread::scope(|ambito| {
+            let mut hilos = Vec::new();
+            for _ in 0..8 {
+                let manija = bucle.manija();
+                hilos.push(ambito.spawn(move || {
+                    let runtime = manija.runtime().expect("inicialización concurrente");
+                    runtime as *const tokio::runtime::Runtime as usize
+                }));
+            }
+            hilos
+                .into_iter()
+                .map(|hilo| hilo.join().expect("hilo de inicialización"))
+                .collect::<Vec<_>>()
+        });
+
+        assert!(
+            direcciones
+                .iter()
+                .all(|direccion| *direccion == direcciones[0])
+        );
     }
 }

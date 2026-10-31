@@ -1815,6 +1815,7 @@ dependencies = [
  "bytecode",
  "criterion",
  "indexmap",
+ "lexico",
  "maquina_virtual",
  "modulos_nativos",
  "motor",

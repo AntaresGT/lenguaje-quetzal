@@ -55,6 +55,7 @@ struct Marco {
     codigo: Rc<CodigoRuntime>,
     pc: u32,
     base: u32,
+    base_limpieza: u32,
     ranuras: u16,
     entorno: Rc<EntornoModulo>,
     esto: Option<Valor>,
@@ -691,6 +692,7 @@ impl Vm {
             codigo,
             pc: 0,
             base,
+            base_limpieza: base,
             ranuras,
             entorno: Rc::clone(entorno),
             esto,
@@ -730,6 +732,7 @@ impl Vm {
             codigo,
             pc: 0,
             base: base as u32,
+            base_limpieza: (base - 1) as u32,
             ranuras,
             entorno: Rc::clone(entorno),
             esto,
@@ -795,7 +798,6 @@ impl Vm {
                 None => drop(self.pila.splice(indice + 1.., argumentos)),
             }
         }
-        self.pila.remove(indice);
         self.preparar_marco_en_pila(&funcion, &entorno, codigo, cantidad, esto, Some(ubicacion))
             .map(|marco| Some(DestinoLlamada::Marco(marco)))
     }
@@ -835,6 +837,7 @@ impl Vm {
             codigo,
             pc: 0,
             base: base_pila,
+            base_limpieza: base_pila,
             ranuras,
             entorno,
             esto,
@@ -865,6 +868,7 @@ impl Vm {
             codigo,
             pc: 0,
             base: base_pila,
+            base_limpieza: base_pila,
             ranuras,
             entorno,
             esto,
@@ -924,7 +928,115 @@ impl Vm {
             }
 
             let instruccion = self.marcos[top].codigo.instruccion(pc, self.optimizar);
-            let resultado = self.ejecutar_instruccion(instruccion, top);
+            let resultado = match instruccion.op {
+                CodigoOp::CargarConstante => {
+                    let constante = self.marcos[top].entorno.constantes
+                        [instruccion.indice_u32() as usize]
+                        .clone();
+                    self.pila.push(constante);
+                    Ok(Flujo::Continuar)
+                }
+                CodigoOp::CargarEntero => {
+                    self.pila
+                        .push(Valor::Entero(instruccion.entero_inmediato() as i64));
+                    Ok(Flujo::Continuar)
+                }
+                CodigoOp::CargarLocal => {
+                    let valor = self.local(top, instruccion.ranura())?;
+                    self.pila.push(valor);
+                    Ok(Flujo::Continuar)
+                }
+                CodigoOp::GuardarLocal => {
+                    let valor = self.sacar()?;
+                    self.set_local(top, instruccion.ranura(), valor)?;
+                    Ok(Flujo::Continuar)
+                }
+                CodigoOp::AjustarLocal => {
+                    let ranura = instruccion.ranura();
+                    let delta = instruccion.delta_ajuste() as i64;
+                    let valor = self.local_mut(top, ranura)?;
+                    let Valor::Entero(actual) = valor else {
+                        let copia = valor.clone();
+                        return Err(self.error_se_esperaba_entero(&copia, self.ubi(top)));
+                    };
+                    let Some(nuevo) = actual.checked_add(delta) else {
+                        let actual = *actual;
+                        return Err(self.excepcion(
+                            "E0402",
+                            format!("desbordamiento de entero al ajustar {actual} en {delta}"),
+                            Some(self.ubi(top)),
+                        ));
+                    };
+                    *actual = nuevo;
+                    Ok(Flujo::Continuar)
+                }
+                CodigoOp::AjustarLocalConLocal => {
+                    let ranura = instruccion.ranura();
+                    let izquierda = self.local(top, ranura)?;
+                    let derecha = self.local(top, instruccion.ranura_derecha())?;
+                    let Valor::Entero(a) = izquierda else {
+                        return Err(self.error_se_esperaba_entero(&izquierda, self.ubi(top)));
+                    };
+                    let Valor::Entero(b) = derecha else {
+                        return Err(self.error_se_esperaba_entero(&derecha, self.ubi(top)));
+                    };
+                    let Some(nuevo) = a.checked_add(b) else {
+                        return Err(self.excepcion(
+                            "E0402",
+                            format!("desbordamiento de entero al sumar {a} y {b}"),
+                            Some(self.ubi(top)),
+                        ));
+                    };
+                    self.set_local(top, ranura, Valor::Entero(nuevo))?;
+                    Ok(Flujo::Continuar)
+                }
+                CodigoOp::CargarLocalLocalSumarEntero => {
+                    let a = self.local(top, instruccion.ranura())?;
+                    let b = self.local(top, instruccion.ranura_derecha())?;
+                    let valor =
+                        self.operacion_entera(Instruccion::SumarEntero(), a, b, self.ubi(top))?;
+                    self.pila.push(valor);
+                    Ok(Flujo::Continuar)
+                }
+                CodigoOp::MenorEnteroSaltarSiFalso => {
+                    let derecha = self.sacar()?;
+                    let izquierda = self.sacar()?;
+                    let Valor::Entero(a) = izquierda else {
+                        return Err(self.error_se_esperaba_entero(&izquierda, self.ubi(top)));
+                    };
+                    let Valor::Entero(b) = derecha else {
+                        return Err(self.error_se_esperaba_entero(&derecha, self.ubi(top)));
+                    };
+                    if a < b {
+                        Ok(Flujo::Continuar)
+                    } else {
+                        self.marcos[top].pc = instruccion.destino();
+                        Ok(Flujo::SinAvanzar)
+                    }
+                }
+                CodigoOp::Saltar => {
+                    #[cfg(feature = "jit")]
+                    if instruccion.destino() < self.marcos[top].pc {
+                        self.marcos[top].codigo.registrar_retroceso();
+                    }
+                    self.marcos[top].pc = instruccion.destino();
+                    Ok(Flujo::SinAvanzar)
+                }
+                CodigoOp::SaltarSiFalso => {
+                    let valor = self.sacar()?;
+                    if !self.como_logico(&valor, self.ubi(top))? {
+                        self.marcos[top].pc = instruccion.destino();
+                        Ok(Flujo::SinAvanzar)
+                    } else {
+                        Ok(Flujo::Continuar)
+                    }
+                }
+                CodigoOp::RetornarLocal => {
+                    let valor = self.local(top, instruccion.ranura())?;
+                    Ok(Flujo::Retornar(valor))
+                }
+                _ => self.ejecutar_instruccion(instruccion, top),
+            };
             match resultado {
                 Ok(Flujo::Continuar) => {
                     self.marcos[top].pc += 1;
@@ -973,7 +1085,7 @@ impl Vm {
             instancia.borrow_mut().inicializando = false;
         }
         let valor = marco.valor_al_volver.unwrap_or(valor);
-        self.pila.truncate(marco.base as usize);
+        self.pila.truncate(marco.base_limpieza as usize);
         if self.marcos.len() == base {
             Some(valor)
         } else {
@@ -1011,7 +1123,7 @@ impl Vm {
                 return Ok(());
             }
             let marco = self.marcos.pop().unwrap();
-            self.pila.truncate(marco.base as usize);
+            self.pila.truncate(marco.base_limpieza as usize);
             if self.marcos.len() == base {
                 return Err(Fallo::Excepcion(datos));
             }
@@ -1021,7 +1133,7 @@ impl Vm {
     fn descartar_hasta(&mut self, base: usize) {
         while self.marcos.len() > base {
             if let Some(marco) = self.marcos.pop() {
-                self.pila.truncate(marco.base as usize);
+                self.pila.truncate(marco.base_limpieza as usize);
             }
         }
     }

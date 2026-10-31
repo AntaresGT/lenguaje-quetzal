@@ -12,6 +12,7 @@ jit = ["maquina_virtual/jit"]
 
 [dependencies]
 nucleo = { workspace = true }
+lexico = { workspace = true }
 sintaxis = { workspace = true }
 semantica = { workspace = true }
 bytecode = { workspace = true }

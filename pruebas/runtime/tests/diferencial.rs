@@ -236,3 +236,57 @@ actual.objeto.valor = 2
 "#,
     );
 }
+
+#[test]
+fn diferencial_deberia_coincidir_en_el_camino_rapido() {
+    mismos_globales(
+        r#"
+entero incrementar(entero a, entero b) {
+    retornar a + b
+}
+entero var resultado = 40000
+para (entero var i = 0; i < 50; i++) {
+    si (i % 2 == 0) {
+        resultado += incrementar(i, 1)
+    } sino {
+        resultado += i
+    }
+}
+si (resultado > 40000) {
+    resultado += 1
+} sino {
+    resultado += 2
+}
+"#,
+        &["resultado"],
+    );
+}
+
+#[test]
+fn diferencial_llamadas_deberian_limpiar_la_pila_en_retornos_y_excepciones() {
+    mismos_globales(
+        r#"
+entero sumar_uno(entero n) {
+    retornar n + 1
+}
+entero fib(entero n) {
+    si (n < 2) { retornar n }
+    retornar fib(n - 1) + fib(n - 2)
+}
+entero fallar() {
+    lanzar "fallo esperado"
+}
+entero recuperar(entero n) {
+    intentar {
+        retornar fallar()
+    } capturar (excepcion e) {
+        retornar sumar_uno(n)
+    }
+}
+entero normal = sumar_uno(41)
+entero recursivo = fib(10)
+entero recuperado = recuperar(41)
+"#,
+        &["normal", "recursivo", "recuperado"],
+    );
+}

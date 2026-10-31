@@ -128,6 +128,56 @@ entero crear_repetido(entero limite) {
 }
 "#;
 
+const ESCRITURA_ATRIBUTOS: &str = r#"
+objeto PuntoMutable {
+    publico:
+        entero var x = 3
+}
+entero escribir_repetido(PuntoMutable punto, entero limite) {
+    para (entero var i = 0; i < limite; i++) {
+        punto.x = i
+    }
+    retornar punto.x
+}
+PuntoMutable punto = nuevo PuntoMutable()
+"#;
+
+const MODIFICACION_JSN: &str = r#"
+entero modificar_jsn(jsn var valores, entero limite) {
+    para (entero var i = 0; i < limite; i++) {
+        valores.a = i
+    }
+    retornar valores.a
+}
+"#;
+
+const METODOS_OBJETO: &str = r#"
+objeto PuntoConMetodo {
+    publico:
+        entero var x = 3
+        entero leer() { retornar esto.x }
+}
+entero llamar_metodos(PuntoConMetodo punto, entero limite) {
+    entero var suma = 0
+    para (entero var i = 0; i < limite; i++) {
+        suma += punto.leer()
+    }
+    retornar suma
+}
+PuntoConMetodo punto = nuevo PuntoConMetodo()
+"#;
+
+const METODOS_NATIVOS: &str = r#"
+entero llamar_nativos(entero limite) {
+    texto contenido = "Hola Mundo"
+    entero var suma = 0
+    para (entero var i = 0; i < limite; i++) {
+        suma += contenido.longitud()
+    }
+    retornar suma
+}
+"#;
+
 struct Preparada {
     vm: Vm,
     funcion: Rc<FuncionCompilada>,
@@ -206,13 +256,72 @@ fn llamar(preparada: &mut Preparada, argumentos: Vec<Valor>) -> Valor {
         .expect("la llamada del benchmark debe funcionar")
 }
 
+fn global(preparada: &Preparada, nombre: &str) -> Valor {
+    preparada
+        .entorno
+        .globales
+        .borrow()
+        .get(nombre)
+        .unwrap_or_else(|| panic!("debe existir la global '{nombre}'"))
+        .valor
+        .clone()
+}
+
 fn fases(criterion: &mut Criterion) {
     let registro = Rc::new(modulos_nativos::crear_registro());
-    criterion.bench_function("fases/compilacion", |b| {
-        b.iter(|| black_box(compilar(black_box(BUCLE))))
+    criterion.bench_function("fases/registro_nativos", |b| {
+        b.iter(|| black_box(modulos_nativos::crear_registro()))
     });
     criterion.bench_function("fases/inicializacion_vm", |b| {
         b.iter(|| black_box(Vm::nueva(Rc::clone(&registro))))
+    });
+    criterion.bench_function("fases/lexico", |b| {
+        let fuente = Fuente::nueva("criterion.qz", BUCLE);
+        b.iter(|| black_box(lexico::tokenizar(black_box(&fuente)).expect("léxico válido")))
+    });
+    criterion.bench_function("fases/parseo_con_lexico", |b| {
+        let fuente = Fuente::nueva("criterion.qz", BUCLE);
+        b.iter(|| black_box(sintaxis::parsear_modulo(black_box(&fuente)).expect("sintaxis válida")))
+    });
+    criterion.bench_function("fases/semantica", |b| {
+        let fuente = Fuente::nueva("criterion.qz", BUCLE);
+        let ast = sintaxis::parsear_modulo(&fuente).expect("sintaxis válida");
+        b.iter(|| semantica::analizar_modulo(black_box(&ast)).expect("semántica válida"))
+    });
+    criterion.bench_function("fases/compilacion", |b| {
+        b.iter(|| black_box(compilar(black_box(BUCLE))))
+    });
+    criterion.bench_function("fases/optimizacion_bytecode", |b| {
+        b.iter_batched(
+            || compilar(BUCLE),
+            |mut modulo| {
+                bytecode::optimizar_modulo(&mut modulo);
+                black_box(modulo)
+            },
+            BatchSize::SmallInput,
+        )
+    });
+    criterion.bench_function("fases/verificacion_bytecode", |b| {
+        b.iter_batched(
+            || compilar(BUCLE),
+            |mut modulo| {
+                bytecode::verificar_modulo(&mut modulo).expect("bytecode válido");
+                black_box(modulo)
+            },
+            BatchSize::SmallInput,
+        )
+    });
+    criterion.bench_function("fases/carga_y_principal", |b| {
+        b.iter_batched(
+            || (Vm::nueva(Rc::clone(&registro)), Rc::new(compilar(BUCLE))),
+            |(mut vm, modulo)| {
+                black_box(
+                    vm.cargar_modulo(modulo, IndexMap::new())
+                        .expect("carga y ejecución principal"),
+                )
+            },
+            BatchSize::SmallInput,
+        )
     });
     #[cfg(feature = "jit")]
     criterion.bench_function("fases/compilacion_jit", |b| {
@@ -242,6 +351,11 @@ fn ejecucion(criterion: &mut Criterion) {
                 |mut preparada| black_box(llamar(&mut preparada, vec![Valor::Entero(2_000_000)])),
                 BatchSize::SmallInput,
             )
+        });
+        let nombre_repetida = format!("ejecucion/bucles_enteros_repetida_{modo}");
+        criterion.bench_function(&nombre_repetida, |b| {
+            let mut preparada = preparar_con_modo(BUCLE, "sumar_hasta", optimizar);
+            b.iter(|| black_box(llamar(&mut preparada, vec![Valor::Entero(2_000_000)])))
         });
     }
     #[cfg(feature = "jit")]
@@ -326,6 +440,32 @@ fn ejecucion(criterion: &mut Criterion) {
             BatchSize::SmallInput,
         )
     });
+    criterion.bench_function("ejecucion/atributos_escritura", |b| {
+        b.iter_batched(
+            || {
+                let preparada = preparar(ESCRITURA_ATRIBUTOS, "escribir_repetido");
+                let punto = global(&preparada, "punto");
+                (preparada, punto)
+            },
+            |(mut preparada, punto)| {
+                black_box(llamar(&mut preparada, vec![punto, Valor::Entero(200_000)]))
+            },
+            BatchSize::SmallInput,
+        )
+    });
+    criterion.bench_function("ejecucion/metodos_objeto", |b| {
+        b.iter_batched(
+            || {
+                let preparada = preparar(METODOS_OBJETO, "llamar_metodos");
+                let punto = global(&preparada, "punto");
+                (preparada, punto)
+            },
+            |(mut preparada, punto)| {
+                black_box(llamar(&mut preparada, vec![punto, Valor::Entero(200_000)]))
+            },
+            BatchSize::SmallInput,
+        )
+    });
     criterion.bench_function("ejecucion/iteracion_lista", |b| {
         b.iter_batched(
             || {
@@ -363,6 +503,25 @@ fn ejecucion(criterion: &mut Criterion) {
             BatchSize::SmallInput,
         )
     });
+    criterion.bench_function("ejecucion/jsn_modificacion", |b| {
+        b.iter_batched(
+            || {
+                let preparada = preparar(MODIFICACION_JSN, "modificar_jsn");
+                let valores = Valor::jsn(IndexMap::from([
+                    ("a".to_string(), Valor::Entero(20)),
+                    ("b".to_string(), Valor::Entero(22)),
+                ]));
+                (preparada, valores)
+            },
+            |(mut preparada, valores)| {
+                black_box(llamar(
+                    &mut preparada,
+                    vec![valores, Valor::Entero(100_000)],
+                ))
+            },
+            BatchSize::SmallInput,
+        )
+    });
     criterion.bench_function("ejecucion/decimales", |b| {
         b.iter_batched(
             || preparar(DECIMALES, "sumar_decimales"),
@@ -374,6 +533,13 @@ fn ejecucion(criterion: &mut Criterion) {
         b.iter_batched(
             || preparar(UNICODE, "recorrer_unicode"),
             |mut preparada| black_box(llamar(&mut preparada, vec![Valor::Entero(100_000)])),
+            BatchSize::SmallInput,
+        )
+    });
+    criterion.bench_function("ejecucion/metodos_nativos", |b| {
+        b.iter_batched(
+            || preparar(METODOS_NATIVOS, "llamar_nativos"),
+            |mut preparada| black_box(llamar(&mut preparada, vec![Valor::Entero(200_000)])),
             BatchSize::SmallInput,
         )
     });

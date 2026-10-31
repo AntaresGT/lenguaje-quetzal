@@ -12,6 +12,6 @@ La ejecución sin argumentos también usa `stdio`. La salida estándar contiene 
 
 ## Estado
 
-Implementado: inicialización, negociación de UTF-16, respuesta a métodos desconocidos, `shutdown`, `exit` y gestión de documentos abiertos con sincronización completa. Los cambios sin guardar permanecen en memoria; las versiones anteriores se descartan.
+Implementado: inicialización, negociación de UTF-16, respuesta a métodos desconocidos, `shutdown`, `exit`, gestión de documentos abiertos con sincronización completa y conversión bidireccional entre offsets UTF-8 y posiciones UTF-16. Los cambios sin guardar permanecen en memoria; las versiones anteriores se descartan.
 
 Pendiente: diagnósticos, autocompletado, hover y navegación. El servidor no anuncia capacidades que todavía no implementa.

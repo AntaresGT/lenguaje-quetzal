@@ -2,16 +2,20 @@
 
 use lsp_server::{Connection, ErrorCode, Message, Notification, ProtocolError, Request, Response};
 use lsp_types::{
-    DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
-    DidSaveTextDocumentParams, InitializeParams, InitializeResult, PositionEncodingKind,
-    PublishDiagnosticsParams, SaveOptions, ServerCapabilities, ServerInfo,
-    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
-    TextDocumentSyncSaveOptions,
+    CompletionOptions, CompletionParams, CompletionResponse, DidChangeTextDocumentParams,
+    DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
+    GotoDefinitionParams, GotoDefinitionResponse, HoverParams, HoverProviderCapability,
+    InitializeParams, InitializeResult, OneOf, PositionEncodingKind, PublishDiagnosticsParams,
+    SaveOptions, ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
+    TextDocumentSyncOptions, TextDocumentSyncSaveOptions,
 };
 
-use crate::analisis::analizar_documento;
-use crate::documentos::{AlmacenDocumentos, DocumentoAbierto};
+use crate::analisis::{analizar_documento, analizar_documento_para_herramientas};
+use crate::documentos::{AlmacenDocumentos, ConvertidorPosiciones, DocumentoAbierto};
+use crate::servicios::autocompletado::completar;
+use crate::servicios::definicion::ubicacion_definicion;
 use crate::servicios::diagnosticos::convertir_diagnosticos;
+use crate::servicios::hover::informacion;
 
 /// Error de transporte o inicialización del servidor.
 #[derive(Debug, thiserror::Error)]
@@ -52,7 +56,7 @@ pub fn ejecutar(conexion: Connection) -> Result<(), ErrorServidor> {
                 if conexion.handle_shutdown(&solicitud)? {
                     return Ok(());
                 }
-                responder_metodo_desconocido(&conexion, solicitud);
+                procesar_solicitud(&conexion, &documentos, solicitud);
             }
             Message::Notification(notificacion) => {
                 procesar_notificacion(&conexion, &mut documentos, notificacion);
@@ -67,6 +71,9 @@ pub fn ejecutar(conexion: Connection) -> Result<(), ErrorServidor> {
 fn capacidades() -> ServerCapabilities {
     ServerCapabilities {
         position_encoding: Some(PositionEncodingKind::UTF16),
+        completion_provider: Some(CompletionOptions::default()),
+        definition_provider: Some(OneOf::Left(true)),
+        hover_provider: Some(HoverProviderCapability::Simple(true)),
         text_document_sync: Some(TextDocumentSyncCapability::Options(
             TextDocumentSyncOptions {
                 open_close: Some(true),
@@ -187,12 +194,81 @@ fn limpiar_diagnosticos(conexion: &Connection, uri: &str) {
     }
 }
 
-fn responder_metodo_desconocido(conexion: &Connection, solicitud: Request) {
-    let respuesta = Response::new_err(
-        solicitud.id,
-        ErrorCode::MethodNotFound as i32,
-        format!("Método no implementado: {}", solicitud.method),
-    );
+fn procesar_solicitud(conexion: &Connection, documentos: &AlmacenDocumentos, solicitud: Request) {
+    let Request { id, method, params } = solicitud;
+    let resultado = match method.as_str() {
+        "textDocument/completion" => serde_json::from_value::<CompletionParams>(params)
+            .map_err(|error| (ErrorCode::InvalidParams, error.to_string()))
+            .and_then(|parametros| {
+                let uri = parametros.text_document_position.text_document.uri;
+                let elementos = documentos
+                    .obtener(&uri.to_string())
+                    .map(|documento| {
+                        let convertidor = ConvertidorPosiciones::nuevo(&documento.contenido);
+                        let offset = convertidor
+                            .posicion_a_offset(parametros.text_document_position.position)
+                            .unwrap_or(documento.contenido.len());
+                        let analisis = analizar_documento_para_herramientas(
+                            &documento.uri,
+                            &documento.contenido,
+                        );
+                        completar(&analisis, &documento.contenido, offset)
+                    })
+                    .unwrap_or_default();
+                serde_json::to_value(CompletionResponse::Array(elementos))
+                    .map_err(|error| (ErrorCode::InternalError, error.to_string()))
+            }),
+        "textDocument/hover" => serde_json::from_value::<HoverParams>(params)
+            .map_err(|error| (ErrorCode::InvalidParams, error.to_string()))
+            .and_then(|parametros| {
+                let posicion = parametros.text_document_position_params;
+                let resultado = documentos
+                    .obtener(&posicion.text_document.uri.to_string())
+                    .and_then(|documento| {
+                        let offset = ConvertidorPosiciones::nuevo(&documento.contenido)
+                            .posicion_a_offset(posicion.position)?;
+                        let analisis = analizar_documento_para_herramientas(
+                            &documento.uri,
+                            &documento.contenido,
+                        );
+                        informacion(&analisis, &documento.contenido, offset)
+                    });
+                serde_json::to_value(resultado)
+                    .map_err(|error| (ErrorCode::InternalError, error.to_string()))
+            }),
+        "textDocument/definition" => serde_json::from_value::<GotoDefinitionParams>(params)
+            .map_err(|error| (ErrorCode::InvalidParams, error.to_string()))
+            .and_then(|parametros| {
+                let posicion = parametros.text_document_position_params;
+                let resultado = documentos
+                    .obtener(&posicion.text_document.uri.to_string())
+                    .and_then(|documento| {
+                        let offset = ConvertidorPosiciones::nuevo(&documento.contenido)
+                            .posicion_a_offset(posicion.position)?;
+                        let analisis = analizar_documento_para_herramientas(
+                            &documento.uri,
+                            &documento.contenido,
+                        );
+                        ubicacion_definicion(
+                            &posicion.text_document.uri,
+                            &analisis,
+                            &documento.contenido,
+                            offset,
+                        )
+                    })
+                    .map(GotoDefinitionResponse::Scalar);
+                serde_json::to_value(resultado)
+                    .map_err(|error| (ErrorCode::InternalError, error.to_string()))
+            }),
+        _ => Err((
+            ErrorCode::MethodNotFound,
+            format!("Método no implementado: {method}"),
+        )),
+    };
+    let respuesta = match resultado {
+        Ok(valor) => Response::new_ok(id, valor),
+        Err((codigo, mensaje)) => Response::new_err(id, codigo as i32, mensaje),
+    };
     if conexion.sender.send(respuesta.into()).is_err() {
         eprintln!("No se pudo enviar la respuesta LSP: canal desconectado");
     }

@@ -12,6 +12,7 @@ name = "quetzal-lsp"
 path = "src/principal.rs"
 
 [dependencies]
+ast = { workspace = true }
 nucleo = { workspace = true }
 sintaxis = { workspace = true }
 semantica = { workspace = true }

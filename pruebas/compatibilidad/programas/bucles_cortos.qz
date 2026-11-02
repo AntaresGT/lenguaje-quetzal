@@ -1,0 +1,11 @@
+entero sumar(entero limite) {
+    entero var suma = 0
+    para (entero var i = 0; i < limite; i++) { suma += i }
+    retornar suma
+}
+entero a = sumar(1)
+entero b = sumar(2)
+entero c = sumar(3)
+entero d = sumar(4)
+entero resultado = sumar(5)
+consola.mostrar(resultado)

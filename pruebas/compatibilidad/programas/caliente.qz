@@ -5,9 +5,9 @@ entero sumar_hasta(entero limite) {
     }
     retornar suma
 }
-entero a = sumar_hasta(1)
-entero b = sumar_hasta(2)
-entero c = sumar_hasta(3)
-entero d = sumar_hasta(4)
+entero a = sumar_hasta(250)
+entero b = sumar_hasta(250)
+entero c = sumar_hasta(250)
+entero d = sumar_hasta(250)
 entero resultado = sumar_hasta(2000000)
 consola.mostrar(resultado)

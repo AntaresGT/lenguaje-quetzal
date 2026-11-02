@@ -16,6 +16,8 @@ use crate::nativos::IdNativo;
 pub const UMBRAL_LLAMADAS_JIT: u32 = 4;
 #[cfg(feature = "jit")]
 pub const UMBRAL_ITERACIONES_JIT: u32 = 1_000;
+#[cfg(feature = "jit")]
+pub const UMBRAL_LLAMADAS_JIT_AUTOMATICO: u32 = 1_024;
 
 #[cfg(feature = "jit")]
 #[derive(Debug)]
@@ -119,6 +121,12 @@ impl CodigoRuntime {
     #[cfg(feature = "jit")]
     pub fn suficientemente_caliente(&self) -> bool {
         self.llamadas.get() >= UMBRAL_LLAMADAS_JIT
+            || self.iteraciones.get() >= UMBRAL_ITERACIONES_JIT
+    }
+
+    #[cfg(feature = "jit")]
+    pub fn suficientemente_caliente_automatico(&self) -> bool {
+        self.llamadas.get() >= UMBRAL_LLAMADAS_JIT_AUTOMATICO
             || self.iteraciones.get() >= UMBRAL_ITERACIONES_JIT
     }
 

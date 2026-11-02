@@ -1,0 +1,13 @@
+entero sumar_hasta(entero limite) {
+    entero var suma = 0
+    para (entero var i = 0; i < limite; i++) {
+        suma += i
+    }
+    retornar suma
+}
+entero a = sumar_hasta(1)
+entero b = sumar_hasta(2)
+entero c = sumar_hasta(3)
+entero d = sumar_hasta(4)
+entero resultado = sumar_hasta(2000000)
+consola.mostrar(resultado)

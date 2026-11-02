@@ -102,3 +102,47 @@ fn repl_deberia_conservar_funciones_sin_acumular_fragmentos() {
     assert!(sesion.estado().is_empty());
     assert!(sesion.modulos().is_empty());
 }
+
+#[cfg(feature = "jit")]
+#[test]
+fn ciclos_jit_deberian_respetar_presupuesto_y_liberar_al_soltar_vm() {
+    let codigo = r#"
+entero sumar(entero limite) {
+    entero var suma = 0
+    para (entero var i = 0; i < limite; i++) { suma += i }
+    retornar suma
+}
+entero a = sumar(1)
+entero b = sumar(2)
+entero c = sumar(3)
+entero d = sumar(4)
+entero resultado = sumar(5)
+"#;
+    let mut vm = Vm::nueva(Rc::new(modulos_nativos::crear_registro())).con_jit(true);
+    let mut codigo_debil = None;
+    for iteracion in 0..24 {
+        let (entorno, _) = vm
+            .cargar_modulo(
+                Rc::new(compilar(&format!("jit_memoria_{iteracion}"), codigo)),
+                IndexMap::new(),
+            )
+            .expect("módulo del ciclo");
+        let entorno_debil = Rc::downgrade(&entorno);
+        codigo_debil = {
+            let runtimes = entorno.runtimes.borrow();
+            match &*runtimes["sumar"].jit.borrow() {
+                maquina_virtual::codigo::EstadoJit::Compilado(funcion) => {
+                    Some(Rc::downgrade(funcion))
+                }
+                _ => None,
+            }
+        };
+        vm.modulos.clear();
+        drop(entorno);
+        assert!(entorno_debil.upgrade().is_none());
+    }
+    assert!(vm.estadisticas_jit().funciones_compiladas <= 256);
+    assert!(vm.estadisticas_jit().bytes_codigo <= 16 * 1024 * 1024);
+    drop(vm);
+    assert!(codigo_debil.is_some_and(|debil| debil.upgrade().is_none()));
+}

@@ -1,0 +1,74 @@
+name: Estabilización VM y JIT
+
+on:
+  push:
+    branches: [trabajo/estabilizar-vm-jit-0.0.3]
+  pull_request:
+    branches: [quetzal-0.0.3, trabajo/estabilizar-vm-jit-0.0.3]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  pruebas:
+    name: ${{ matrix.sistema }} / VM y CLI
+    runs-on: ${{ matrix.corredor }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sistema: Linux
+            corredor: ubuntu-latest
+          - sistema: Windows
+            corredor: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: estabilizacion-${{ matrix.sistema }}
+      - name: Formato
+        run: cargo fmt --all -- --check
+      - name: Comprobación del workspace
+        run: cargo check --workspace --locked
+      - name: Prohibir unsafe en crates seguros
+        if: matrix.sistema == 'Linux'
+        env:
+          RUSTFLAGS: -Dunsafe_code
+        run: cargo check --workspace --tests --locked
+      - name: Suite predeterminada
+        run: cargo test --workspace --locked --no-fail-fast
+      - name: Bytecode, optimizador, verificador y caché
+        run: cargo test -p pruebas_bytecode -p pruebas_paquetes --locked --no-fail-fast
+      - name: CLI real y compatibilidad
+        run: cargo test -p lnc --locked --no-fail-fast
+
+  jit:
+    name: ${{ matrix.sistema }} / JIT nativo
+    runs-on: ${{ matrix.corredor }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sistema: Linux
+            corredor: ubuntu-latest
+          - sistema: Windows
+            corredor: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: estabilizacion-jit-${{ matrix.sistema }}
+      - name: Auditar frontera nativa sin prohibir su unsafe aislado
+        run: cargo clippy -p compilador_jit --features nativo --locked -- -D warnings -D unsafe_op_in_unsafe_fn
+      - name: Batería JIT de runtime, memoria y cuatro niveles
+        run: cargo test -p pruebas_runtime --features jit --locked --no-fail-fast
+      - name: Pruebas del compilador nativo
+        run: cargo test -p compilador_jit --features nativo --locked --no-fail-fast
+      - name: CLI real con JIT
+        run: cargo test -p lnc --features jit --locked --no-fail-fast

@@ -292,6 +292,7 @@ impl Vm {
         modulo: Rc<ModuloCompilado>,
         importaciones: IndexMap<String, Variable>,
     ) -> Result<(Rc<EntornoModulo>, Valor), ErrorQuetzal> {
+        bytecode::verificar_modulo_inmutable(&modulo)?;
         let constantes = modulo.constantes.iter().map(valor_de_constante).collect();
         let nombres = modulo
             .nombres

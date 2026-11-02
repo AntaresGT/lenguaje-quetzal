@@ -11,5 +11,11 @@ nucleo = { workspace = true }
 sintaxis = { workspace = true }
 bytecode = { workspace = true }
 
+[dev-dependencies]
+semantica = { workspace = true }
+maquina_virtual = { workspace = true }
+modulos_nativos = { workspace = true }
+indexmap = { workspace = true }
+
 [lib]
 path = "lib.rs"

@@ -8,7 +8,7 @@ pub mod configuracion;
 pub mod motor;
 pub mod sesion;
 
-pub use configuracion::ConfiguracionMotor;
+pub use configuracion::{ConfiguracionMotor, ModoJit};
 pub use motor::MotorQuetzal;
 pub use nucleo::{ErrorQuetzal, ResultadoMultiple, ResultadoQuetzal, VERSION_QUETZAL};
 pub use sesion::SesionInteractiva;

@@ -1,16 +1,23 @@
 //! Comando `quetzal ejecutar [ARCHIVO]`.
 
 use diagnosticos::colores::Paleta;
-use motor::{ConfiguracionMotor, MotorQuetzal};
+use motor::{ConfiguracionMotor, ModoJit, MotorQuetzal};
 
 /// Ejecuta un archivo `.qz` o el proyecto actual (vía `quetzal.json`).
-pub fn ejecutar(archivo: Option<&str>, sin_optimizar: bool, jit: bool) -> i32 {
+pub fn ejecutar(archivo: Option<&str>, sin_optimizar: bool, jit: bool, sin_jit: bool) -> i32 {
     #[cfg(not(feature = "jit"))]
     if jit {
         eprintln!("este binario se compiló sin soporte JIT; usa la feature 'jit'");
         return 2;
     }
-    let mut configuracion = ConfiguracionMotor::por_defecto().con_jit(jit);
+    let modo_jit = if sin_optimizar || sin_jit {
+        ModoJit::Desactivado
+    } else if jit {
+        ModoJit::Activado
+    } else {
+        ConfiguracionMotor::por_defecto().jit
+    };
+    let mut configuracion = ConfiguracionMotor::por_defecto().con_modo_jit(modo_jit);
     if sin_optimizar {
         configuracion = configuracion.sin_optimizar();
     }

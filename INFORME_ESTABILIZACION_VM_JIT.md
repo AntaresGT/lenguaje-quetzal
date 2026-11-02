@@ -48,6 +48,7 @@ El veredicto global no se cierra porque la primera matriz Windows/CI detectó do
 6. **Fallback permanentemente contado.** Una función rechazada deja de pagar observación en cada llamada; el fallback se registra en la transición.
 7. **Regresión por umbral automático demasiado bajo.** La primera medición falló las puertas; la selección por calor observado la corrigió. Evidencias antes/después: `INFORME_UMBRAL_4.md`, `resultados-seleccion-1.json` y `resultados.json`.
 8. **ABI incorrecta en llamadas directas JIT en Windows.** La llamada indirecta forzaba `CallConv::SystemV` aunque el llamado usaba la convención del objetivo; ahora ambos usan `generador.func.signature.call_conv`. La regresión de 10 000 llamadas conserva el resultado y muestra el valor real si diverge. Linux vuelve a pasar toda la suite; falta confirmación del próximo CI en Windows.
+9. **Oráculo convertido a CRLF por el checkout de Windows.** El programa emitía LF y Git convirtió los archivos esperados a CRLF. `compatibilidad_cli` ahora normaliza únicamente pares CRLF a LF en salida real y esperada, sin eliminar CR aislados ni tolerar otras diferencias.
 
 No se eliminaron ni ignoraron tests para obtener suites verdes.
 
@@ -100,7 +101,7 @@ El binario release normal superó ocho ejecuciones: `quetzal ejecutar`, `quetzal
 
 ## Trabajo restante para cerrar el veredicto global
 
-1. Repetir la matriz Linux/Windows para confirmar la corrección de ABI y resolver la divergencia restante de `compatibilidad_cli`; activar automáticamente solo los objetivos que la superen.
+1. Repetir la matriz Linux/Windows para confirmar la corrección de ABI y la normalización multiplataforma del oráculo CLI; activar automáticamente solo los objetivos que la superen.
 2. Repetir estrés prolongado y compatibilidad completa en cada plataforma soportada; las 24 iteraciones y RSS local no sustituyen esa campaña.
 3. Si aparece una divergencia generativa, conservar el caso mínimo como regresión permanente y repetir las cuatro rutas antes de habilitar más funciones JIT.
 

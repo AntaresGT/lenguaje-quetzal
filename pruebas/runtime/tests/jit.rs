@@ -256,6 +256,10 @@ entero llamar_repetido(entero limite) {
     }
     retornar suma
 }
+entero a = llamar_repetido(1)
+entero b = llamar_repetido(2)
+entero c = llamar_repetido(3)
+entero d = llamar_repetido(4)
 entero resultado = llamar_repetido(10000)
 "#;
     let mut vm = Vm::nueva(Rc::new(modulos_nativos::crear_registro())).con_jit(true);

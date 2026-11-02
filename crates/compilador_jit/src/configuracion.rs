@@ -15,7 +15,7 @@ impl Default for ConfiguracionJit {
         Self {
             max_funciones: 256,
             max_bytes_codigo: 16 * 1024 * 1024,
-            anticipacion: true,
+            anticipacion: false,
             max_instrucciones_anticipacion: 256,
             max_costo_estimado_anticipacion: 512,
             max_tiempo_compilacion_anticipacion: Duration::from_millis(5),

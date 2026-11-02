@@ -8,7 +8,7 @@ description = "Pruebas de integración de la máquina virtual de Quetzal."
 
 [features]
 default = []
-jit = ["maquina_virtual/jit"]
+jit = ["maquina_virtual/jit", "dep:compilador_jit"]
 
 [dependencies]
 nucleo = { workspace = true }
@@ -17,6 +17,7 @@ sintaxis = { workspace = true }
 semantica = { workspace = true }
 bytecode = { workspace = true }
 maquina_virtual = { workspace = true }
+compilador_jit = { path = "../../crates/compilador_jit", optional = true }
 modulos_nativos = { workspace = true }
 runtime = { workspace = true }
 paquetes = { workspace = true }

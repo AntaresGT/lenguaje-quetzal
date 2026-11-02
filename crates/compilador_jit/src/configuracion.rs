@@ -8,6 +8,7 @@ pub struct ConfiguracionJit {
     pub max_instrucciones_anticipacion: usize,
     pub max_costo_estimado_anticipacion: usize,
     pub max_tiempo_compilacion_anticipacion: Duration,
+    pub metricas: bool,
 }
 
 impl Default for ConfiguracionJit {
@@ -19,6 +20,7 @@ impl Default for ConfiguracionJit {
             max_instrucciones_anticipacion: 256,
             max_costo_estimado_anticipacion: 512,
             max_tiempo_compilacion_anticipacion: Duration::from_millis(5),
+            metricas: false,
         }
     }
 }

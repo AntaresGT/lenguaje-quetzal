@@ -7,4 +7,8 @@ pub struct EstadisticasJit {
     pub tiempo_compilacion: Duration,
     pub fallbacks: usize,
     pub desoptimizaciones: usize,
+    pub funciones_elegibles: usize,
+    pub compilaciones_descartadas: usize,
+    pub guardas_fallidas: usize,
+    pub ejecuciones_nativas: usize,
 }

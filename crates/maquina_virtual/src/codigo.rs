@@ -23,6 +23,7 @@ pub enum EstadoJit {
     Frio,
     Compilado(Rc<FuncionNativa>),
     NoElegible,
+    NoDisponible,
 }
 
 /// Sitio de caché en línea para `CargarMiembro` / `LlamarMetodo`.

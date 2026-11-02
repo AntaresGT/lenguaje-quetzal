@@ -1869,6 +1869,7 @@ name = "pruebas_runtime"
 version = "0.0.2"
 dependencies = [
  "bytecode",
+ "compilador_jit",
  "criterion",
  "indexmap",
  "lexico",

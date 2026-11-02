@@ -58,6 +58,21 @@ impl ContextoJit {
         self.estadisticas.fallbacks = self.estadisticas.fallbacks.saturating_add(1);
     }
 
+    pub fn registrar_guardia_fallida(&mut self) {
+        self.registrar_fallback();
+        if self.configuracion.metricas {
+            self.estadisticas.guardas_fallidas =
+                self.estadisticas.guardas_fallidas.saturating_add(1);
+        }
+    }
+
+    pub fn registrar_ejecucion_nativa(&mut self) {
+        if self.configuracion.metricas {
+            self.estadisticas.ejecuciones_nativas =
+                self.estadisticas.ejecuciones_nativas.saturating_add(1);
+        }
+    }
+
     pub fn deberia_anticipar(&self, funcion: &bytecode::FuncionCompilada) -> bool {
         #[cfg(feature = "nativo")]
         {
@@ -139,6 +154,20 @@ impl ContextoJit {
             }
             let resultado = self.compilar_funcion_y_dependencias(modulo, funcion);
             self.visitando.remove(&clave);
+            if self.configuracion.metricas {
+                match &resultado {
+                    Ok(_) => {
+                        self.estadisticas.funciones_elegibles =
+                            self.estadisticas.funciones_elegibles.saturating_add(1);
+                    }
+                    Err(_) => {
+                        self.estadisticas.compilaciones_descartadas = self
+                            .estadisticas
+                            .compilaciones_descartadas
+                            .saturating_add(1);
+                    }
+                }
+            }
             resultado
         }
         #[cfg(not(feature = "nativo"))]

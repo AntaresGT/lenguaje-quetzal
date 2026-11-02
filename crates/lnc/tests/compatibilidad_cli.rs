@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 #[derive(Deserialize)]
 struct Inventario {
-    oracle: String,
+    referencia: String,
     casos: Vec<Caso>,
 }
 
@@ -30,18 +30,18 @@ fn raiz() -> PathBuf {
 }
 
 #[test]
-fn ejemplos_congelados_deberian_coincidir_con_el_oraculo_en_modo_normal_y_sin_jit() {
+fn ejemplos_congelados_deberian_coincidir_con_la_referencia_en_modo_normal_y_sin_jit() {
     let raiz = raiz();
     let inventario: Inventario = serde_json::from_str(
         &std::fs::read_to_string(raiz.join("pruebas/compatibilidad/casos.json"))
             .expect("leer inventario"),
     )
     .expect("inventario válido");
-    let oraculo = raiz.join(inventario.oracle);
+    let referencia = raiz.join(inventario.referencia);
 
     for caso in inventario.casos {
-        let esperado = std::fs::read(oraculo.join(&caso.stdout)).expect("stdout del oráculo");
-        let error_esperado = std::fs::read(oraculo.join(&caso.stderr)).expect("stderr del oráculo");
+        let esperado = std::fs::read(referencia.join(&caso.stdout)).expect("stdout esperado");
+        let error_esperado = std::fs::read(referencia.join(&caso.stderr)).expect("stderr esperado");
         for banderas in [vec![], vec!["--sin-jit"]] {
             let entrada = raiz.join(&caso.entrada);
             let mut comando = quetzal();

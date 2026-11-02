@@ -14,8 +14,8 @@ La matriz completa ya pasó en [GitHub Actions 41374080659](https://github.com/A
 - Referencias: `v0.0.2 = 533807f3066ebd6ad21c5885b360fbf07dee5965`; rama 0.0.3 original = `647cfe73e035799393315835e8e025a52a9a0fd0`.
 - Entorno: Rust 1.99.0, Linux x86_64, Intel i7-6700HQ, 15 GiB RAM; detalles en `pruebas/resultados/linea-base/entorno.txt`.
 - La línea base completa pasó antes de editar. Logs y salidas originales: `pruebas/resultados/linea-base/`.
-- Se congelaron 19 ejemplos deterministas en `pruebas/compatibilidad/casos.json` y `pruebas/resultados/linea-base/oraculo/`.
-- `--sin-optimizar` desactiva especialización, cachés y JIT de ejecución; el generador de bytecode sigue optimizando y verificando. El oráculo crudo usa `generar_modulo_sin_procesar()` más `verificar_modulo()`.
+- Se congelaron 19 ejemplos deterministas en `pruebas/compatibilidad/casos.json` y `pruebas/resultados/linea-base/referencia/`.
+- `--sin-optimizar` desactiva especialización, cachés y JIT de ejecución; el generador de bytecode sigue optimizando y verificando. La referencia esperada cruda usa `generar_modulo_sin_procesar()` más `verificar_modulo()`.
 
 ## Optimizaciones y decisiones
 
@@ -48,7 +48,7 @@ La matriz completa ya pasó en [GitHub Actions 41374080659](https://github.com/A
 6. **Fallback permanentemente contado.** Una función rechazada deja de pagar observación en cada llamada; el fallback se registra en la transición.
 7. **Regresión por umbral automático demasiado bajo.** La primera medición falló las puertas; la selección por calor observado la corrigió. Evidencias antes/después: `INFORME_UMBRAL_4.md`, `resultados-seleccion-1.json` y `resultados.json`.
 8. **ABI incorrecta en llamadas directas JIT en Windows.** La llamada indirecta forzaba `CallConv::SystemV` aunque el llamado usaba la convención del objetivo; ahora ambos usan `generador.func.signature.call_conv`. La regresión de 10 000 llamadas conserva el resultado y muestra el valor real si diverge. Linux y Windows pasan la suite en CI.
-9. **Oráculo convertido a CRLF por el checkout de Windows.** El programa emitía LF y Git convirtió los archivos esperados a CRLF. `compatibilidad_cli` ahora normaliza únicamente pares CRLF a LF en salida real y esperada, sin eliminar CR aislados ni tolerar otras diferencias.
+9. **Referencia esperada convertida a CRLF por el checkout de Windows.** El programa emitía LF y Git convirtió los archivos esperados a CRLF. `compatibilidad_cli` ahora normaliza únicamente pares CRLF a LF en salida real y esperada, sin eliminar CR aislados ni tolerar otras diferencias.
 10. **Crecimiento de metadatos JIT en carga prolongada.** La tabla de identidades conservaba una referencia débil por módulo incluso tras liberarlo; 66 243 módulos elevaron RSS de 11,8 a 39,1 MiB. Se añadió purga periódica de entradas muertas sin descartar módulos vivos. Dos repeticiones posteriores quedaron en 13,36 y 13,13 MiB, con 256 funciones y 55 296 bytes de código.
 
 No se eliminaron ni ignoraron tests para obtener suites verdes.
@@ -61,7 +61,7 @@ No se eliminaron ni ignoraron tests para obtener suites verdes.
 - Bytecode corrupto y 512 mutaciones reproducibles sin pánicos: `verificador_adversarial.rs`.
 - Caché fría/caliente/corrupta y bytecode serializado inválido: `pruebas/paquetes/tests/cache_bytecode.rs`.
 - CLI real con procesos, tiempo límite y temporales: `crates/lnc/tests/`.
-- Los 19 oráculos pasan en modo normal y con `--sin-jit`, con y sin feature nominal.
+- Los 19 casos de referencia esperada pasan en modo normal y con `--sin-jit`, con y sin feature nominal.
 - Memoria: 24 ciclos de módulos calientes, presupuesto de 256 funciones/16 MiB, liberación de entornos y código al soltar VM.
 - `unsafe` sigue prohibido en VM, bytecode y motor; las llamadas nativas aisladas del JIT conservan contratos de aridad, vida del módulo y buffers.
 

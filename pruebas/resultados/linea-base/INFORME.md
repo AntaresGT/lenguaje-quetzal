@@ -19,4 +19,4 @@ Todos los comandos iniciales terminaron con código 0, sin excluir ni ignorar pr
 | `build_release.log` | `cargo build -p lnc --release --locked` |
 | `build_release_jit.log` | `cargo build -p lnc --release --features jit --locked` |
 
-El oráculo de `oraculo/` se produjo con una copia del binario release sin JIT del SHA de origen. Los 19 casos terminaron con código 0 y sin tiempo excedido. Estos resultados describen únicamente la línea base; no constituyen un veredicto de estabilización.
+La referencia esperada de `referencia/` se produjo con una copia del binario release sin JIT del SHA de origen. Los 19 casos terminaron con código 0 y sin tiempo excedido. Estos resultados describen únicamente la línea base; no constituyen un veredicto de estabilización.

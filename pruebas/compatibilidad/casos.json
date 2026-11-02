@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "oracle": "pruebas/resultados/linea-base/oraculo",
+  "referencia": "pruebas/resultados/linea-base/referencia",
   "casos": [
     { "nombre": "textos", "entrada": "ejemplos/textos.qz", "argumentos": [], "stdin": "", "salida": 0, "stdout": "textos.qz.stdout", "stderr": "textos.qz.stderr", "permisos": "del_proyecto", "recursos": [], "timeout_ms": 10000 },
     { "nombre": "tipos", "entrada": "ejemplos/tipos.qz", "argumentos": [], "stdin": "", "salida": 0, "stdout": "tipos.qz.stdout", "stderr": "tipos.qz.stderr", "permisos": "del_proyecto", "recursos": [], "timeout_ms": 10000 },
@@ -41,5 +41,5 @@
     { "entrada": "ejemplos/red_formulario_multipart/principal.qz", "categoria": "servidor", "tratamiento": "puerto efímero, petición multipart y detención" },
     { "entrada": "ejemplos/red_servidor_rest/principal.qz", "categoria": "servidor", "tratamiento": "puerto efímero, cliente local y detención" }
   ],
-  "nota_sin_optimizar": "La bandera --sin-optimizar desactiva especialización, cachés y JIT de ejecución; generar_modulo() siempre optimiza y verifica bytecode. El oráculo sin transformaciones usa generar_modulo_sin_procesar() seguido de verificar_modulo()."
+  "nota_sin_optimizar": "La bandera --sin-optimizar desactiva especialización, cachés y JIT de ejecución; generar_modulo() siempre optimiza y verifica bytecode. La referencia esperada sin transformaciones usa generar_modulo_sin_procesar() seguido de verificar_modulo()."
 }

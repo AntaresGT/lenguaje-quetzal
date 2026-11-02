@@ -123,6 +123,11 @@ impl ContextoJit {
         {
             return *id;
         }
+        const LIMITE_IDS_OBSERVADOS: usize = 256;
+        if self.ids_modulos.len() >= LIMITE_IDS_OBSERVADOS {
+            self.ids_modulos
+                .retain(|_, (_, modulo)| modulo.strong_count() > 0);
+        }
         let id = self.siguiente_id_modulo;
         self.siguiente_id_modulo += 1;
         self.ids_modulos
@@ -571,6 +576,25 @@ mod pruebas {
             .expect("función compilable");
         drop(modulo);
         assert!(debil.upgrade().is_none());
+    }
+
+    #[cfg(feature = "nativo")]
+    #[test]
+    fn ids_modulos_deberian_purgar_referencias_muertas_conservando_las_vivas() {
+        let mut contexto = ContextoJit::default();
+        let vivo = Rc::new(bytecode::ModuloCompilado::default());
+        let id_vivo = contexto.id_modulo(&vivo);
+        for _ in 0..512 {
+            let temporal = Rc::new(bytecode::ModuloCompilado::default());
+            contexto.id_modulo(&temporal);
+        }
+        assert!(contexto.ids_modulos.len() <= 256);
+        assert!(contexto.ids_modulos.values().any(|(id, modulo)| {
+            *id == id_vivo
+                && modulo
+                    .upgrade()
+                    .is_some_and(|actual| Rc::ptr_eq(&actual, &vivo))
+        }));
     }
 
     #[cfg(feature = "nativo")]

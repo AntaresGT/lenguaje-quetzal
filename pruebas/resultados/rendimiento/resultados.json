@@ -1,0 +1,307 @@
+{
+  "entorno": {
+    "sistema": "Linux-7.3.1-1-cachyos-x86_64-with-glibc2.44",
+    "maquina": "x86_64",
+    "procesador": "",
+    "python": "3.14.8",
+    "rust": "rustc 1.99.0 (b940084d7 2026-09-28)",
+    "cpu": "Intel(R) Core(TM) i7-6700HQ CPU @ 2.60GHz"
+  },
+  "escenarios": {
+    "corto": {
+      "automatico": {
+        "muestras": 31,
+        "mediana_ms": 3.641217,
+        "desviacion_ms": 0.26182825654336817,
+        "minimo_ms": 3.451839,
+        "maximo_ms": 4.434227,
+        "stdout": "hola\n"
+      },
+      "sin_jit": {
+        "muestras": 31,
+        "mediana_ms": 3.686184,
+        "desviacion_ms": 0.2513474569889046,
+        "minimo_ms": 3.500796,
+        "maximo_ms": 4.56031,
+        "stdout": "hola\n"
+      },
+      "sin_feature": {
+        "muestras": 31,
+        "mediana_ms": 3.559306,
+        "desviacion_ms": 0.16917965018309125,
+        "minimo_ms": 3.304658,
+        "maximo_ms": 3.966953,
+        "stdout": "hola\n"
+      },
+      "base_003": {
+        "muestras": 31,
+        "mediana_ms": 3.503182,
+        "desviacion_ms": 0.28391123483228237,
+        "minimo_ms": 3.347397,
+        "maximo_ms": 4.434119,
+        "stdout": "hola\n"
+      },
+      "v002": {
+        "muestras": 31,
+        "mediana_ms": 3.899474,
+        "desviacion_ms": 0.23162392486855957,
+        "minimo_ms": 3.607777,
+        "maximo_ms": 4.541053,
+        "stdout": "hola\n"
+      }
+    },
+    "pequenas": {
+      "automatico": {
+        "muestras": 31,
+        "mediana_ms": 3.650833,
+        "desviacion_ms": 0.2309967491427354,
+        "minimo_ms": 3.520015,
+        "maximo_ms": 4.528467,
+        "stdout": "5\n"
+      },
+      "sin_jit": {
+        "muestras": 31,
+        "mediana_ms": 3.709489,
+        "desviacion_ms": 0.2546957483854569,
+        "minimo_ms": 3.524316,
+        "maximo_ms": 4.336128,
+        "stdout": "5\n"
+      },
+      "sin_feature": {
+        "muestras": 31,
+        "mediana_ms": 3.514975,
+        "desviacion_ms": 0.21346740088743427,
+        "minimo_ms": 3.191263,
+        "maximo_ms": 4.15291,
+        "stdout": "5\n"
+      },
+      "base_003": {
+        "muestras": 31,
+        "mediana_ms": 3.566583,
+        "desviacion_ms": 0.18381016455321397,
+        "minimo_ms": 3.398034,
+        "maximo_ms": 4.073,
+        "stdout": "5\n"
+      },
+      "v002": {
+        "muestras": 31,
+        "mediana_ms": 3.854489,
+        "desviacion_ms": 0.3163210536222092,
+        "minimo_ms": 3.587768,
+        "maximo_ms": 5.240503,
+        "stdout": "5\n"
+      }
+    },
+    "bucles_cortos": {
+      "automatico": {
+        "muestras": 31,
+        "mediana_ms": 3.681651,
+        "desviacion_ms": 0.24037153145133966,
+        "minimo_ms": 3.492093,
+        "maximo_ms": 4.468931,
+        "stdout": "10\n"
+      },
+      "sin_jit": {
+        "muestras": 31,
+        "mediana_ms": 3.753902,
+        "desviacion_ms": 0.27924465881067884,
+        "minimo_ms": 3.53256,
+        "maximo_ms": 4.620411,
+        "stdout": "10\n"
+      },
+      "sin_feature": {
+        "muestras": 31,
+        "mediana_ms": 3.517993,
+        "desviacion_ms": 0.18527369690154513,
+        "minimo_ms": 3.351031,
+        "maximo_ms": 4.022579,
+        "stdout": "10\n"
+      },
+      "base_003": {
+        "muestras": 31,
+        "mediana_ms": 3.622262,
+        "desviacion_ms": 0.1747573777991918,
+        "minimo_ms": 3.409631,
+        "maximo_ms": 4.087984,
+        "stdout": "10\n"
+      },
+      "v002": {
+        "muestras": 31,
+        "mediana_ms": 3.954237,
+        "desviacion_ms": 0.3520766389157063,
+        "minimo_ms": 3.708244,
+        "maximo_ms": 5.011914,
+        "stdout": "10\n"
+      }
+    },
+    "repetidas": {
+      "automatico": {
+        "muestras": 7,
+        "mediana_ms": 39.810389,
+        "desviacion_ms": 0.5365340684007109,
+        "minimo_ms": 38.956944,
+        "maximo_ms": 40.442495,
+        "stdout": "7\n"
+      },
+      "sin_jit": {
+        "muestras": 7,
+        "mediana_ms": 40.811859,
+        "desviacion_ms": 0.7375650030943507,
+        "minimo_ms": 39.344703,
+        "maximo_ms": 41.300459,
+        "stdout": "7\n"
+      },
+      "sin_feature": {
+        "muestras": 7,
+        "mediana_ms": 40.34574,
+        "desviacion_ms": 1.0156767701832612,
+        "minimo_ms": 38.897181,
+        "maximo_ms": 41.795559,
+        "stdout": "7\n"
+      },
+      "base_003": {
+        "muestras": 7,
+        "mediana_ms": 40.672477,
+        "desviacion_ms": 1.1204207445718557,
+        "minimo_ms": 38.697569,
+        "maximo_ms": 41.266704,
+        "stdout": "7\n"
+      },
+      "v002": {
+        "muestras": 7,
+        "mediana_ms": 144.577096,
+        "desviacion_ms": 4.397098166860477,
+        "minimo_ms": 142.783466,
+        "maximo_ms": 153.214381,
+        "stdout": "7\n"
+      }
+    },
+    "caliente": {
+      "automatico": {
+        "muestras": 7,
+        "mediana_ms": 6.378192,
+        "desviacion_ms": 0.4938505590077688,
+        "minimo_ms": 6.196237,
+        "maximo_ms": 7.484573,
+        "stdout": "1999999000000\n"
+      },
+      "sin_jit": {
+        "muestras": 7,
+        "mediana_ms": 143.971681,
+        "desviacion_ms": 3.001839190854637,
+        "minimo_ms": 140.928093,
+        "maximo_ms": 150.356909,
+        "stdout": "1999999000000\n"
+      },
+      "sin_feature": {
+        "muestras": 7,
+        "mediana_ms": 137.377509,
+        "desviacion_ms": 2.636239444720671,
+        "minimo_ms": 134.096747,
+        "maximo_ms": 141.942779,
+        "stdout": "1999999000000\n"
+      },
+      "base_003": {
+        "muestras": 7,
+        "mediana_ms": 143.740916,
+        "desviacion_ms": 3.211782386108579,
+        "minimo_ms": 142.124181,
+        "maximo_ms": 149.89119,
+        "stdout": "1999999000000\n"
+      },
+      "v002": {
+        "muestras": 7,
+        "mediana_ms": 912.901816,
+        "desviacion_ms": 135.09007905582592,
+        "minimo_ms": 880.948369,
+        "maximo_ms": 1186.134021,
+        "stdout": "1999999000000\n"
+      }
+    },
+    "no_elegible": {
+      "automatico": {
+        "muestras": 7,
+        "mediana_ms": 15.248539,
+        "desviacion_ms": 0.43864859352474683,
+        "minimo_ms": 14.876774,
+        "maximo_ms": 16.128907,
+        "stdout": "17711\n"
+      },
+      "sin_jit": {
+        "muestras": 7,
+        "mediana_ms": 15.531054,
+        "desviacion_ms": 0.5958667690940812,
+        "minimo_ms": 14.939171,
+        "maximo_ms": 16.646424,
+        "stdout": "17711\n"
+      },
+      "sin_feature": {
+        "muestras": 7,
+        "mediana_ms": 14.595816,
+        "desviacion_ms": 0.45798365988417605,
+        "minimo_ms": 14.187184,
+        "maximo_ms": 15.610652,
+        "stdout": "17711\n"
+      },
+      "base_003": {
+        "muestras": 7,
+        "mediana_ms": 14.696079,
+        "desviacion_ms": 0.1837947182964371,
+        "minimo_ms": 14.478991,
+        "maximo_ms": 15.068177,
+        "stdout": "17711\n"
+      },
+      "v002": {
+        "muestras": 7,
+        "mediana_ms": 31.415869,
+        "desviacion_ms": 1.4781724704000605,
+        "minimo_ms": 30.680915,
+        "maximo_ms": 34.435423,
+        "stdout": "17711\n"
+      }
+    }
+  },
+  "cache": {
+    "automatico": {
+      "fria_ms": 3.345768,
+      "caliente_mediana_ms": 3.569563,
+      "muestras_caliente": 15
+    },
+    "sin_jit": {
+      "fria_ms": 3.425591,
+      "caliente_mediana_ms": 3.538019,
+      "muestras_caliente": 15
+    },
+    "sin_feature": {
+      "fria_ms": 3.334128,
+      "caliente_mediana_ms": 3.402773,
+      "muestras_caliente": 15
+    }
+  },
+  "rss_maximo_kib": {
+    "automatico": {
+      "corto": 11356,
+      "pequenas": 11368,
+      "bucles_cortos": 11368,
+      "repetidas": 11368,
+      "caliente": 11368,
+      "no_elegible": 11368
+    },
+    "sin_jit": {
+      "corto": 11372,
+      "pequenas": 11372,
+      "bucles_cortos": 11372,
+      "repetidas": 11372,
+      "caliente": 11372,
+      "no_elegible": 11372
+    },
+    "sin_feature": {
+      "corto": 11372,
+      "pequenas": 11372,
+      "bucles_cortos": 11372,
+      "repetidas": 11372,
+      "caliente": 11372,
+      "no_elegible": 11372
+    }
+  }
+}

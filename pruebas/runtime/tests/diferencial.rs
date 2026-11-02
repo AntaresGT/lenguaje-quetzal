@@ -35,6 +35,89 @@ fn intentar_entorno(
     intentar_entorno_con_modo(codigo, optimizar, true)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Nivel {
+    Referencia,
+    OptimizadoSinEspecializacion,
+    Optimizado,
+    #[cfg(feature = "jit")]
+    Jit,
+}
+
+fn intentar_entorno_nivel(
+    codigo: &str,
+    nivel: Nivel,
+) -> Result<Rc<maquina_virtual::valores::EntornoModulo>, nucleo::ErrorQuetzal> {
+    let fuente = Fuente::nueva("cuatro_niveles.qz", codigo);
+    let ast = sintaxis::parsear_modulo(&fuente).expect("debe parsear");
+    semantica::analizar_modulo(&ast).expect("debe pasar semántica");
+    let modulo = if nivel == Nivel::Referencia {
+        let mut modulo = bytecode::generar_modulo_sin_procesar(&ast).expect("debe generar");
+        bytecode::verificar_modulo(&mut modulo).expect("el original debe verificar");
+        modulo
+    } else {
+        bytecode::generar_modulo(&ast).expect("debe generar y verificar")
+    };
+    if nivel == Nivel::Referencia {
+        bytecode::verificar_modulo_inmutable(&modulo).expect("la referencia debe ser válida");
+    }
+    let mut vm = Vm::nueva(Rc::new(modulos_nativos::crear_registro()));
+    if matches!(
+        nivel,
+        Nivel::Referencia | Nivel::OptimizadoSinEspecializacion
+    ) {
+        vm = vm.sin_optimizar();
+    }
+    if matches!(
+        nivel,
+        Nivel::Referencia | Nivel::OptimizadoSinEspecializacion
+    ) {
+        vm = vm.sin_despacho_rapido();
+    }
+    #[cfg(feature = "jit")]
+    if nivel == Nivel::Jit {
+        vm = vm.con_jit(true);
+    }
+    vm.cargar_modulo(Rc::new(modulo), IndexMap::new())
+        .map(|(entorno, _)| entorno)
+}
+
+fn niveles() -> Vec<Nivel> {
+    vec![
+        Nivel::OptimizadoSinEspecializacion,
+        Nivel::Optimizado,
+        #[cfg(feature = "jit")]
+        Nivel::Jit,
+    ]
+}
+
+fn mismos_globales_cuatro_niveles(codigo: &str, nombres: &[&str]) {
+    let referencia = intentar_entorno_nivel(codigo, Nivel::Referencia).expect("referencia válida");
+    for nivel in niveles() {
+        let actual = intentar_entorno_nivel(codigo, nivel).expect("nivel ejecutable");
+        for nombre in nombres {
+            let esperado = global(&referencia, nombre);
+            let valor = global(&actual, nombre);
+            assert!(
+                valor.es_igual(&esperado),
+                "global '{nombre}' difiere en {nivel:?}: actual={valor:?} esperado={esperado:?}\n{codigo}"
+            );
+        }
+    }
+}
+
+fn mismos_errores_cuatro_niveles(codigo: &str) {
+    let referencia =
+        intentar_entorno_nivel(codigo, Nivel::Referencia).expect_err("la referencia debe fallar");
+    for nivel in niveles() {
+        let actual = intentar_entorno_nivel(codigo, nivel).expect_err("el nivel debe fallar");
+        assert_eq!(actual.codigo, referencia.codigo);
+        assert_eq!(actual.categoria, referencia.categoria);
+        assert_eq!(actual.mensaje, referencia.mensaje);
+        assert_eq!(actual.ubicacion, referencia.ubicacion);
+    }
+}
+
 fn entorno(codigo: &str, optimizar: bool) -> Rc<maquina_virtual::valores::EntornoModulo> {
     intentar_entorno(codigo, optimizar).expect("debe ejecutar")
 }
@@ -709,4 +792,107 @@ entero resultado = ejecutar()
 #[test]
 fn diferencial_cache_sitio_deberia_permanecer_compacta() {
     assert_eq!(std::mem::size_of::<CacheSitio>(), 24);
+}
+
+#[test]
+fn cuatro_niveles_deberian_conservar_aritmetica_funciones_y_bucles_calientes() {
+    mismos_globales_cuatro_niveles(
+        r#"
+entero combinar(entero a, entero b, entero c, entero d, entero e) {
+    entero var total = a - b + c * d - e
+    para (entero var i = 0; i < 2000; i++) {
+        si (i % 3 == 0) { total += i } sino { total -= 1 }
+    }
+    retornar total
+}
+entero primero = combinar(1, 2, 3, 4, 5)
+entero segundo = combinar(2, 3, 4, 5, 6)
+entero tercero = combinar(3, 4, 5, 6, 7)
+entero cuarto = combinar(4, 5, 6, 7, 8)
+entero resultado = combinar(5, 6, 7, 8, 9)
+"#,
+        &["primero", "segundo", "tercero", "cuarto", "resultado"],
+    );
+}
+
+#[test]
+fn cuatro_niveles_deberian_conservar_objetos_unicode_listas_y_jsn() {
+    mismos_globales_cuatro_niveles(
+        r#"
+objeto Base { publico: entero var valor = 11 }
+objeto Derivada hereda Base {
+    publico:
+        entero doble() { retornar esto.valor * 2 }
+}
+Derivada instancia = nuevo Derivada()
+lista<texto> textos = ["Quetzal🦜", "áéíóú"]
+jsn datos = { texto: textos[0], cantidad: textos.longitud(), valor: instancia.doble() }
+texto resultado = datos.texto + ":" + datos.cantidad.texto() + ":" + datos.valor.texto()
+"#,
+        &["resultado"],
+    );
+}
+
+#[test]
+fn cuatro_niveles_deberian_conservar_excepciones_finalmente_y_efectos() {
+    mismos_globales_cuatro_niveles(
+        r#"
+texto var efectos = ""
+vacio registrar(texto valor) { efectos += valor }
+vacio ejecutar() {
+    intentar {
+        registrar("inicio;")
+        lanzar "esperado"
+    } capturar (excepcion e) {
+        registrar("captura;")
+    } finalmente {
+        registrar("fin;")
+    }
+}
+ejecutar()
+"#,
+        &["efectos"],
+    );
+}
+
+#[test]
+fn cuatro_niveles_deberian_conservar_asincronia() {
+    mismos_globales_cuatro_niveles(
+        r#"
+asincrono entero duplicar(entero valor) { retornar valor * 2 }
+asincrono entero cuadruplicar(entero valor) {
+    entero doble = esperar duplicar(valor)
+    retornar esperar duplicar(doble)
+}
+entero resultado = esperar cuadruplicar(10)
+"#,
+        &["resultado"],
+    );
+}
+
+#[test]
+fn cuatro_niveles_deberian_conservar_errores_tras_calentar_jit() {
+    mismos_errores_cuatro_niveles(
+        r#"
+entero dividir(entero a, entero b) { retornar a / b }
+entero a = dividir(10, 2)
+entero b = dividir(10, 2)
+entero c = dividir(10, 2)
+entero d = dividir(10, 2)
+entero resultado = dividir(1, 0)
+"#,
+    );
+}
+
+#[test]
+fn cuatro_niveles_deberian_coincidir_en_programas_generados_con_semillas() {
+    for semilla in 0..32i64 {
+        let a = semilla % 7 - 3;
+        let b = semilla % 5 + 1;
+        let limite = semilla % 11 + 1;
+        let codigo = format!(
+            "entero var total = {a}\npara (entero var i = 0; i < {limite}; i++) {{\n    total = total * 2 + {b} - i\n}}\nentero resultado = total\n"
+        );
+        mismos_globales_cuatro_niveles(&codigo, &["resultado"]);
+    }
 }

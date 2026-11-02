@@ -26,6 +26,10 @@ paquetes = { workspace = true }
 # Parseo de argumentos de línea de comandos.
 clap = { workspace = true }
 
+[dev-dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+
 [build-dependencies]
 # Embebe el icono de la aplicación en el ejecutable de Windows.
 winresource = "0.1"

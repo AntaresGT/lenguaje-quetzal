@@ -188,8 +188,12 @@ impl ContextoJit {
         modulo: &Rc<bytecode::ModuloCompilado>,
         funcion: &bytecode::FuncionCompilada,
     ) -> Result<Rc<FuncionNativa>, ErrorJit> {
+        let inicio_verificacion = self.configuracion.metricas.then(std::time::Instant::now);
         bytecode::verificar_funcion_inmutable(modulo, funcion)
             .map_err(|error| ErrorJit::Bytecode(error.to_string()))?;
+        if let Some(inicio) = inicio_verificacion {
+            self.estadisticas.tiempo_verificacion += inicio.elapsed();
+        }
         if self.estadisticas.funciones_compiladas >= self.configuracion.max_funciones {
             return Err(ErrorJit::Limite("cantidad de funciones compiladas"));
         }
@@ -215,9 +219,23 @@ impl ContextoJit {
         let clave = self.clave_de_funcion(modulo, &funcion.nombre);
         let id_modulo = self.id_modulo(modulo);
         let inicio = std::time::Instant::now();
-        let resultado = crate::traductor::compilar(modulo, funcion, &self.compilados, id_modulo);
-        self.estadisticas.tiempo_compilacion += inicio.elapsed();
-        let (funcion, bytes) = resultado?;
+        let resultado = crate::traductor::compilar(
+            modulo,
+            funcion,
+            &self.compilados,
+            id_modulo,
+            self.configuracion.metricas,
+        );
+        let total_compilacion = inicio.elapsed();
+        self.estadisticas.tiempo_compilacion += total_compilacion;
+        let (funcion, bytes, tiempo_analisis, tiempo_define) = resultado?;
+        if let Some(tiempo_analisis) = tiempo_analisis {
+            self.estadisticas.tiempo_analisis += tiempo_analisis;
+            self.estadisticas.tiempo_emision += total_compilacion.saturating_sub(tiempo_analisis);
+        }
+        if let Some(tiempo_define) = tiempo_define {
+            self.estadisticas.tiempo_define += tiempo_define;
+        }
         let total = self.estadisticas.bytes_codigo.saturating_add(bytes);
         if total > self.configuracion.max_bytes_codigo {
             return Err(ErrorJit::Limite("memoria de código generado"));

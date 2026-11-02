@@ -21,8 +21,19 @@ pub(crate) fn compilar(
     funcion: &FuncionCompilada,
     compilados: &HashMap<ClaveFuncion, Rc<FuncionNativa>>,
     id_modulo: usize,
-) -> Result<(FuncionNativa, usize), ErrorJit> {
+    medir: bool,
+) -> Result<
+    (
+        FuncionNativa,
+        usize,
+        Option<std::time::Duration>,
+        Option<std::time::Duration>,
+    ),
+    ErrorJit,
+> {
+    let inicio_analisis = medir.then(std::time::Instant::now);
     let analisis = analizar(modulo, funcion)?;
+    let tiempo_analisis = inicio_analisis.map(|inicio| inicio.elapsed());
     let constructor = JITBuilder::new(default_libcall_names())
         .map_err(|error| ErrorJit::Compilacion(error.to_string()))?;
     let mut modulo_jit = JITModule::new(constructor);
@@ -64,9 +75,11 @@ pub(crate) fn compilar(
     if std::env::var_os("QUETZAL_JIT_IR").is_some() {
         eprintln!("{}", contexto.func.display());
     }
+    let inicio_define = medir.then(std::time::Instant::now);
     modulo_jit
         .define_function(id, &mut contexto)
         .map_err(|error| ErrorJit::Compilacion(error.to_string()))?;
+    let tiempo_define = inicio_define.map(|inicio| inicio.elapsed());
     let bytes = contexto
         .compiled_code()
         .map(|codigo| codigo.code_buffer().len())
@@ -90,6 +103,8 @@ pub(crate) fn compilar(
             firma: FirmaNativa::Entera,
         },
         bytes,
+        tiempo_analisis,
+        tiempo_define,
     ))
 }
 

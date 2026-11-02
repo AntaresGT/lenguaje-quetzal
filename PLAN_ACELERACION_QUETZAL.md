@@ -47,6 +47,8 @@ Cada cambio debe ser pequeño y medido por separado con los benchmarks existente
 
 **Resultado de la primera iteración:** se probaron verificación sin clonar la función y dependencias con nombres prestados. Las suites pasaron, pero cinco lotes intercalados no mostraron beneficio; la mediana fue 4,884 ms antes y 5,109 ms después. Una comprobación con orden invertido tampoco favoreció el cambio. Se revirtió el código y solo se conservó la medición en `pruebas/resultados/rendimiento/fase-2-compilacion-jit.json`. La siguiente iteración debe medir el tiempo interno de cada subfase antes de elegir otro cambio.
 
+**Resultado de la segunda iteración:** la instrumentación opt-in mostró que verificación y análisis cuestan solo microsegundos, mientras `define_function` concentra el costo. `opt_level=none` redujo compilación de 493 a 329 µs, pero el tiempo nativo empeoró aproximadamente 3–4 % en bucle y llamadas calientes. Se revirtió ese nivel y se conservó únicamente la medición por subfases, sin relojes activados en producción. No se intentará bajar el nivel de optimización nativa a costa de velocidad sostenida.
+
 ### Etapa 3 — Evitar verificación duplicada sin debilitar seguridad
 
 **Archivos:** `crates/bytecode/src/verificador.rs`, `crates/motor/src/cargador.rs`, `crates/maquina_virtual/src/vm.rs`, `crates/paquetes/src/cache.rs`.

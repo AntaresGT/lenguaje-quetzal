@@ -1,0 +1,36 @@
+{
+  "bucle_caliente": {
+    "antes": {
+      "muestras": 15,
+      "mediana_ms": 6.178386,
+      "desviacion_ms": 4.7034556471615785,
+      "minimo_ms": 5.993241,
+      "maximo_ms": 24.396312
+    },
+    "despues": {
+      "muestras": 15,
+      "mediana_ms": 6.35175,
+      "desviacion_ms": 0.24004302962590043,
+      "minimo_ms": 6.175413,
+      "maximo_ms": 7.170741
+    },
+    "aceleracion": 0.9727061046168378
+  },
+  "llamadas_calientes": {
+    "antes": {
+      "muestras": 15,
+      "mediana_ms": 4.931571,
+      "desviacion_ms": 0.11532763269783058,
+      "minimo_ms": 4.850958,
+      "maximo_ms": 5.291684
+    },
+    "despues": {
+      "muestras": 15,
+      "mediana_ms": 5.129694,
+      "desviacion_ms": 0.0710700196472935,
+      "minimo_ms": 5.000404,
+      "maximo_ms": 5.312884
+    },
+    "aceleracion": 0.9613772283492934
+  }
+}

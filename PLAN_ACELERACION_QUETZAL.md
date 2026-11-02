@@ -45,6 +45,8 @@ Cada cambio debe ser pequeño y medido por separado con los benchmarks existente
 
 **Medida:** primera llamada caliente, carga de proyecto grande, bytes de código y tiempo total de proceso.
 
+**Resultado de la primera iteración:** se probaron verificación sin clonar la función y dependencias con nombres prestados. Las suites pasaron, pero cinco lotes intercalados no mostraron beneficio; la mediana fue 4,884 ms antes y 5,109 ms después. Una comprobación con orden invertido tampoco favoreció el cambio. Se revirtió el código y solo se conservó la medición en `pruebas/resultados/rendimiento/fase-2-compilacion-jit.json`. La siguiente iteración debe medir el tiempo interno de cada subfase antes de elegir otro cambio.
+
 ### Etapa 3 — Evitar verificación duplicada sin debilitar seguridad
 
 **Archivos:** `crates/bytecode/src/verificador.rs`, `crates/motor/src/cargador.rs`, `crates/maquina_virtual/src/vm.rs`, `crates/paquetes/src/cache.rs`.

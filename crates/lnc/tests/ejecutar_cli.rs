@@ -61,25 +61,16 @@ fn cli_deberia_rechazar_banderas_jit_contradictorias() {
     assert_eq!(salida.status.code(), Some(2));
 }
 
-#[cfg(not(feature = "jit"))]
 #[test]
-fn cli_sin_soporte_deberia_rechazar_solo_la_activacion_explicita() {
-    let temporal = Temporal::nuevo("sin_feature");
+fn cli_deberia_respetar_la_disponibilidad_real_del_jit() {
+    let temporal = Temporal::nuevo("disponibilidad");
     let entrada = temporal.proyecto("consola.mostrar(\"salida-42\")\n");
     let ruta = entrada.to_str().expect("ruta UTF-8");
     let salida = ejecutar_en(&temporal.ruta, &["ejecutar", "--jit", ruta]);
-    assert_eq!(salida.status.code(), Some(2));
+    if motor::JIT_DISPONIBLE {
+        afirmar_salida(&salida, SALIDA);
+    } else {
+        assert_eq!(salida.status.code(), Some(2));
+    }
     afirmar_salida(&ejecutar_en(&temporal.ruta, &["ejecutar", ruta]), SALIDA);
-}
-
-#[cfg(feature = "jit")]
-#[test]
-fn cli_con_soporte_deberia_aceptar_activacion_explicita() {
-    let temporal = Temporal::nuevo("con_feature");
-    let entrada = temporal.proyecto("consola.mostrar(\"salida-42\")\n");
-    let ruta = entrada.to_str().expect("ruta UTF-8");
-    afirmar_salida(
-        &ejecutar_en(&temporal.ruta, &["ejecutar", "--jit", ruta]),
-        SALIDA,
-    );
 }

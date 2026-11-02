@@ -5,8 +5,7 @@ use motor::{ConfiguracionMotor, ModoJit, MotorQuetzal};
 
 /// Ejecuta un archivo `.qz` o el proyecto actual (vía `quetzal.json`).
 pub fn ejecutar(archivo: Option<&str>, sin_optimizar: bool, jit: bool, sin_jit: bool) -> i32 {
-    #[cfg(not(feature = "jit"))]
-    if jit {
+    if jit && !motor::JIT_DISPONIBLE {
         eprintln!("este binario se compiló sin soporte JIT; usa la feature 'jit'");
         return 2;
     }

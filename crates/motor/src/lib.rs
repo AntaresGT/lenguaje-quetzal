@@ -12,3 +12,5 @@ pub use configuracion::{ConfiguracionMotor, ModoJit};
 pub use motor::MotorQuetzal;
 pub use nucleo::{ErrorQuetzal, ResultadoMultiple, ResultadoQuetzal, VERSION_QUETZAL};
 pub use sesion::SesionInteractiva;
+
+pub const JIT_DISPONIBLE: bool = cfg!(feature = "jit");

@@ -1,0 +1,54 @@
+   Compiling foldhash v0.2.0
+   Compiling smallvec v1.15.1
+   Compiling libm v0.2.16
+   Compiling allocator-api2 v0.2.21
+   Compiling hashbrown v0.16.1
+   Compiling rustc-hash v2.1.2
+   Compiling fnv v1.0.7
+   Compiling arbitrary v1.5.0
+   Compiling cranelift-assembler-x64 v0.137.0
+   Compiling target-lexicon v0.13.5
+   Compiling hashbrown v0.17.1
+   Compiling cranelift-codegen-shared v0.137.0
+   Compiling icu_normalizer v2.2.0
+   Compiling bumpalo v3.20.3
+   Compiling anyhow v1.0.104
+   Compiling idna_adapter v1.2.2
+   Compiling region v3.0.2
+   Compiling hyper v1.10.1
+   Compiling indexmap v2.14.0
+   Compiling cranelift-control v0.137.0
+   Compiling wasmtime-internal-core v50.0.0
+   Compiling regalloc2 v0.15.2
+   Compiling idna v1.1.0
+   Compiling memmap2 v0.9.12
+   Compiling parking_lot_core v0.9.12
+   Compiling lnc v0.0.2 (/home/allam/Escritorio/Proyectos/antares/lenguaje-quetzal/crates/lnc)
+   Compiling url v2.5.8
+   Compiling cranelift-bitset v0.137.0
+   Compiling wasmtime-internal-jit-icache-coherence v50.0.0
+   Compiling cranelift-entity v0.137.0
+   Compiling parking_lot v0.12.5
+   Compiling gimli v0.33.0
+   Compiling cranelift-bforest v0.137.0
+   Compiling serde_json v1.0.150
+   Compiling hyper-util v0.1.20
+   Compiling tower-http v0.6.11
+   Compiling crossterm v0.28.1
+   Compiling semantica v0.0.2 (/home/allam/Escritorio/Proyectos/antares/lenguaje-quetzal/crates/semantica)
+   Compiling paquetes v0.0.2 (/home/allam/Escritorio/Proyectos/antares/lenguaje-quetzal/crates/paquetes)
+   Compiling hyper-rustls v0.27.9
+   Compiling reqwest v0.12.28
+   Compiling runtime v0.0.2 (/home/allam/Escritorio/Proyectos/antares/lenguaje-quetzal/crates/runtime)
+   Compiling reedline v0.42.0
+   Compiling cranelift-codegen v0.137.0
+   Compiling cranelift-module v0.137.0
+   Compiling cranelift-native v0.137.0
+   Compiling cranelift-frontend v0.137.0
+   Compiling cranelift-jit v0.137.0
+   Compiling compilador_jit v0.0.2 (/home/allam/Escritorio/Proyectos/antares/lenguaje-quetzal/crates/compilador_jit)
+   Compiling maquina_virtual v0.0.2 (/home/allam/Escritorio/Proyectos/antares/lenguaje-quetzal/crates/maquina_virtual)
+   Compiling modulos_nativos v0.0.2 (/home/allam/Escritorio/Proyectos/antares/lenguaje-quetzal/crates/modulos_nativos)
+   Compiling motor v0.0.2 (/home/allam/Escritorio/Proyectos/antares/lenguaje-quetzal/crates/motor)
+   Compiling repl v0.0.2 (/home/allam/Escritorio/Proyectos/antares/lenguaje-quetzal/crates/repl)
+    Finished `release` profile [optimized] target(s) in 3m 19s

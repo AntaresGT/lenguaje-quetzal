@@ -1,0 +1,24 @@
+   Compiling bytecode v0.0.2 (/home/allam/Escritorio/Proyectos/antares/lenguaje-quetzal/crates/bytecode)
+   Compiling compilador_jit v0.0.2 (/home/allam/Escritorio/Proyectos/antares/lenguaje-quetzal/crates/compilador_jit)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.03s
+     Running unittests src/lib.rs (target/debug/deps/compilador_jit-957902730029eb5b)
+
+running 9 tests
+test analisis::pruebas::deberia_rechazar_operacion_generica ... ok
+test analisis::pruebas::deberia_aceptar_retorno_de_parametro_entero ... ok
+test contexto::pruebas::anticipacion_deberia_exigir_bucles_y_respetar_limites ... ok
+test contexto::pruebas::baseline_deberia_llamar_funciones_directas ... ok
+test contexto::pruebas::trivial_deberia_ejecutar_y_liberarse ... ok
+test contexto::pruebas::baseline_deberia_ejecutar_condicionales ... ok
+test contexto::pruebas::baseline_deberia_ejecutar_bucles_y_retornos ... ok
+test contexto::pruebas::baseline_deberia_conservar_errores_numericos ... ok
+test contexto::pruebas::baseline_deberia_coincidir_con_operaciones_checked ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+   Doc-tests compilador_jit
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

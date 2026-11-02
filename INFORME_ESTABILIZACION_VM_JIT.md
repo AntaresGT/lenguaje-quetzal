@@ -49,6 +49,7 @@ La matriz completa ya pasó en [GitHub Actions 41374080659](https://github.com/A
 7. **Regresión por umbral automático demasiado bajo.** La primera medición falló las puertas; la selección por calor observado la corrigió. Evidencias antes/después: `INFORME_UMBRAL_4.md`, `resultados-seleccion-1.json` y `resultados.json`.
 8. **ABI incorrecta en llamadas directas JIT en Windows.** La llamada indirecta forzaba `CallConv::SystemV` aunque el llamado usaba la convención del objetivo; ahora ambos usan `generador.func.signature.call_conv`. La regresión de 10 000 llamadas conserva el resultado y muestra el valor real si diverge. Linux y Windows pasan la suite en CI.
 9. **Oráculo convertido a CRLF por el checkout de Windows.** El programa emitía LF y Git convirtió los archivos esperados a CRLF. `compatibilidad_cli` ahora normaliza únicamente pares CRLF a LF en salida real y esperada, sin eliminar CR aislados ni tolerar otras diferencias.
+10. **Crecimiento de metadatos JIT en carga prolongada.** La tabla de identidades conservaba una referencia débil por módulo incluso tras liberarlo; 66 243 módulos elevaron RSS de 11,8 a 39,1 MiB. Se añadió purga periódica de entradas muertas sin descartar módulos vivos. Dos repeticiones posteriores quedaron en 13,36 y 13,13 MiB, con 256 funciones y 55 296 bytes de código.
 
 No se eliminaron ni ignoraron tests para obtener suites verdes.
 
@@ -99,11 +100,13 @@ Todos estos registros terminaron con código 0 (`pruebas/resultados/validacion-f
 
 El binario release normal superó ocho ejecuciones: `quetzal ejecutar`, `quetzal ejecutar programa.qz`, `quetzal programa.qz`, `--sin-jit`, `--sin-optimizar`, `--jit` y caliente con/sin JIT. Salidas, errores y estados están en `pruebas/resultados/validacion-final/cli.json`.
 
+La campaña Linux de 15 segundos cargó y descargó 65 865 módulos con JIT, objetos, listas y `esperar`: RSS inicial 11 739 136 bytes, final y máximo 13 127 680 bytes; 256 funciones y 55 296 bytes de código. Evidencia: `pruebas/resultados/validacion-final/estres-linux.stdout.log`. CI ejecuta la misma campaña en Linux/Windows y mide el proceso Windows externamente.
+
 La ejecución [GitHub Actions 41374080659](https://github.com/AntaresGT/lenguaje-quetzal/actions/runs/41374080659) confirmó los cuatro trabajos en `success` sobre `b1e4c97415dcb30ae7a0a9bab522f2c0552ad686`: Linux/Windows, VM/CLI y JIT nativo.
 
 ## Trabajo restante para cerrar el veredicto global
 
-1. Repetir estrés prolongado y compatibilidad completa en cada plataforma soportada; las 24 iteraciones y RSS local no sustituyen esa campaña.
+1. Ejecutar y aprobar en CI la campaña prolongada de Windows; Linux ya superó dos repeticiones de más de 65 000 módulos con RSS estabilizado.
 2. Si aparece una divergencia generativa, conservar el caso mínimo como regresión permanente y repetir las cuatro rutas antes de habilitar más funciones JIT.
 
 No se cambió la versión pública, no se crearon etiquetas/publicaciones y no se modificó `quetzal compilar` ni la generación de ejecutables Quetzal.

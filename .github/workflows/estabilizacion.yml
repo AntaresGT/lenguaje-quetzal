@@ -72,3 +72,40 @@ jobs:
         run: cargo test -p compilador_jit --features nativo --locked --no-fail-fast
       - name: CLI real con JIT
         run: cargo test -p lnc --features jit --locked --no-fail-fast
+
+  estres:
+    name: ${{ matrix.sistema }} / Estrés prolongado y memoria
+    runs-on: ${{ matrix.corredor }}
+    needs: jit
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sistema: Linux
+            corredor: ubuntu-latest
+          - sistema: Windows
+            corredor: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: estabilizacion-estres-${{ matrix.sistema }}
+      - name: Construir prueba de memoria en release
+        run: cargo test -p pruebas_runtime --features jit --release --test memoria --locked --no-run
+      - name: Ejecutar campaña en Linux
+        if: matrix.sistema == 'Linux'
+        run: |
+          set -o pipefail
+          cargo test -p pruebas_runtime --features jit --release --test memoria --locked -- --ignored --nocapture estres_prolongado_deberia_estabilizar_modulos_jit_y_memoria | tee estres-linux.stdout.log
+      - name: Ejecutar campaña y medir proceso en Windows
+        if: matrix.sistema == 'Windows'
+        shell: pwsh
+        run: .github/scripts/ejecutar-estres-memoria.ps1
+      - name: Guardar evidencias de memoria
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: estres-memoria-${{ matrix.sistema }}
+          path: estres-*.log
+          if-no-files-found: error

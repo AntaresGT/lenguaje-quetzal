@@ -1,0 +1,14 @@
+entero identidad(entero n) { retornar n }
+entero llamar_repetido(entero limite) {
+    entero var suma = 0
+    para (entero var i = 0; i < limite; i++) {
+        suma = identidad(suma)
+    }
+    retornar suma
+}
+entero a = llamar_repetido(1)
+entero b = llamar_repetido(2)
+entero c = llamar_repetido(3)
+entero d = llamar_repetido(4)
+entero resultado = llamar_repetido(200000)
+consola.mostrar(resultado)

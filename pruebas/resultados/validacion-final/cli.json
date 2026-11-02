@@ -1,0 +1,50 @@
+[
+  {
+    "caso": "proyecto_sin_banderas",
+    "estado": 0,
+    "stdout": "final-42\n",
+    "stderr": ""
+  },
+  {
+    "caso": "archivo_absoluto",
+    "estado": 0,
+    "stdout": "final-42\n",
+    "stderr": ""
+  },
+  {
+    "caso": "alias_archivo",
+    "estado": 0,
+    "stdout": "final-42\n",
+    "stderr": ""
+  },
+  {
+    "caso": "sin_jit",
+    "estado": 0,
+    "stdout": "final-42\n",
+    "stderr": ""
+  },
+  {
+    "caso": "sin_optimizar",
+    "estado": 0,
+    "stdout": "final-42\n",
+    "stderr": ""
+  },
+  {
+    "caso": "jit_explicito",
+    "estado": 0,
+    "stdout": "final-42\n",
+    "stderr": ""
+  },
+  {
+    "caso": "caliente_automatico",
+    "estado": 0,
+    "stdout": "1999999000000\n",
+    "stderr": ""
+  },
+  {
+    "caso": "caliente_sin_jit",
+    "estado": 0,
+    "stdout": "1999999000000\n",
+    "stderr": ""
+  }
+]

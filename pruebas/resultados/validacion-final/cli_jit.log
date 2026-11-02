@@ -1,0 +1,30 @@
+   Compiling lnc v0.0.2 (/home/allam/Escritorio/Proyectos/antares/lenguaje-quetzal/crates/lnc)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.17s
+     Running unittests src/principal.rs (target/debug/deps/quetzal-7587e8dcaa3c92c8)
+
+running 4 tests
+test argumentos::pruebas::traducir_aliases_deberia_anteponer_ejecutar_a_sin_optimizar ... ok
+test argumentos::pruebas::traducir_aliases_deberia_aceptar_version_con_tilde ... ok
+test argumentos::pruebas::traducir_aliases_deberia_convertir_archivo_qz_en_ejecutar ... ok
+test argumentos::pruebas::traducir_aliases_deberia_convertir_nuevo_flag_en_subcomando ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/compatibilidad_cli.rs (target/debug/deps/compatibilidad_cli-a680dab113120440)
+
+running 1 test
+test ejemplos_congelados_deberian_coincidir_con_el_oraculo_en_modo_normal_y_sin_jit ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s
+
+     Running tests/ejecutar_cli.rs (target/debug/deps/ejecutar_cli-fa8342f03b8819c9)
+
+running 5 tests
+test cli_deberia_rechazar_banderas_jit_contradictorias ... ok
+test cli_deberia_respetar_la_disponibilidad_real_del_jit ... ok
+test cli_deberia_conservar_errores_con_y_sin_jit ... ok
+test cli_deberia_recompilar_una_cache_corrupta ... ok
+test cli_deberia_ejecutar_archivo_y_proyecto_sin_banderas ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+

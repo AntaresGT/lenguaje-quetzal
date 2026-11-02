@@ -266,7 +266,11 @@ entero resultado = llamar_repetido(10000)
     let (entorno, _) = vm
         .cargar_modulo(Rc::new(compilar(codigo)), IndexMap::new())
         .expect("llamadas directas");
-    assert!(global(&entorno, "resultado").es_igual(&Valor::Entero(10_000)));
+    let resultado = global(&entorno, "resultado");
+    assert!(
+        resultado.es_igual(&Valor::Entero(10_000)),
+        "resultado incorrecto en llamadas directas JIT: {resultado:?}"
+    );
     assert_eq!(vm.estadisticas_jit().funciones_compiladas, 2);
 }
 

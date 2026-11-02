@@ -296,6 +296,7 @@ fn traducir_funcion(
                 pila_guardar(generador, &variables, &mut profundidad, valor);
             }
             CodigoOp::Llamar => {
+                let convencion = generador.func.signature.call_conv;
                 llamar_directa(
                     generador,
                     &variables,
@@ -303,7 +304,7 @@ fn traducir_funcion(
                     instruccion.cantidad() as usize,
                     direccion_salida,
                     puntero_tipo,
-                    CallConv::SystemV,
+                    convencion,
                 );
             }
             CodigoOp::Saltar => {

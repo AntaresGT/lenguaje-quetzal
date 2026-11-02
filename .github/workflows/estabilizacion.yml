@@ -66,7 +66,7 @@ jobs:
           shared-key: estabilizacion-jit-${{ matrix.sistema }}
       - name: Auditar frontera nativa sin prohibir su unsafe aislado
         run: cargo clippy -p compilador_jit --features nativo --locked -- -D warnings -D unsafe_op_in_unsafe_fn
-      - name: Batería JIT de runtime, memoria y cuatro niveles
+      - name: Pruebas del runtime con JIT, memoria y equivalencia
         run: cargo test -p pruebas_runtime --features jit --locked --no-fail-fast
       - name: Pruebas del compilador nativo
         run: cargo test -p compilador_jit --features nativo --locked --no-fail-fast

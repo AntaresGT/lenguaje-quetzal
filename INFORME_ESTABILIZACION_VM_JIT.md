@@ -6,7 +6,7 @@
 
 **Linux x86_64 sí supera las puertas locales de estabilidad, compatibilidad y costo/beneficio.** En esa plataforma el build release normal activa `ModoJit::Automatico` sin flags; `--sin-jit` conserva la salida de emergencia y otras plataformas no reciben activación automática indiscriminada.
 
-El veredicto global no se cierra porque la matriz Windows/CI añadida en `.github/workflows/estabilizacion.yml` no se ejecutó en este entorno. Tampoco se afirma haber cubierto una ejecución prolongada en cada plataforma. No hay fallos críticos abiertos en las suites ejecutadas.
+El veredicto global no se cierra porque la primera matriz Windows/CI detectó dos fallos y aún falta una nueva ejecución completa tras las correcciones. Tampoco se afirma haber cubierto una ejecución prolongada en cada plataforma. La divergencia de llamadas directas JIT en Windows quedó corregida y validada localmente, pero su confirmación en Windows sigue pendiente.
 
 ## Alcance y línea base
 
@@ -47,6 +47,7 @@ El veredicto global no se cierra porque la matriz Windows/CI añadida en `.githu
 5. **Sobrecosto en llamadas frías.** Se eliminaron vectores y reinserción de argumentos en la ruta de pila.
 6. **Fallback permanentemente contado.** Una función rechazada deja de pagar observación en cada llamada; el fallback se registra en la transición.
 7. **Regresión por umbral automático demasiado bajo.** La primera medición falló las puertas; la selección por calor observado la corrigió. Evidencias antes/después: `INFORME_UMBRAL_4.md`, `resultados-seleccion-1.json` y `resultados.json`.
+8. **ABI incorrecta en llamadas directas JIT en Windows.** La llamada indirecta forzaba `CallConv::SystemV` aunque el llamado usaba la convención del objetivo; ahora ambos usan `generador.func.signature.call_conv`. La regresión de 10 000 llamadas conserva el resultado y muestra el valor real si diverge. Linux vuelve a pasar toda la suite; falta confirmación del próximo CI en Windows.
 
 No se eliminaron ni ignoraron tests para obtener suites verdes.
 
@@ -99,7 +100,7 @@ El binario release normal superó ocho ejecuciones: `quetzal ejecutar`, `quetzal
 
 ## Trabajo restante para cerrar el veredicto global
 
-1. Ejecutar la matriz Linux/Windows de `.github/workflows/estabilizacion.yml` y activar automáticamente solo los objetivos que la superen.
+1. Repetir la matriz Linux/Windows para confirmar la corrección de ABI y resolver la divergencia restante de `compatibilidad_cli`; activar automáticamente solo los objetivos que la superen.
 2. Repetir estrés prolongado y compatibilidad completa en cada plataforma soportada; las 24 iteraciones y RSS local no sustituyen esa campaña.
 3. Si aparece una divergencia generativa, conservar el caso mínimo como regresión permanente y repetir las cuatro rutas antes de habilitar más funciones JIT.
 

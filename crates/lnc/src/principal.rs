@@ -25,6 +25,13 @@ fn main() {
 
     let argumentos_traducidos = argumentos::traducir_aliases(std::env::args().collect());
 
+    // Ctrl+C interrumpe la ejecución de forma cooperativa (E0410) en lugar
+    // de matar el proceso en frío; el REPL queda vivo y reporta el error.
+    let resultado_ctrlc = ctrlc::set_handler(motor::interrumpir_ejecucion);
+    if let Err(error) = resultado_ctrlc {
+        eprintln!("aviso: no se pudo registrar Ctrl+C: {error}");
+    }
+
     let cli = match Cli::try_parse_from(argumentos_traducidos) {
         Ok(cli) => cli,
         Err(error) => {

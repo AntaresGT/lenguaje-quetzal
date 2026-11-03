@@ -9,6 +9,7 @@
 pub mod bucle_eventos;
 pub mod codigo;
 pub mod errores;
+pub mod interrupcion;
 pub mod nativos;
 pub mod valores;
 pub mod vm;

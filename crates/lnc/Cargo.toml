@@ -26,6 +26,9 @@ paquetes = { workspace = true }
 # Parseo de argumentos de línea de comandos.
 clap = { workspace = true }
 
+# Interrupción de la ejecución con Ctrl+C (bandera cooperativa).
+ctrlc = { workspace = true }
+
 [build-dependencies]
 # Embebe el icono de la aplicación en el ejecutable de Windows.
 winresource = "0.1"

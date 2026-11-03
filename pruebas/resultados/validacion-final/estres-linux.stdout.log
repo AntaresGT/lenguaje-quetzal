@@ -1,7 +1,0 @@
-
-running 1 test
-estres_jit iteraciones=65865 rss_inicial=Some(11739136) rss_final=Some(13127680) rss_maximo=13127680 compiladas=256 bytes=55296
-test estres_prolongado_deberia_estabilizar_modulos_jit_y_memoria ... ok
-
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 15.00s
-

@@ -1,7 +1,0 @@
-    Checking modulos_nativos v0.0.2 (/home/allam/Escritorio/Proyectos/antares/lenguaje-quetzal/crates/modulos_nativos)
-    Checking motor v0.0.2 (/home/allam/Escritorio/Proyectos/antares/lenguaje-quetzal/crates/motor)
-    Checking pruebas_runtime v0.0.2 (/home/allam/Escritorio/Proyectos/antares/lenguaje-quetzal/pruebas/runtime)
-    Checking pruebas_bytecode v0.0.2 (/home/allam/Escritorio/Proyectos/antares/lenguaje-quetzal/pruebas/bytecode)
-    Checking repl v0.0.2 (/home/allam/Escritorio/Proyectos/antares/lenguaje-quetzal/crates/repl)
-    Checking lnc v0.0.2 (/home/allam/Escritorio/Proyectos/antares/lenguaje-quetzal/crates/lnc)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.12s

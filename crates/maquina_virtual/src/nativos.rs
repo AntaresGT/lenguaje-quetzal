@@ -214,3 +214,41 @@ pub fn normalizar_nombre(texto: &str) -> String {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    fn registro_con_metodo(nombre: &str) -> RegistroNativos {
+        let mut registro = RegistroNativos::nuevo();
+        registro.registrar_funcion(nombre, Box::new(|_| Ok(Valor::Nulo)));
+        registro
+    }
+
+    #[test]
+    fn metodo_de_deberia_resolver_nombres_ascii_por_id() {
+        let registro = registro_con_metodo("texto.mayusculas");
+        let id = registro.id_de("texto.mayusculas");
+        assert_eq!(registro.metodo_de("texto", "mayusculas"), id);
+    }
+
+    #[test]
+    fn metodo_de_deberia_consultar_sin_tildes_un_registro_con_tildes() {
+        let registro = registro_con_metodo("mátematica.número");
+        let id = registro.id_de("matematica.numero");
+        assert_eq!(registro.metodo_de("matematica", "numero"), id);
+    }
+
+    #[test]
+    fn metodo_de_deberia_consultar_con_tildes_un_registro_sin_tildes() {
+        let registro = registro_con_metodo("matematica.numero");
+        let id = registro.id_de("matematica.numero");
+        assert_eq!(registro.metodo_de("mátematica", "número"), id);
+    }
+
+    #[test]
+    fn metodo_de_deberia_rechazar_un_metodo_ausente() {
+        let registro = registro_con_metodo("texto.mayusculas");
+        assert_eq!(registro.metodo_de("texto", "ausente"), None);
+    }
+}

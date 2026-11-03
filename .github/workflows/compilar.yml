@@ -27,6 +27,7 @@ jobs:
           - sistema: windows
             corredor: windows-latest
             binario: quetzal.exe
+            binario_lsp: quetzal-lsp.exe
             artefacto: quetzal-windows
             empaquetado: windows
             objetivo: ""
@@ -35,13 +36,15 @@ jobs:
           - sistema: ubuntu
             corredor: ubuntu-latest
             binario: quetzal
+            binario_lsp: quetzal-lsp
             artefacto: quetzal-ubuntu
-            empaquetado: bundle
+            empaquetado: deb
             objetivo: ""
             rustflags: ""
           - sistema: linux
             corredor: ubuntu-latest
             binario: quetzal
+            binario_lsp: quetzal-lsp
             artefacto: quetzal-linux
             empaquetado: estatico
             objetivo: x86_64-unknown-linux-musl
@@ -67,17 +70,17 @@ jobs:
         with:
           shared-key: lnc-${{ matrix.sistema }}
 
-      - name: Compilar quetzal (release)
+      - name: Compilar ejecutables (release)
         if: matrix.objetivo == ''
         env:
           RUSTFLAGS: ${{ matrix.rustflags }}
-        run: cargo build -p lnc --release
+        run: cargo build -p lnc -p lsp --release
 
-      - name: Compilar quetzal estático (musl)
+      - name: Compilar ejecutables estáticos (musl)
         if: matrix.objetivo != ''
         env:
           RUSTFLAGS: ${{ matrix.rustflags }}
-        run: cargo build -p lnc --release --target ${{ matrix.objetivo }}
+        run: cargo build -p lnc -p lsp --release --target ${{ matrix.objetivo }}
 
       - name: Instalar WiX
         if: matrix.empaquetado == 'windows'
@@ -87,48 +90,79 @@ jobs:
         if: matrix.empaquetado == 'windows'
         shell: bash
         run: |
-          mkdir -p dist
-          cp "target/release/${{ matrix.binario }}" "dist/${{ matrix.binario }}"
-          bash .github/scripts/empaquetar-msi.sh "dist/${{ matrix.binario }}" dist
+          mkdir -p dist/portable dist/instalador
+          cp "target/release/${{ matrix.binario }}" "dist/portable/${{ matrix.binario }}"
+          cp "target/release/${{ matrix.binario_lsp }}" "dist/portable/${{ matrix.binario_lsp }}"
+          bash .github/scripts/empaquetar-msi.sh "dist/portable/${{ matrix.binario }}" dist/instalador
 
       - name: Instalar dpkg-dev
-        if: matrix.empaquetado == 'bundle'
+        if: matrix.empaquetado == 'deb'
         run: sudo apt-get update && sudo apt-get install -y dpkg-dev
 
-      - name: Empaquetar Ubuntu con librerías
-        if: matrix.empaquetado == 'bundle'
-        shell: bash
-        run: bash .github/scripts/empaquetar-linux.sh "target/release/${{ matrix.binario }}" dist
-
       - name: Empaquetar .deb
-        if: matrix.empaquetado == 'bundle'
+        if: matrix.empaquetado == 'deb'
         shell: bash
-        run: bash .github/scripts/empaquetar-deb.sh "target/release/${{ matrix.binario }}" dist
+        run: bash .github/scripts/empaquetar-deb.sh "target/release/${{ matrix.binario }}" dist/paquete
 
-      - name: Empaquetar binario estático
+      - name: Empaquetar binarios estáticos
         if: matrix.empaquetado == 'estatico'
         shell: bash
         run: |
           set -euo pipefail
-          bin="target/${{ matrix.objetivo }}/release/${{ matrix.binario }}"
-          if readelf -d "$bin" 2>/dev/null | grep -q '(NEEDED)'; then
-            echo "el binario musl sigue enlazado a librerías dinámicas" >&2
-            readelf -d "$bin" || true
-            exit 1
-          fi
-          mkdir -p dist
-          cp "$bin" "dist/${{ matrix.binario }}"
+          for nombre in "${{ matrix.binario }}" "${{ matrix.binario_lsp }}"; do
+            bin="target/${{ matrix.objetivo }}/release/$nombre"
+            if readelf -d "$bin" 2>/dev/null | grep -q '(NEEDED)'; then
+              echo "el binario musl $nombre sigue enlazado a librerías dinámicas" >&2
+              readelf -d "$bin" || true
+              exit 1
+            fi
+          done
+          mkdir -p dist/portable
+          cp "target/${{ matrix.objetivo }}/release/${{ matrix.binario }}" "dist/portable/${{ matrix.binario }}"
+          cp "target/${{ matrix.objetivo }}/release/${{ matrix.binario_lsp }}" "dist/portable/${{ matrix.binario_lsp }}"
 
       - name: Empaquetar AppImage
         if: matrix.empaquetado == 'estatico'
         shell: bash
-        run: bash .github/scripts/empaquetar-appimage.sh "dist/${{ matrix.binario }}" dist
+        run: |
+          mkdir -p dist/appimage
+          bash .github/scripts/empaquetar-appimage.sh "dist/portable/${{ matrix.binario }}" dist/appimage
 
-      - name: Subir ejecutable
+      # Actions ya comprime cada subida. Un zip dentro de dist/ saldría
+      # otra vez al extraer el artefacto.
+      - name: Subir binarios portátiles
+        if: matrix.empaquetado == 'windows' || matrix.empaquetado == 'estatico'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artefacto }}
-          path: dist
+          path: dist/portable/*
+          if-no-files-found: error
+          retention-days: 5
+
+      - name: Subir instalador MSI
+        if: matrix.empaquetado == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: quetzal-windows-msi
+          path: dist/instalador/*
+          if-no-files-found: error
+          retention-days: 5
+
+      - name: Subir paquete Debian
+        if: matrix.empaquetado == 'deb'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artefacto }}
+          path: dist/paquete/*
+          if-no-files-found: error
+          retention-days: 5
+
+      - name: Subir AppImage
+        if: matrix.empaquetado == 'estatico'
+        uses: actions/upload-artifact@v4
+        with:
+          name: quetzal-appimage
+          path: dist/appimage/*
           if-no-files-found: error
           retention-days: 5
 
@@ -147,10 +181,10 @@ jobs:
             artefacto: quetzal-fedora
             empaquetado: rpm
             paquetes: dnf install -y gcc git curl ca-certificates binutils findutils rpm-build
+          # Sin artefacto: el binario musl de quetzal-linux ya corre en Arch.
           - sistema: arch
             imagen: archlinux:latest
-            artefacto: quetzal-arch
-            empaquetado: bundle
+            empaquetado: compilar
             paquetes: |
               pacman -Sy --noconfirm archlinux-keyring
               pacman -S --noconfirm --needed base-devel git curl ca-certificates binutils findutils
@@ -172,23 +206,20 @@ jobs:
         with:
           shared-key: lnc-${{ matrix.sistema }}
 
-      - name: Compilar quetzal (release)
-        run: cargo build -p lnc --release
-
-      - name: Empaquetar con librerías
-        shell: bash
-        run: bash .github/scripts/empaquetar-linux.sh target/release/quetzal dist
+      - name: Compilar ejecutables (release)
+        run: cargo build -p lnc -p lsp --release
 
       - name: Empaquetar RPM
         if: matrix.empaquetado == 'rpm'
         shell: bash
-        run: bash .github/scripts/empaquetar-rpm.sh target/release/quetzal dist
+        run: bash .github/scripts/empaquetar-rpm.sh target/release/quetzal dist/paquete
 
-      - name: Subir ejecutable
+      - name: Subir RPM
+        if: matrix.empaquetado == 'rpm'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artefacto }}
-          path: dist
+          path: dist/paquete/*
           if-no-files-found: error
           retention-days: 5
 
@@ -210,7 +241,7 @@ jobs:
       - name: Prohibir unsafe_code
         env:
           RUSTFLAGS: "-Dunsafe_code"
-        run: cargo check --workspace --tests --locked
+        run: cargo check -p ast -p nucleo -p diagnosticos -p lexico -p sintaxis -p semantica -p bytecode -p maquina_virtual -p runtime -p modulos_nativos -p paquetes -p pruebas_bytecode -p pruebas_runtime -p pruebas_paquetes --tests --locked
 
       - name: Suite de pruebas
         run: cargo test --workspace --locked

@@ -7,6 +7,7 @@
 #![forbid(unsafe_code)]
 
 pub mod analizador;
+pub mod indice;
 pub mod mutabilidad;
 pub mod permisos;
 pub mod resolucion_imports;
@@ -14,5 +15,5 @@ pub mod tabla_simbolos;
 pub mod tipos;
 pub mod visibilidad;
 
-pub use analizador::analizar_modulo;
+pub use analizador::{analizar_modulo, analizar_modulo_para_herramientas};
 pub use tipos::TipoSemantico;

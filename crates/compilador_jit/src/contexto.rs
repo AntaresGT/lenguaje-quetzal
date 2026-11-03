@@ -1,6 +1,8 @@
 #[cfg(feature = "nativo")]
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
+#[cfg(feature = "nativo")]
+use std::rc::Weak;
 
 use crate::{ConfiguracionJit, ErrorJit, EstadisticasJit, FuncionNativa};
 
@@ -13,7 +15,7 @@ pub(crate) fn clave_funcion(id_modulo: usize, nombre: &str) -> ClaveFuncion {
 }
 
 #[cfg(feature = "nativo")]
-type IdsModulos = HashMap<usize, (usize, Rc<bytecode::ModuloCompilado>)>;
+type IdsModulos = HashMap<usize, (usize, Weak<bytecode::ModuloCompilado>)>;
 
 pub struct ContextoJit {
     configuracion: ConfiguracionJit,
@@ -54,6 +56,21 @@ impl ContextoJit {
 
     pub fn registrar_fallback(&mut self) {
         self.estadisticas.fallbacks = self.estadisticas.fallbacks.saturating_add(1);
+    }
+
+    pub fn registrar_guardia_fallida(&mut self) {
+        self.registrar_fallback();
+        if self.configuracion.metricas {
+            self.estadisticas.guardas_fallidas =
+                self.estadisticas.guardas_fallidas.saturating_add(1);
+        }
+    }
+
+    pub fn registrar_ejecucion_nativa(&mut self) {
+        if self.configuracion.metricas {
+            self.estadisticas.ejecuciones_nativas =
+                self.estadisticas.ejecuciones_nativas.saturating_add(1);
+        }
     }
 
     pub fn deberia_anticipar(&self, funcion: &bytecode::FuncionCompilada) -> bool {
@@ -97,24 +114,31 @@ impl ContextoJit {
     }
 
     #[cfg(feature = "nativo")]
-    fn id_modulo(&mut self, modulo: &bytecode::ModuloCompilado) -> usize {
-        let direccion = modulo as *const _ as usize;
+    fn id_modulo(&mut self, modulo: &Rc<bytecode::ModuloCompilado>) -> usize {
+        let direccion = Rc::as_ptr(modulo) as usize;
         if let Some((id, existente)) = self.ids_modulos.get(&direccion)
-            && existente.as_ref() == modulo
+            && existente
+                .upgrade()
+                .is_some_and(|actual| Rc::ptr_eq(&actual, modulo))
         {
             return *id;
+        }
+        const LIMITE_IDS_OBSERVADOS: usize = 256;
+        if self.ids_modulos.len() >= LIMITE_IDS_OBSERVADOS {
+            self.ids_modulos
+                .retain(|_, (_, modulo)| modulo.strong_count() > 0);
         }
         let id = self.siguiente_id_modulo;
         self.siguiente_id_modulo += 1;
         self.ids_modulos
-            .insert(direccion, (id, Rc::new(modulo.clone())));
+            .insert(direccion, (id, Rc::downgrade(modulo)));
         id
     }
 
     #[cfg(feature = "nativo")]
     fn clave_de_funcion(
         &mut self,
-        modulo: &bytecode::ModuloCompilado,
+        modulo: &Rc<bytecode::ModuloCompilado>,
         nombre: &str,
     ) -> ClaveFuncion {
         (self.id_modulo(modulo), nombre.to_string())
@@ -122,7 +146,7 @@ impl ContextoJit {
 
     pub fn compilar_funcion(
         &mut self,
-        modulo: &bytecode::ModuloCompilado,
+        modulo: &Rc<bytecode::ModuloCompilado>,
         funcion: &bytecode::FuncionCompilada,
     ) -> Result<Rc<FuncionNativa>, ErrorJit> {
         #[cfg(feature = "nativo")]
@@ -135,6 +159,20 @@ impl ContextoJit {
             }
             let resultado = self.compilar_funcion_y_dependencias(modulo, funcion);
             self.visitando.remove(&clave);
+            if self.configuracion.metricas {
+                match &resultado {
+                    Ok(_) => {
+                        self.estadisticas.funciones_elegibles =
+                            self.estadisticas.funciones_elegibles.saturating_add(1);
+                    }
+                    Err(_) => {
+                        self.estadisticas.compilaciones_descartadas = self
+                            .estadisticas
+                            .compilaciones_descartadas
+                            .saturating_add(1);
+                    }
+                }
+            }
             resultado
         }
         #[cfg(not(feature = "nativo"))]
@@ -147,11 +185,15 @@ impl ContextoJit {
     #[cfg(feature = "nativo")]
     fn compilar_funcion_y_dependencias(
         &mut self,
-        modulo: &bytecode::ModuloCompilado,
+        modulo: &Rc<bytecode::ModuloCompilado>,
         funcion: &bytecode::FuncionCompilada,
     ) -> Result<Rc<FuncionNativa>, ErrorJit> {
+        let inicio_verificacion = self.configuracion.metricas.then(std::time::Instant::now);
         bytecode::verificar_funcion_inmutable(modulo, funcion)
             .map_err(|error| ErrorJit::Bytecode(error.to_string()))?;
+        if let Some(inicio) = inicio_verificacion {
+            self.estadisticas.tiempo_verificacion += inicio.elapsed();
+        }
         if self.estadisticas.funciones_compiladas >= self.configuracion.max_funciones {
             return Err(ErrorJit::Limite("cantidad de funciones compiladas"));
         }
@@ -177,9 +219,23 @@ impl ContextoJit {
         let clave = self.clave_de_funcion(modulo, &funcion.nombre);
         let id_modulo = self.id_modulo(modulo);
         let inicio = std::time::Instant::now();
-        let resultado = crate::traductor::compilar(modulo, funcion, &self.compilados, id_modulo);
-        self.estadisticas.tiempo_compilacion += inicio.elapsed();
-        let (funcion, bytes) = resultado?;
+        let resultado = crate::traductor::compilar(
+            modulo,
+            funcion,
+            &self.compilados,
+            id_modulo,
+            self.configuracion.metricas,
+        );
+        let total_compilacion = inicio.elapsed();
+        self.estadisticas.tiempo_compilacion += total_compilacion;
+        let (funcion, bytes, tiempo_analisis, tiempo_define) = resultado?;
+        if let Some(tiempo_analisis) = tiempo_analisis {
+            self.estadisticas.tiempo_analisis += tiempo_analisis;
+            self.estadisticas.tiempo_emision += total_compilacion.saturating_sub(tiempo_analisis);
+        }
+        if let Some(tiempo_define) = tiempo_define {
+            self.estadisticas.tiempo_define += tiempo_define;
+        }
         let total = self.estadisticas.bytes_codigo.saturating_add(bytes);
         if total > self.configuracion.max_bytes_codigo {
             return Err(ErrorJit::Limite("memoria de código generado"));
@@ -254,10 +310,10 @@ mod pruebas {
     fn funcion_manual(
         instrucciones: Vec<bytecode::Instruccion>,
         ranuras: u16,
-    ) -> (bytecode::ModuloCompilado, bytecode::FuncionCompilada) {
+    ) -> (Rc<bytecode::ModuloCompilado>, bytecode::FuncionCompilada) {
         let ubicaciones = vec![nucleo::Ubicacion::default(); instrucciones.len()];
         (
-            bytecode::ModuloCompilado::default(),
+            Rc::new(bytecode::ModuloCompilado::default()),
             bytecode::FuncionCompilada {
                 nombre: "prueba".to_string(),
                 parametros: vec![("n".to_string(), false)],
@@ -325,10 +381,11 @@ mod pruebas {
             ],
             1,
         );
-        modulo.nombres_globales = vec!["identidad".to_string()];
-        modulo.globales_mutables = vec![false];
-        modulo.funciones = vec![identidad, llamada];
-        modulo.funciones[0].nombre = "identidad".to_string();
+        let compilado = Rc::get_mut(&mut modulo).expect("módulo aún no compartido");
+        compilado.nombres_globales = vec!["identidad".to_string()];
+        compilado.globales_mutables = vec![false];
+        compilado.funciones = vec![identidad, llamada];
+        compilado.funciones[0].nombre = "identidad".to_string();
         let mut contexto = ContextoJit::default();
         let funcion = contexto
             .compilar_funcion(&modulo, &modulo.funciones[1])
@@ -491,7 +548,10 @@ mod pruebas {
     fn anticipacion_deberia_exigir_bucles_y_respetar_limites() {
         use bytecode::Instruccion;
 
-        let contexto = ContextoJit::default();
+        let contexto = ContextoJit::nuevo(ConfiguracionJit {
+            anticipacion: true,
+            ..ConfiguracionJit::default()
+        });
         let (_modulo, bucle) = funcion_manual(
             vec![
                 Instruccion::CargarEntero(0),
@@ -521,6 +581,44 @@ mod pruebas {
             ..ConfiguracionJit::default()
         });
         assert!(!limitado.deberia_anticipar(&bucle));
+    }
+
+    #[cfg(feature = "nativo")]
+    #[test]
+    fn contexto_no_deberia_retener_modulos_tras_compilar() {
+        let (modulo, identidad) = funcion_manual(vec![bytecode::Instruccion::RetornarLocal(0)], 1);
+        let debil = Rc::downgrade(&modulo);
+        let mut contexto = ContextoJit::default();
+        contexto
+            .compilar_funcion(&modulo, &identidad)
+            .expect("función compilable");
+        drop(modulo);
+        assert!(debil.upgrade().is_none());
+    }
+
+    #[cfg(feature = "nativo")]
+    #[test]
+    fn ids_modulos_deberian_purgar_referencias_muertas_conservando_las_vivas() {
+        let mut contexto = ContextoJit::default();
+        let vivo = Rc::new(bytecode::ModuloCompilado::default());
+        let id_vivo = contexto.id_modulo(&vivo);
+        for _ in 0..512 {
+            let temporal = Rc::new(bytecode::ModuloCompilado::default());
+            contexto.id_modulo(&temporal);
+        }
+        assert!(contexto.ids_modulos.len() <= 256);
+        assert!(contexto.ids_modulos.values().any(|(id, modulo)| {
+            *id == id_vivo
+                && modulo
+                    .upgrade()
+                    .is_some_and(|actual| Rc::ptr_eq(&actual, &vivo))
+        }));
+    }
+
+    #[cfg(feature = "nativo")]
+    #[test]
+    fn anticipacion_deberia_estar_desactivada_por_defecto() {
+        assert!(!ConfiguracionJit::default().anticipacion);
     }
 
     #[cfg(not(feature = "nativo"))]

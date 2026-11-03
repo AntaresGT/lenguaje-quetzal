@@ -84,7 +84,7 @@ where
 {
     let id = vm.bucle().nuevo_id();
     let manija = vm.bucle().manija();
-    manija.clone().runtime().spawn_blocking(move || {
+    manija.clone().runtime()?.spawn_blocking(move || {
         let resultado = trabajo();
         manija.enviar(Mensaje::TareaLista { id, resultado });
     });

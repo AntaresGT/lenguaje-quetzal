@@ -27,10 +27,10 @@ members = [
 
 [workspace.package]
 edition = "2024"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["Allam López <alan@antaresgt.com>", "Antares <antaresgt.com>"]
-repository = "https://github.com/alannn3030/lenguaje-quetzal"
-homepage = "https://lenguajequetzal.com"
+repository = "https://github.com/AntaresGT/lenguaje-quetzall"
+homepage = "https://lenguaje-quetzal.com"
 description = "Lenguaje de programación interpretado en español, escrito en Rust."
 
 [workspace.dependencies]
@@ -135,3 +135,7 @@ lto = "fat"
 codegen-units = 1
 panic = "abort"
 strip = "symbols"
+
+[profile.bench]
+debug = 1
+strip = "none"

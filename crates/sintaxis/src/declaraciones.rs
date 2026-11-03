@@ -105,7 +105,14 @@ impl Parser<'_> {
         let (nombre, ubicacion_nombre) = self.esperar_identificador("el nombre de la variable")?;
 
         let valor = if self.consumir_si(&TipoToken::Asignar) {
-            Some(self.parsear_expresion()?)
+            match self.parsear_expresion() {
+                Ok(valor) => Some(valor),
+                Err(error) if self.modo_editor => {
+                    self.errores.push(error);
+                    None
+                }
+                Err(error) => return Err(error),
+            }
         } else {
             None
         };
@@ -155,10 +162,24 @@ impl Parser<'_> {
         if !self.comprobar(&TipoToken::ParentesisDerecho) {
             loop {
                 let inicio = self.ubicacion_actual();
-                let tipo = self.parsear_tipo()?;
+                let tipo = match self.parsear_tipo() {
+                    Ok(tipo) => tipo,
+                    Err(error) if self.modo_editor => {
+                        self.errores.push(error);
+                        return Ok(parametros);
+                    }
+                    Err(error) => return Err(error),
+                };
                 let mutable = self.consumir_si(&TipoToken::Var);
                 let (nombre, ubicacion_nombre) =
-                    self.esperar_identificador("el nombre del parámetro")?;
+                    match self.esperar_identificador("el nombre del parámetro") {
+                        Ok(nombre) => nombre,
+                        Err(error) if self.modo_editor => {
+                            self.errores.push(error);
+                            return Ok(parametros);
+                        }
+                        Err(error) => return Err(error),
+                    };
                 parametros.push(Parametro {
                     tipo,
                     mutable,
@@ -171,10 +192,16 @@ impl Parser<'_> {
             }
         }
 
-        self.esperar(
+        if let Err(error) = self.esperar(
             &TipoToken::ParentesisDerecho,
             "')' para cerrar los parámetros",
-        )?;
+        ) {
+            if self.modo_editor {
+                self.errores.push(error);
+                return Ok(parametros);
+            }
+            return Err(error);
+        }
         Ok(parametros)
     }
 }

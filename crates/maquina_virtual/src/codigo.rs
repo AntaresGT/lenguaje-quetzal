@@ -16,6 +16,8 @@ use crate::nativos::IdNativo;
 pub const UMBRAL_LLAMADAS_JIT: u32 = 4;
 #[cfg(feature = "jit")]
 pub const UMBRAL_ITERACIONES_JIT: u32 = 1_000;
+#[cfg(feature = "jit")]
+pub const UMBRAL_LLAMADAS_JIT_AUTOMATICO: u32 = 1_024;
 
 #[cfg(feature = "jit")]
 #[derive(Debug)]
@@ -23,6 +25,7 @@ pub enum EstadoJit {
     Frio,
     Compilado(Rc<FuncionNativa>),
     NoElegible,
+    NoDisponible,
 }
 
 /// Sitio de caché en línea para `CargarMiembro` / `LlamarMetodo`.
@@ -30,9 +33,11 @@ pub enum EstadoJit {
 pub enum CacheSitio {
     Vacia,
     Atributo { clase: u64, slot: u16 },
+    AtributosPolimorficos { clases: [u64; 2], slots: [u16; 2] },
     Metodo { clase: u64 },
     Nativa { tipo: u8, id: IdNativo },
-    Polimorfica,
+    Externa { id: IdNativo },
+    Generica { clase: u64, repeticiones: u16 },
 }
 
 /// Bytecode de una función o trozo, con tablas laterales de runtime.
@@ -116,6 +121,12 @@ impl CodigoRuntime {
     #[cfg(feature = "jit")]
     pub fn suficientemente_caliente(&self) -> bool {
         self.llamadas.get() >= UMBRAL_LLAMADAS_JIT
+            || self.iteraciones.get() >= UMBRAL_ITERACIONES_JIT
+    }
+
+    #[cfg(feature = "jit")]
+    pub fn suficientemente_caliente_automatico(&self) -> bool {
+        self.llamadas.get() >= UMBRAL_LLAMADAS_JIT_AUTOMATICO
             || self.iteraciones.get() >= UMBRAL_ITERACIONES_JIT
     }
 

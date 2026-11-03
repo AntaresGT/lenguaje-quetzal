@@ -1,13 +1,14 @@
 //! Cache de bytecode en `.quetzal/cache/`.
 //!
 //! La clave de cada entrada combina el hash del código fuente, la versión de
-//! Quetzal y la versión del formato de bytecode: cualquier cambio invalida la
-//! entrada automáticamente. El payload es binario (`postcard`).
+//! Quetzal, el formato de bytecode y la revisión del optimizador: cualquier
+//! cambio invalida la entrada automáticamente. El payload es binario (`postcard`).
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
 const LIMITE_BYTES_CACHE: u64 = 64 * 1024 * 1024;
+const REVISION_OPTIMIZADOR_CACHE: u32 = 1;
 
 use bytecode::{ModuloCompilado, modulo::VERSION_FORMATO_BYTECODE, verificar_modulo_inmutable};
 use sha2::{Digest, Sha256};
@@ -31,6 +32,7 @@ impl CacheBytecode {
         hasher.update(contenido_fuente.as_bytes());
         hasher.update(nucleo::VERSION_QUETZAL.as_bytes());
         hasher.update(VERSION_FORMATO_BYTECODE.to_le_bytes());
+        hasher.update(REVISION_OPTIMIZADOR_CACHE.to_le_bytes());
         hex::encode(hasher.finalize())
     }
 

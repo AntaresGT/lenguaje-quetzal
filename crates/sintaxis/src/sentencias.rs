@@ -9,12 +9,35 @@ use crate::parser::{ClaseDeclaracion, Parser};
 impl Parser<'_> {
     /// Parsea un bloque `{ ... }` con declaraciones y sentencias.
     pub(crate) fn parsear_bloque(&mut self) -> Result<Bloque, ErrorQuetzal> {
-        self.esperar(&TipoToken::LlaveIzquierda, "'{' para abrir el bloque")?;
+        if let Err(error) = self.esperar(&TipoToken::LlaveIzquierda, "'{' para abrir el bloque") {
+            if self.modo_editor {
+                self.errores.push(error);
+                return Ok(Bloque::default());
+            }
+            return Err(error);
+        }
         let mut sentencias = Vec::new();
         while !self.comprobar(&TipoToken::LlaveDerecha) && !self.comprobar(&TipoToken::Fin) {
-            sentencias.push(self.parsear_sentencia()?);
+            let posicion_anterior = self.posicion;
+            match self.parsear_sentencia() {
+                Ok(sentencia) => sentencias.push(sentencia),
+                Err(error) if self.modo_editor => {
+                    self.errores.push(error);
+                    self.sincronizar_sentencia();
+                }
+                Err(error) => return Err(error),
+            }
+            if self.posicion == posicion_anterior {
+                self.avanzar();
+            }
         }
-        self.esperar(&TipoToken::LlaveDerecha, "'}' para cerrar el bloque")?;
+        if let Err(error) = self.esperar(&TipoToken::LlaveDerecha, "'}' para cerrar el bloque") {
+            if self.modo_editor && self.comprobar(&TipoToken::Fin) {
+                self.errores.push(error);
+                return Ok(Bloque { sentencias });
+            }
+            return Err(error);
+        }
         Ok(Bloque { sentencias })
     }
 

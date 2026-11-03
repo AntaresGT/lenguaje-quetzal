@@ -20,8 +20,16 @@ use crate::modulo::{
 use crate::optimizar::optimizar_modulo;
 use crate::verificador::verificar_modulo;
 
-/// Genera el bytecode de un módulo completo.
+/// Genera, optimiza y verifica el bytecode de un módulo completo.
 pub fn generar_modulo(modulo: &Modulo) -> Result<ModuloCompilado, ErrorQuetzal> {
+    let mut compilado = generar_modulo_sin_procesar(modulo)?;
+    optimizar_modulo(&mut compilado);
+    verificar_modulo(&mut compilado)?;
+    Ok(compilado)
+}
+
+/// Genera bytecode sin aplicar optimización ni verificación posteriores.
+pub fn generar_modulo_sin_procesar(modulo: &Modulo) -> Result<ModuloCompilado, ErrorQuetzal> {
     let mut generador = Generador::nuevo(&modulo.nombre);
     generador.generar(modulo)
 }
@@ -36,6 +44,7 @@ struct ContextoBucle {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TipoRapido {
     Entero,
+    Numero,
     Otro,
 }
 
@@ -150,8 +159,6 @@ impl Generador {
         compilado.nombres_globales = std::mem::take(&mut self.nombres_globales);
         compilado.globales_mutables = std::mem::take(&mut self.globales_mutables);
         compilado.ranuras_locales_principal = self.ranuras_max;
-        optimizar_modulo(&mut compilado);
-        verificar_modulo(&mut compilado)?;
         Ok(compilado)
     }
 
@@ -816,7 +823,7 @@ impl Generador {
                 })?;
                 let indice = self.indice_constante(Constante::Numero(decimal));
                 trozo.emitir(Instruccion::CargarConstante(indice), ubicacion);
-                Ok(TipoRapido::Otro)
+                Ok(TipoRapido::Numero)
             }
             NodoExpresion::LiteralTexto(texto) => {
                 let indice = self.indice_constante(Constante::Texto(texto.clone()));
@@ -1007,6 +1014,7 @@ impl Generador {
 fn tipo_rapido(tipo: &Tipo) -> TipoRapido {
     match tipo {
         Tipo::Entero => TipoRapido::Entero,
+        Tipo::Numero => TipoRapido::Numero,
         _ => TipoRapido::Otro,
     }
 }
@@ -1036,12 +1044,18 @@ fn instruccion_binaria(
     derecha: TipoRapido,
 ) -> Instruccion {
     let enteros = izquierda == TipoRapido::Entero && derecha == TipoRapido::Entero;
+    let numeros = izquierda == TipoRapido::Numero && derecha == TipoRapido::Numero;
     match operador {
         OperadorBinario::Sumar if enteros => Instruccion::SumarEntero(),
         OperadorBinario::Restar if enteros => Instruccion::RestarEntero(),
         OperadorBinario::Multiplicar if enteros => Instruccion::MultiplicarEntero(),
         OperadorBinario::Dividir if enteros => Instruccion::DividirEntero(),
         OperadorBinario::Modulo if enteros => Instruccion::ModuloEntero(),
+        OperadorBinario::Sumar if numeros => Instruccion::SumarNumero(),
+        OperadorBinario::Restar if numeros => Instruccion::RestarNumero(),
+        OperadorBinario::Multiplicar if numeros => Instruccion::MultiplicarNumero(),
+        OperadorBinario::Dividir if numeros => Instruccion::DividirNumero(),
+        OperadorBinario::Modulo if numeros => Instruccion::ModuloNumero(),
         OperadorBinario::Igual if enteros => Instruccion::IgualEntero(),
         OperadorBinario::Diferente if enteros => Instruccion::DiferenteEntero(),
         OperadorBinario::Mayor if enteros => Instruccion::MayorEntero(),
@@ -1077,6 +1091,15 @@ fn tipo_resultado(
             if izquierda == TipoRapido::Entero && derecha == TipoRapido::Entero =>
         {
             TipoRapido::Entero
+        }
+        OperadorBinario::Sumar
+        | OperadorBinario::Restar
+        | OperadorBinario::Multiplicar
+        | OperadorBinario::Dividir
+        | OperadorBinario::Modulo
+            if izquierda == TipoRapido::Numero && derecha == TipoRapido::Numero =>
+        {
+            TipoRapido::Numero
         }
         _ => TipoRapido::Otro,
     }

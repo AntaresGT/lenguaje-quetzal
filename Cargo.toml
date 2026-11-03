@@ -27,7 +27,7 @@ members = [
 
 [workspace.package]
 edition = "2024"
-version = "0.0.3-beta.1"
+version = "0.0.3"
 authors = ["Allam López <alan@antaresgt.com>", "Antares <antaresgt.com>"]
 repository = "https://github.com/AntaresGT/lenguaje-quetzall"
 homepage = "https://lenguaje-quetzal.com"

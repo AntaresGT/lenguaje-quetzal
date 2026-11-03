@@ -104,7 +104,7 @@ jobs:
         run: .github/scripts/ejecutar-estres-memoria.ps1
       - name: Guardar evidencias de memoria
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: estres-memoria-${{ matrix.sistema }}
           path: estres-*.log

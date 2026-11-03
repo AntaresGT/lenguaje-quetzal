@@ -136,6 +136,7 @@ fn verificar_trozo(
     if n == 0 {
         return Ok(0);
     }
+    verificar_flujo_excepciones(trozo, n, nombre)?;
 
     let mut profundidades = vec![None; n];
     let mut trabajo = VecDeque::from([(0usize, 0u32)]);
@@ -276,6 +277,121 @@ fn verificar_trozo(
     u16::try_from(maxima).map_err(|_| error_verificacion(nombre, "la pila supera 65535 valores"))
 }
 
+fn verificar_flujo_excepciones(trozo: &Trozo, n: usize, nombre: &str) -> Result<(), ErrorQuetzal> {
+    let mut profundidades = vec![None; n];
+    let mut trabajo = VecDeque::from([(0usize, 0u32)]);
+    profundidades[0] = Some(0);
+
+    while let Some((pc, profundidad)) = trabajo.pop_front() {
+        let instruccion = trozo.instrucciones[pc];
+        match instruccion.op {
+            CodigoOp::EntrarIntentar => {
+                let interior = profundidad.checked_add(1).ok_or_else(|| {
+                    error_verificacion(nombre, "demasiadas regiones de excepción anidadas")
+                })?;
+                encolar_excepcion(
+                    pc + 1,
+                    interior,
+                    n,
+                    &mut profundidades,
+                    &mut trabajo,
+                    nombre,
+                )?;
+                encolar_excepcion(
+                    instruccion.destino() as usize,
+                    profundidad,
+                    n,
+                    &mut profundidades,
+                    &mut trabajo,
+                    nombre,
+                )?;
+            }
+            CodigoOp::SalirIntentar => {
+                let exterior = profundidad.checked_sub(1).ok_or_else(|| {
+                    error_verificacion(
+                        nombre,
+                        format!("salida de una región de excepción inexistente en {pc}"),
+                    )
+                })?;
+                encolar_excepcion(
+                    pc + 1,
+                    exterior,
+                    n,
+                    &mut profundidades,
+                    &mut trabajo,
+                    nombre,
+                )?;
+            }
+            CodigoOp::Saltar => encolar_excepcion(
+                instruccion.destino() as usize,
+                profundidad,
+                n,
+                &mut profundidades,
+                &mut trabajo,
+                nombre,
+            )?,
+            CodigoOp::SaltarSiFalso
+            | CodigoOp::SaltarSiVerdadero
+            | CodigoOp::SaltarSiFalsoYDejar
+            | CodigoOp::SaltarSiVerdaderoYDejar
+            | CodigoOp::IteradorSiguiente
+            | CodigoOp::MenorEnteroSaltarSiFalso => {
+                encolar_excepcion(
+                    instruccion.destino() as usize,
+                    profundidad,
+                    n,
+                    &mut profundidades,
+                    &mut trabajo,
+                    nombre,
+                )?;
+                encolar_excepcion(
+                    pc + 1,
+                    profundidad,
+                    n,
+                    &mut profundidades,
+                    &mut trabajo,
+                    nombre,
+                )?;
+            }
+            CodigoOp::Retornar | CodigoOp::RetornarLocal | CodigoOp::Lanzar => {}
+            _ => encolar_excepcion(
+                pc + 1,
+                profundidad,
+                n,
+                &mut profundidades,
+                &mut trabajo,
+                nombre,
+            )?,
+        }
+    }
+    Ok(())
+}
+
+fn encolar_excepcion(
+    destino: usize,
+    profundidad: u32,
+    n: usize,
+    profundidades: &mut [Option<u32>],
+    trabajo: &mut VecDeque<(usize, u32)>,
+    nombre: &str,
+) -> Result<(), ErrorQuetzal> {
+    if destino == n {
+        return Ok(());
+    }
+    match profundidades[destino] {
+        Some(anterior) if anterior != profundidad => Err(error_verificacion(
+            nombre,
+            format!("unión incompatible de regiones de excepción en la instrucción {destino}"),
+        )),
+        Some(_) => Ok(()),
+        None => {
+            profundidades[destino] = Some(profundidad);
+            trabajo.push_back((destino, profundidad));
+            Ok(())
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn encolar(
     destino: usize,
@@ -358,6 +474,9 @@ fn validar_indices(
             nombre,
             "limpieza de locales fuera de rango",
         )),
+        CodigoOp::EntrarIntentar if instruccion.ranuras_intentar() > ranuras => Err(
+            error_verificacion(nombre, "limpieza de excepción fuera de rango"),
+        ),
         CodigoOp::CargarGlobal | CodigoOp::DeclararGlobal | CodigoOp::GuardarGlobal
             if instruccion.indice_u16() as usize >= limites.globales =>
         {
@@ -551,8 +670,69 @@ fn error_verificacion(funcion: &str, mensaje: impl Into<String>) -> ErrorQuetzal
 
 /// Recorre un módulo ya deserializado (cache) y lo rechaza si está corrupto.
 pub fn verificar_modulo_inmutable(modulo: &ModuloCompilado) -> Result<(), ErrorQuetzal> {
-    let mut copia = modulo.clone();
-    verificar_modulo(&mut copia)
+    if modulo.globales_mutables.len() != modulo.nombres_globales.len() {
+        return Err(error_verificacion(
+            "módulo",
+            "la mutabilidad de las globales no coincide con sus nombres",
+        ));
+    }
+    let limites = Limites {
+        constantes: modulo.constantes.len(),
+        nombres: modulo.nombres.len(),
+        globales: modulo.nombres_globales.len(),
+    };
+    let layouts = layouts_objetos(&modulo.objetos);
+    verificar_trozo(
+        &modulo.principal,
+        limites,
+        modulo.ranuras_locales_principal,
+        None,
+        "principal",
+    )?;
+    for funcion in &modulo.funciones {
+        if (funcion.ranuras_locales as usize) < funcion.parametros.len() {
+            return Err(error_verificacion(
+                &funcion.nombre,
+                "hay menos ranuras locales que parámetros",
+            ));
+        }
+        verificar_trozo(
+            &funcion.trozo,
+            limites,
+            funcion.ranuras_locales,
+            None,
+            &funcion.nombre,
+        )?;
+    }
+    for objeto in &modulo.objetos {
+        let slots = layouts.get(&objeto.nombre).copied();
+        for funcion in objeto
+            .metodos
+            .iter()
+            .map(|metodo| &metodo.funcion)
+            .chain(objeto.constructores.iter())
+        {
+            if (funcion.ranuras_locales as usize) < funcion.parametros.len() {
+                return Err(error_verificacion(
+                    &funcion.nombre,
+                    "hay menos ranuras locales que parámetros",
+                ));
+            }
+            verificar_trozo(
+                &funcion.trozo,
+                limites,
+                funcion.ranuras_locales,
+                slots,
+                &funcion.nombre,
+            )?;
+        }
+        for atributo in &objeto.atributos {
+            if let Some(inicial) = &atributo.inicial {
+                verificar_trozo(inicial, limites, 0, slots, &atributo.nombre)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

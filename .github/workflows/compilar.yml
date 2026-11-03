@@ -229,7 +229,7 @@ jobs:
       - name: Prohibir unsafe_code
         env:
           RUSTFLAGS: "-Dunsafe_code"
-        run: cargo check --workspace --tests --locked
+        run: cargo check -p ast -p nucleo -p diagnosticos -p lexico -p sintaxis -p semantica -p bytecode -p maquina_virtual -p runtime -p modulos_nativos -p paquetes -p pruebas_bytecode -p pruebas_runtime -p pruebas_paquetes --tests --locked
 
       - name: Suite de pruebas
         run: cargo test --workspace --locked

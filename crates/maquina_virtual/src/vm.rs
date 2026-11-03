@@ -10,9 +10,9 @@ use bytecode::{
 };
 #[cfg(feature = "jit")]
 use compilador_jit::{
-    ContextoJit, ESTADO_DESBORDAMIENTO, ESTADO_DIVISION_CERO, ESTADO_EXITO, OPERACION_AJUSTE,
-    OPERACION_DIVISION, OPERACION_MODULO, OPERACION_MULTIPLICACION, OPERACION_NEGACION,
-    OPERACION_RESTA, OPERACION_SUMA,
+    ContextoJit, ESTADO_DESBORDAMIENTO, ESTADO_DIVISION_CERO, ESTADO_EXITO, ErrorJit,
+    OPERACION_AJUSTE, OPERACION_DIVISION, OPERACION_MODULO, OPERACION_MULTIPLICACION,
+    OPERACION_NEGACION, OPERACION_RESTA, OPERACION_SUMA,
 };
 use indexmap::IndexMap;
 use nucleo::{ErrorQuetzal, Ubicacion};
@@ -51,6 +51,8 @@ pub struct Vm {
     jit: ContextoJit,
     #[cfg(feature = "jit")]
     jit_habilitado: bool,
+    #[cfg(feature = "jit")]
+    jit_automatico: bool,
 }
 
 struct Marco {
@@ -147,6 +149,8 @@ impl Vm {
             jit: ContextoJit::default(),
             #[cfg(feature = "jit")]
             jit_habilitado: false,
+            #[cfg(feature = "jit")]
+            jit_automatico: false,
         }
     }
 
@@ -168,6 +172,14 @@ impl Vm {
     #[cfg(feature = "jit")]
     pub fn con_jit(mut self, habilitado: bool) -> Self {
         self.jit_habilitado = habilitado;
+        self.jit_automatico = false;
+        self
+    }
+
+    #[cfg(feature = "jit")]
+    pub fn con_jit_automatico(mut self) -> Self {
+        self.jit_habilitado = true;
+        self.jit_automatico = true;
         self
     }
 
@@ -179,6 +191,7 @@ impl Vm {
     ) -> Self {
         self.jit = ContextoJit::nuevo(configuracion);
         self.jit_habilitado = habilitado;
+        self.jit_automatico = false;
         self
     }
 
@@ -292,6 +305,7 @@ impl Vm {
         modulo: Rc<ModuloCompilado>,
         importaciones: IndexMap<String, Variable>,
     ) -> Result<(Rc<EntornoModulo>, Valor), ErrorQuetzal> {
+        bytecode::verificar_modulo_inmutable(&modulo)?;
         let constantes = modulo.constantes.iter().map(valor_de_constante).collect();
         let nombres = modulo
             .nombres
@@ -562,11 +576,57 @@ impl Vm {
             let compilado = self.jit.compilar_funcion(&entorno.modulo, funcion);
             let estado = match compilado {
                 Ok(funcion_nativa) => EstadoJit::Compilado(funcion_nativa),
-                Err(_) => EstadoJit::NoElegible,
+                Err(ErrorJit::NoElegible(_) | ErrorJit::Bytecode(_)) => EstadoJit::NoElegible,
+                Err(_) => EstadoJit::NoDisponible,
             };
             if let Some(codigo) = entorno.runtimes.borrow().get(&funcion.nombre) {
                 *codigo.jit.borrow_mut() = estado;
             }
+        }
+    }
+
+    #[cfg(feature = "jit")]
+    fn preparar_jit(
+        &mut self,
+        codigo: &Rc<CodigoRuntime>,
+        entorno: &Rc<EntornoModulo>,
+    ) -> Option<Rc<compilador_jit::FuncionNativa>> {
+        if !self.jit_habilitado {
+            return None;
+        }
+        {
+            let estado = codigo.jit.borrow();
+            match &*estado {
+                EstadoJit::Compilado(funcion) => return Some(Rc::clone(funcion)),
+                EstadoJit::NoElegible | EstadoJit::NoDisponible => return None,
+                EstadoJit::Frio => {}
+            }
+        }
+        codigo.registrar_llamada();
+        let caliente = if self.jit_automatico {
+            codigo.suficientemente_caliente_automatico()
+        } else {
+            codigo.suficientemente_caliente()
+        };
+        if caliente {
+            let compilado = codigo
+                .funcion
+                .as_ref()
+                .map(|funcion| self.jit.compilar_funcion(&entorno.modulo, funcion));
+            let estado = match compilado {
+                Some(Ok(funcion)) => EstadoJit::Compilado(funcion),
+                Some(Err(ErrorJit::NoElegible(_) | ErrorJit::Bytecode(_))) => EstadoJit::NoElegible,
+                Some(Err(_)) | None => EstadoJit::NoDisponible,
+            };
+            if matches!(estado, EstadoJit::NoElegible | EstadoJit::NoDisponible) {
+                self.jit.registrar_fallback();
+            }
+            *codigo.jit.borrow_mut() = estado;
+        }
+        let estado = codigo.jit.borrow();
+        match &*estado {
+            EstadoJit::Compilado(funcion) => Some(Rc::clone(funcion)),
+            EstadoJit::Frio | EstadoJit::NoElegible | EstadoJit::NoDisponible => None,
         }
     }
 
@@ -578,44 +638,32 @@ impl Vm {
         argumentos: &[Valor],
         ubicacion: Option<Ubicacion>,
     ) -> Option<Result<Valor, Fallo>> {
-        if !self.jit_habilitado {
-            return None;
-        }
-        codigo.registrar_llamada();
-        if matches!(&*codigo.jit.borrow(), EstadoJit::Frio) && codigo.suficientemente_caliente() {
-            let compilado = codigo
-                .funcion
-                .as_ref()
-                .map(|funcion| self.jit.compilar_funcion(&entorno.modulo, funcion));
-            *codigo.jit.borrow_mut() = match compilado {
-                Some(Ok(funcion)) => EstadoJit::Compilado(funcion),
-                _ => EstadoJit::NoElegible,
-            };
-        }
-        let funcion = {
-            let estado = codigo.jit.borrow();
-            match &*estado {
-                EstadoJit::Compilado(funcion) => Rc::clone(funcion),
-                EstadoJit::Frio => return None,
-                EstadoJit::NoElegible => {
-                    self.jit.registrar_fallback();
-                    return None;
-                }
-            }
-        };
-        let enteros = ArgumentosNativos::nuevo(argumentos);
-        let Some(enteros) = enteros else {
-            self.jit.registrar_fallback();
+        let funcion = self.preparar_jit(codigo, entorno)?;
+        let Some(enteros) = ArgumentosNativos::nuevo(argumentos) else {
+            self.jit.registrar_guardia_fallida();
             return None;
         };
-        let salida = match funcion.ejecutar(enteros.como_slice()) {
+        self.ejecutar_jit(codigo, entorno, funcion, enteros, ubicacion)
+    }
+
+    #[cfg(feature = "jit")]
+    fn ejecutar_jit(
+        &mut self,
+        codigo: &Rc<CodigoRuntime>,
+        entorno: &Rc<EntornoModulo>,
+        funcion: Rc<compilador_jit::FuncionNativa>,
+        argumentos: ArgumentosNativos,
+        ubicacion: Option<Ubicacion>,
+    ) -> Option<Result<Valor, Fallo>> {
+        let salida = match funcion.ejecutar(argumentos.como_slice()) {
             Ok(salida) => salida,
             Err(_) => {
-                self.jit.registrar_fallback();
+                self.jit.registrar_guardia_fallida();
                 *codigo.jit.borrow_mut() = EstadoJit::NoElegible;
                 return None;
             }
         };
+        self.jit.registrar_ejecucion_nativa();
         let ubicacion = entorno
             .modulo
             .funciones
@@ -796,15 +844,24 @@ impl Vm {
             _ => return Ok(None),
         };
         #[cfg(feature = "jit")]
-        if self.jit_habilitado && esto.is_none() && cantidad == funcion.parametros.len() {
-            let argumentos = self.pila.split_off(indice + 1);
-            match self.intentar_jit(&codigo, &entorno, &argumentos, Some(ubicacion)) {
-                Some(Ok(valor)) => {
-                    self.pila.truncate(indice);
-                    return Ok(Some(DestinoLlamada::Valor(valor)));
+        if self.jit_habilitado
+            && esto.is_none()
+            && cantidad == funcion.parametros.len()
+            && let Some(funcion_nativa) = self.preparar_jit(&codigo, &entorno)
+        {
+            let enteros = ArgumentosNativos::nuevo(&self.pila[indice + 1..]);
+            if let Some(enteros) = enteros {
+                match self.ejecutar_jit(&codigo, &entorno, funcion_nativa, enteros, Some(ubicacion))
+                {
+                    Some(Ok(valor)) => {
+                        self.pila.truncate(indice);
+                        return Ok(Some(DestinoLlamada::Valor(valor)));
+                    }
+                    Some(Err(fallo)) => return Err(fallo),
+                    None => {}
                 }
-                Some(Err(fallo)) => return Err(fallo),
-                None => drop(self.pila.splice(indice + 1.., argumentos)),
+            } else {
+                self.jit.registrar_guardia_fallida();
             }
         }
         self.preparar_marco_en_pila(&funcion, &entorno, codigo, cantidad, esto, Some(ubicacion))

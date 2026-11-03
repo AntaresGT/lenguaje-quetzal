@@ -1,0 +1,111 @@
+name: Estabilización VM y JIT
+
+on:
+  push:
+    branches: [trabajo/estabilizar-vm-jit-0.0.3]
+  pull_request:
+    branches: [quetzal-0.0.3, trabajo/estabilizar-vm-jit-0.0.3]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  pruebas:
+    name: ${{ matrix.sistema }} / VM y CLI
+    runs-on: ${{ matrix.corredor }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sistema: Linux
+            corredor: ubuntu-latest
+          - sistema: Windows
+            corredor: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: estabilizacion-${{ matrix.sistema }}
+      - name: Formato
+        run: cargo fmt --all -- --check
+      - name: Comprobación del workspace
+        run: cargo check --workspace --locked
+      - name: Prohibir unsafe en crates seguros
+        if: matrix.sistema == 'Linux'
+        env:
+          RUSTFLAGS: -Dunsafe_code
+        run: cargo check -p ast -p nucleo -p diagnosticos -p lexico -p sintaxis -p semantica -p bytecode -p maquina_virtual -p runtime -p modulos_nativos -p paquetes -p pruebas_bytecode -p pruebas_runtime -p pruebas_paquetes --tests --locked
+      - name: Suite predeterminada
+        run: cargo test --workspace --locked --no-fail-fast
+      - name: Bytecode, optimizador, verificador y caché
+        run: cargo test -p pruebas_bytecode -p pruebas_paquetes --locked --no-fail-fast
+      - name: CLI real y compatibilidad
+        run: cargo test -p lnc --locked --no-fail-fast
+
+  jit:
+    name: ${{ matrix.sistema }} / JIT nativo
+    runs-on: ${{ matrix.corredor }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sistema: Linux
+            corredor: ubuntu-latest
+          - sistema: Windows
+            corredor: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: estabilizacion-jit-${{ matrix.sistema }}
+      - name: Auditar frontera nativa sin prohibir su unsafe aislado
+        run: cargo clippy -p compilador_jit --features nativo --locked -- -D warnings -D unsafe_op_in_unsafe_fn
+      - name: Pruebas del runtime con JIT, memoria y equivalencia
+        run: cargo test -p pruebas_runtime --features jit --locked --no-fail-fast
+      - name: Pruebas del compilador nativo
+        run: cargo test -p compilador_jit --features nativo --locked --no-fail-fast
+      - name: CLI real con JIT
+        run: cargo test -p lnc --features jit --locked --no-fail-fast
+
+  estres:
+    name: ${{ matrix.sistema }} / Estrés prolongado y memoria
+    runs-on: ${{ matrix.corredor }}
+    needs: jit
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sistema: Linux
+            corredor: ubuntu-latest
+          - sistema: Windows
+            corredor: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: estabilizacion-estres-${{ matrix.sistema }}
+      - name: Construir prueba de memoria en release
+        run: cargo test -p pruebas_runtime --features jit --release --test memoria --locked --no-run
+      - name: Ejecutar campaña en Linux
+        if: matrix.sistema == 'Linux'
+        run: |
+          set -o pipefail
+          cargo test -p pruebas_runtime --features jit --release --test memoria --locked -- --ignored --nocapture estres_prolongado_deberia_estabilizar_modulos_jit_y_memoria | tee estres-linux.stdout.log
+      - name: Ejecutar campaña y medir proceso en Windows
+        if: matrix.sistema == 'Windows'
+        shell: pwsh
+        run: .github/scripts/ejecutar-estres-memoria.ps1
+      - name: Guardar evidencias de memoria
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: estres-memoria-${{ matrix.sistema }}
+          path: estres-*.log
+          if-no-files-found: error

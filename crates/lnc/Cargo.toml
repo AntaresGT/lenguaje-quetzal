@@ -26,6 +26,13 @@ paquetes = { workspace = true }
 # Parseo de argumentos de línea de comandos.
 clap = { workspace = true }
 
+[target.'cfg(all(target_arch = "x86_64", target_os = "linux"))'.dependencies]
+motor = { workspace = true, features = ["jit"] }
+
+[dev-dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+
 [build-dependencies]
 # Embebe el icono de la aplicación en el ejecutable de Windows.
 winresource = "0.1"

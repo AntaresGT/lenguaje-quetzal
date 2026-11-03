@@ -1,0 +1,4 @@
+[31mPatrón inválido detectado: 'nuevo ExpresiónRegular' recibió una expresión regular inválida: regex parse error:
+    (sin-cerrar
+    ^
+error: unclosed group[0m

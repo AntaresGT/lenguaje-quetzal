@@ -1413,6 +1413,8 @@ dependencies = [
  "nucleo",
  "paquetes",
  "repl",
+ "serde",
+ "serde_json",
  "winresource",
 ]
 
@@ -1837,7 +1839,11 @@ name = "pruebas_bytecode"
 version = "0.0.2"
 dependencies = [
  "bytecode",
+ "indexmap",
+ "maquina_virtual",
+ "modulos_nativos",
  "nucleo",
+ "semantica",
  "sintaxis",
 ]
 
@@ -1856,6 +1862,7 @@ dependencies = [
  "bytecode",
  "nucleo",
  "paquetes",
+ "postcard",
  "sintaxis",
 ]
 
@@ -1864,6 +1871,7 @@ name = "pruebas_runtime"
 version = "0.0.2"
 dependencies = [
  "bytecode",
+ "compilador_jit",
  "criterion",
  "indexmap",
  "lexico",

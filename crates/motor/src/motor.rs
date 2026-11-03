@@ -11,6 +11,17 @@ use nucleo::{CategoriaError, ErrorQuetzal, Fuente, ResultadoMultiple, ResultadoQ
 use crate::cargador::Cargador;
 use crate::configuracion::ConfiguracionMotor;
 
+/// Interrumpe la ejecución en curso (Ctrl+C). La VM lo detecta entre
+/// instrucciones y la detiene con el error `E0410`.
+pub fn interrumpir_ejecucion() {
+    maquina_virtual::interrupcion::interrumpir();
+}
+
+/// Establece la bandera de interrupción antes de una evaluación nueva.
+pub fn reiniciar_interrupcion() {
+    maquina_virtual::interrupcion::reiniciar();
+}
+
 /// Motor del Lenguaje Quetzal.
 ///
 /// Es la única puerta de entrada para ejecutar o revisar código Quetzal,

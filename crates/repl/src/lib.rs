@@ -93,7 +93,10 @@ fn iniciar_sin_terminal(sesion: &mut SesionInteractiva) -> i32 {
         match procesar_comando(sesion, entrada, &paleta) {
             Some(Accion::Salir) => return 0,
             Some(Accion::Continuar) => continue,
-            None => reportar(sesion.evaluar(entrada), sesion, &paleta),
+            None => {
+                motor::reiniciar_interrupcion();
+                reportar(sesion.evaluar(entrada), sesion, &paleta)
+            }
         }
     }
     0
@@ -142,6 +145,7 @@ fn procesar_comando(
         if ruta.is_empty() {
             println!("uso: :cargar ruta/al/archivo.qz");
         } else {
+            motor::reiniciar_interrupcion();
             reportar(sesion.cargar_archivo(ruta), sesion, paleta);
         }
         return Some(Accion::Continuar);
@@ -185,6 +189,7 @@ fn procesar(
     if let Some(accion) = procesar_comando(sesion, entrada, paleta) {
         return accion;
     }
+    motor::reiniciar_interrupcion();
     reportar(sesion.evaluar(entrada), sesion, paleta);
     Accion::Continuar
 }

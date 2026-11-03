@@ -20,6 +20,7 @@ pub fn ejecutar(archivo: Option<&str>, sin_optimizar: bool, jit: bool, sin_jit: 
     if sin_optimizar {
         configuracion = configuracion.sin_optimizar();
     }
+    motor::reiniciar_interrupcion();
     let motor = match MotorQuetzal::nuevo(configuracion) {
         Ok(motor) => motor,
         Err(error) => return reportar_errores(None, &[error]),

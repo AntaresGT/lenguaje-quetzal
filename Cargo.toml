@@ -113,6 +113,9 @@ regex = "1"
 # Notificaciones del sistema de archivos para el objeto Observador.
 notify = "8"
 
+# Interrupción cooperativa de la ejecución (Ctrl+C) en la CLI.
+ctrlc = "3"
+
 # RedSocket (WebSocket en inglés) del módulo nativo de red (ClienteRs/
 # ServidorRs), sobre el mismo runtime tokio del bucle de eventos; rustls
 # para soportar wss://.

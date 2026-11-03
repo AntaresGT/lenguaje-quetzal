@@ -15,7 +15,7 @@ use compilador_jit::{
     OPERACION_NEGACION, OPERACION_RESTA, OPERACION_SUMA,
 };
 use indexmap::IndexMap;
-use nucleo::{ErrorQuetzal, Ubicacion};
+use nucleo::{CategoriaError, ErrorQuetzal, Ubicacion};
 use rust_decimal::Decimal;
 
 use crate::bucle_eventos::{BucleEventos, CargaNativa, Mensaje};
@@ -23,6 +23,7 @@ use crate::bucle_eventos::{BucleEventos, CargaNativa, Mensaje};
 use crate::codigo::EstadoJit;
 use crate::codigo::{CacheSitio, CodigoRuntime, clave_clase, tipo_cache};
 use crate::errores::{DatosExcepcion, Fallo};
+use crate::interrupcion;
 use crate::nativos::{IdNativo, RegistroNativos};
 use crate::valores::{
     ClaseObjeto, DatosMetodoEnlazado, DatosTarea, EnlaceEntorno, EntornoModulo, EstadoIterador,
@@ -231,6 +232,16 @@ impl Vm {
             return self.convertir_resultado_tarea(resultado, ubicacion);
         }
         loop {
+            if interrupcion::interrumpido() {
+                return Err(Fallo::Error(Box::new(
+                    ErrorQuetzal::nuevo(
+                        "E0410",
+                        CategoriaError::Runtime,
+                        "ejecución interrumpida por el usuario (Ctrl+C)",
+                    )
+                    .con_ubicacion(ubicacion),
+                )));
+            }
             match self.bucle.recibir() {
                 Some(Mensaje::TareaLista {
                     id: llegado,
@@ -280,6 +291,9 @@ impl Vm {
     pub fn drenar_bucle_eventos(&mut self) {
         use std::time::Duration;
         while self.bucle.hay_trabajo_activo() {
+            if interrupcion::interrumpido() {
+                return;
+            }
             match self.bucle.recibir_con_limite(Duration::from_millis(200)) {
                 Some(Mensaje::TareaLista { id, resultado }) => {
                     self.resultados_pendientes
@@ -979,6 +993,9 @@ impl Vm {
     }
 
     fn correr_hasta(&mut self, base: usize) -> Result<Valor, Fallo> {
+        // Se revisa la bandera de interrupción en cada instrucción: es una
+        // lectura atómica, costo despreciable frente al resto del bucle, y
+        // responde a Ctrl+C incluso en un `mientras (verdadero) { }`.
         if self.despacho_rapido {
             self.correr_hasta_modo::<true>(base)
         } else {
@@ -990,6 +1007,22 @@ impl Vm {
         loop {
             if self.marcos.len() <= base {
                 return Ok(self.pila.pop().unwrap_or(Valor::Nulo));
+            }
+            if interrupcion::interrumpido() {
+                let ubicacion = self.ubi(self.marcos.len() - 1);
+                self.descartar_hasta(base);
+                return Err(Fallo::Error(Box::new(
+                    ErrorQuetzal::nuevo(
+                        "E0410",
+                        CategoriaError::Runtime,
+                        "ejecución interrumpida por el usuario (Ctrl+C)",
+                    )
+                    .con_ayuda(
+                        "el código quedó en un bucle infinito o muy largo; \
+                         revisa la condición del bucle",
+                    )
+                    .con_ubicacion(ubicacion),
+                )));
             }
             let top = self.marcos.len() - 1;
             let pc = self.marcos[top].pc as usize;

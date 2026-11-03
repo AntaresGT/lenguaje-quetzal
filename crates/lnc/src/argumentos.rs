@@ -25,9 +25,12 @@ pub enum Comando {
         /// Intérprete puro: sin especialización ni caches en línea.
         #[arg(long = "sin-optimizar")]
         sin_optimizar: bool,
-        /// Activa el Baseline JIT para funciones enteras calientes.
-        #[arg(long = "jit")]
+        /// Activa explícitamente el Baseline JIT para funciones enteras calientes.
+        #[arg(long = "jit", conflicts_with = "sin_jit")]
         jit: bool,
+        /// Fuerza el intérprete optimizado sin JIT.
+        #[arg(long = "sin-jit")]
+        sin_jit: bool,
     },
     /// Genera un ejecutable único con bytecode verificado embebido.
     Compilar {
@@ -76,9 +79,9 @@ pub fn traducir_aliases(mut argumentos: Vec<String>) -> Vec<String> {
         "--instalar" | "-i" => {
             argumentos[1] = "instalar".to_string();
         }
-        "--sin-optimizar" => {
+        "--sin-optimizar" | "--sin-jit" | "--jit" => {
             argumentos[1] = "ejecutar".to_string();
-            argumentos.insert(2, "--sin-optimizar".to_string());
+            argumentos.insert(2, primero);
         }
         _ => {
             // Un archivo .qz como primer argumento ejecuta directamente.

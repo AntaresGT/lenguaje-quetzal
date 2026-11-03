@@ -102,6 +102,27 @@ fn generar_deberia_emitir_cargar_esto_atributo_para_esto() {
 }
 
 #[test]
+fn generar_deberia_especializar_aritmetica_decimal_conocida() {
+    let modulo = generar(
+        "número calcular(número a, número b) {\n    a += b\n    a -= b\n    a *= b\n    a /= b\n    a %= b\n    retornar a + b\n}\n",
+    );
+    let instrucciones = &modulo.funciones[0].trozo.instrucciones;
+    for operacion in [
+        bytecode::CodigoOp::SumarNumero,
+        bytecode::CodigoOp::RestarNumero,
+        bytecode::CodigoOp::MultiplicarNumero,
+        bytecode::CodigoOp::DividirNumero,
+        bytecode::CodigoOp::ModuloNumero,
+    ] {
+        assert!(
+            instrucciones
+                .iter()
+                .any(|instruccion| instruccion.op == operacion)
+        );
+    }
+}
+
+#[test]
 fn generar_deberia_deduplicar_constantes_conservando_el_primer_indice() {
     let modulo =
         generar("texto a = \"mismo\"\ntexto b = \"mismo\"\nnúmero c = 0.1\nnúmero d = 0.1\n");

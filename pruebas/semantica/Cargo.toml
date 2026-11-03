@@ -8,6 +8,7 @@ description = "Pruebas de integración del análisis semántico de Quetzal."
 
 [dependencies]
 nucleo = { workspace = true }
+ast = { workspace = true }
 sintaxis = { workspace = true }
 semantica = { workspace = true }
 

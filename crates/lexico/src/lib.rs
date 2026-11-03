@@ -12,5 +12,5 @@ pub mod normalizacion;
 pub mod palabras_reservadas;
 pub mod token;
 
-pub use lexer::{resolver_escapes, tokenizar};
+pub use lexer::{ResultadoTokens, resolver_escapes, tokenizar, tokenizar_para_editor};
 pub use token::{TipoToken, Token};

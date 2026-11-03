@@ -92,6 +92,11 @@ pub enum CodigoOp {
     AjustarLocalConLocal,
     CargarLocalMiembro,
     CargarLocalAtributo,
+    SumarNumero,
+    RestarNumero,
+    MultiplicarNumero,
+    DividirNumero,
+    ModuloNumero,
 }
 
 #[allow(non_snake_case)]
@@ -315,6 +320,21 @@ impl Instruccion {
     pub const fn CargarLocalAtributo(ranura: u16, slot: u16) -> Self {
         Self::nueva(CodigoOp::CargarLocalAtributo, 0, ranura, slot as u32)
     }
+    pub const fn SumarNumero() -> Self {
+        Self::nueva(CodigoOp::SumarNumero, 0, 0, 0)
+    }
+    pub const fn RestarNumero() -> Self {
+        Self::nueva(CodigoOp::RestarNumero, 0, 0, 0)
+    }
+    pub const fn MultiplicarNumero() -> Self {
+        Self::nueva(CodigoOp::MultiplicarNumero, 0, 0, 0)
+    }
+    pub const fn DividirNumero() -> Self {
+        Self::nueva(CodigoOp::DividirNumero, 0, 0, 0)
+    }
+    pub const fn ModuloNumero() -> Self {
+        Self::nueva(CodigoOp::ModuloNumero, 0, 0, 0)
+    }
     pub const fn RetornarLocal(ranura: u16) -> Self {
         Self::nueva(CodigoOp::RetornarLocal, 0, ranura, 0)
     }
@@ -420,6 +440,17 @@ impl Instruccion {
                 | CodigoOp::MenorEntero
                 | CodigoOp::MayorOIgualEntero
                 | CodigoOp::MenorOIgualEntero
+        )
+    }
+
+    pub fn es_binaria_numero(self) -> bool {
+        matches!(
+            self.op,
+            CodigoOp::SumarNumero
+                | CodigoOp::RestarNumero
+                | CodigoOp::MultiplicarNumero
+                | CodigoOp::DividirNumero
+                | CodigoOp::ModuloNumero
         )
     }
 }

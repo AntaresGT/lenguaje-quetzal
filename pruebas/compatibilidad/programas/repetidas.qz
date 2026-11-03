@@ -1,0 +1,6 @@
+entero identidad(entero n) { retornar n }
+entero var resultado = 7
+para (entero var i = 0; i < 200000; i++) {
+    resultado = identidad(resultado)
+}
+consola.mostrar(resultado)

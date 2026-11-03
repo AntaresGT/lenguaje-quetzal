@@ -10,9 +10,9 @@ use bytecode::{
 };
 #[cfg(feature = "jit")]
 use compilador_jit::{
-    ContextoJit, ESTADO_DESBORDAMIENTO, ESTADO_DIVISION_CERO, ESTADO_EXITO, OPERACION_AJUSTE,
-    OPERACION_DIVISION, OPERACION_MODULO, OPERACION_MULTIPLICACION, OPERACION_NEGACION,
-    OPERACION_RESTA, OPERACION_SUMA,
+    ContextoJit, ESTADO_DESBORDAMIENTO, ESTADO_DIVISION_CERO, ESTADO_EXITO, ErrorJit,
+    OPERACION_AJUSTE, OPERACION_DIVISION, OPERACION_MODULO, OPERACION_MULTIPLICACION,
+    OPERACION_NEGACION, OPERACION_RESTA, OPERACION_SUMA,
 };
 use indexmap::IndexMap;
 use nucleo::{ErrorQuetzal, Ubicacion};
@@ -30,6 +30,7 @@ use crate::valores::{
 };
 
 const LIMITE_PROFUNDIDAD: usize = 10_000;
+const UMBRAL_REESPECIALIZACION: u16 = 32;
 static SIGUIENTE_ID_CLASE: AtomicU64 = AtomicU64::new(1);
 
 type Despachador = Rc<dyn Fn(&mut Vm, u64, CargaNativa) -> CargaNativa>;
@@ -41,6 +42,7 @@ pub struct Vm {
     /// Pila única: locales de cada marco en `[base, base+ranuras)` y operandos encima.
     pub(crate) pila: Vec<Valor>,
     pub(crate) optimizar: bool,
+    despacho_rapido: bool,
     marcos: Vec<Marco>,
     bucle: BucleEventos,
     resultados_pendientes: RefCell<HashMap<u64, Result<CargaNativa, String>>>,
@@ -49,12 +51,15 @@ pub struct Vm {
     jit: ContextoJit,
     #[cfg(feature = "jit")]
     jit_habilitado: bool,
+    #[cfg(feature = "jit")]
+    jit_automatico: bool,
 }
 
 struct Marco {
     codigo: Rc<CodigoRuntime>,
     pc: u32,
     base: u32,
+    base_limpieza: u32,
     ranuras: u16,
     entorno: Rc<EntornoModulo>,
     esto: Option<Valor>,
@@ -135,6 +140,7 @@ impl Vm {
             modulos: IndexMap::new(),
             pila: Vec::with_capacity(256),
             optimizar: true,
+            despacho_rapido: true,
             marcos: Vec::new(),
             bucle: BucleEventos::nuevo(),
             resultados_pendientes: RefCell::new(HashMap::new()),
@@ -143,6 +149,8 @@ impl Vm {
             jit: ContextoJit::default(),
             #[cfg(feature = "jit")]
             jit_habilitado: false,
+            #[cfg(feature = "jit")]
+            jit_automatico: false,
         }
     }
 
@@ -155,9 +163,23 @@ impl Vm {
         self
     }
 
+    /// Usa el despachador general como referencia, sin cambiar la especialización adaptativa.
+    pub fn sin_despacho_rapido(mut self) -> Self {
+        self.despacho_rapido = false;
+        self
+    }
+
     #[cfg(feature = "jit")]
     pub fn con_jit(mut self, habilitado: bool) -> Self {
         self.jit_habilitado = habilitado;
+        self.jit_automatico = false;
+        self
+    }
+
+    #[cfg(feature = "jit")]
+    pub fn con_jit_automatico(mut self) -> Self {
+        self.jit_habilitado = true;
+        self.jit_automatico = true;
         self
     }
 
@@ -169,6 +191,7 @@ impl Vm {
     ) -> Self {
         self.jit = ContextoJit::nuevo(configuracion);
         self.jit_habilitado = habilitado;
+        self.jit_automatico = false;
         self
     }
 
@@ -282,6 +305,7 @@ impl Vm {
         modulo: Rc<ModuloCompilado>,
         importaciones: IndexMap<String, Variable>,
     ) -> Result<(Rc<EntornoModulo>, Valor), ErrorQuetzal> {
+        bytecode::verificar_modulo_inmutable(&modulo)?;
         let constantes = modulo.constantes.iter().map(valor_de_constante).collect();
         let nombres = modulo
             .nombres
@@ -552,11 +576,57 @@ impl Vm {
             let compilado = self.jit.compilar_funcion(&entorno.modulo, funcion);
             let estado = match compilado {
                 Ok(funcion_nativa) => EstadoJit::Compilado(funcion_nativa),
-                Err(_) => EstadoJit::NoElegible,
+                Err(ErrorJit::NoElegible(_) | ErrorJit::Bytecode(_)) => EstadoJit::NoElegible,
+                Err(_) => EstadoJit::NoDisponible,
             };
             if let Some(codigo) = entorno.runtimes.borrow().get(&funcion.nombre) {
                 *codigo.jit.borrow_mut() = estado;
             }
+        }
+    }
+
+    #[cfg(feature = "jit")]
+    fn preparar_jit(
+        &mut self,
+        codigo: &Rc<CodigoRuntime>,
+        entorno: &Rc<EntornoModulo>,
+    ) -> Option<Rc<compilador_jit::FuncionNativa>> {
+        if !self.jit_habilitado {
+            return None;
+        }
+        {
+            let estado = codigo.jit.borrow();
+            match &*estado {
+                EstadoJit::Compilado(funcion) => return Some(Rc::clone(funcion)),
+                EstadoJit::NoElegible | EstadoJit::NoDisponible => return None,
+                EstadoJit::Frio => {}
+            }
+        }
+        codigo.registrar_llamada();
+        let caliente = if self.jit_automatico {
+            codigo.suficientemente_caliente_automatico()
+        } else {
+            codigo.suficientemente_caliente()
+        };
+        if caliente {
+            let compilado = codigo
+                .funcion
+                .as_ref()
+                .map(|funcion| self.jit.compilar_funcion(&entorno.modulo, funcion));
+            let estado = match compilado {
+                Some(Ok(funcion)) => EstadoJit::Compilado(funcion),
+                Some(Err(ErrorJit::NoElegible(_) | ErrorJit::Bytecode(_))) => EstadoJit::NoElegible,
+                Some(Err(_)) | None => EstadoJit::NoDisponible,
+            };
+            if matches!(estado, EstadoJit::NoElegible | EstadoJit::NoDisponible) {
+                self.jit.registrar_fallback();
+            }
+            *codigo.jit.borrow_mut() = estado;
+        }
+        let estado = codigo.jit.borrow();
+        match &*estado {
+            EstadoJit::Compilado(funcion) => Some(Rc::clone(funcion)),
+            EstadoJit::Frio | EstadoJit::NoElegible | EstadoJit::NoDisponible => None,
         }
     }
 
@@ -568,44 +638,32 @@ impl Vm {
         argumentos: &[Valor],
         ubicacion: Option<Ubicacion>,
     ) -> Option<Result<Valor, Fallo>> {
-        if !self.jit_habilitado {
-            return None;
-        }
-        codigo.registrar_llamada();
-        if matches!(&*codigo.jit.borrow(), EstadoJit::Frio) && codigo.suficientemente_caliente() {
-            let compilado = codigo
-                .funcion
-                .as_ref()
-                .map(|funcion| self.jit.compilar_funcion(&entorno.modulo, funcion));
-            *codigo.jit.borrow_mut() = match compilado {
-                Some(Ok(funcion)) => EstadoJit::Compilado(funcion),
-                _ => EstadoJit::NoElegible,
-            };
-        }
-        let funcion = {
-            let estado = codigo.jit.borrow();
-            match &*estado {
-                EstadoJit::Compilado(funcion) => Rc::clone(funcion),
-                EstadoJit::Frio => return None,
-                EstadoJit::NoElegible => {
-                    self.jit.registrar_fallback();
-                    return None;
-                }
-            }
-        };
-        let enteros = ArgumentosNativos::nuevo(argumentos);
-        let Some(enteros) = enteros else {
-            self.jit.registrar_fallback();
+        let funcion = self.preparar_jit(codigo, entorno)?;
+        let Some(enteros) = ArgumentosNativos::nuevo(argumentos) else {
+            self.jit.registrar_guardia_fallida();
             return None;
         };
-        let salida = match funcion.ejecutar(enteros.como_slice()) {
+        self.ejecutar_jit(codigo, entorno, funcion, enteros, ubicacion)
+    }
+
+    #[cfg(feature = "jit")]
+    fn ejecutar_jit(
+        &mut self,
+        codigo: &Rc<CodigoRuntime>,
+        entorno: &Rc<EntornoModulo>,
+        funcion: Rc<compilador_jit::FuncionNativa>,
+        argumentos: ArgumentosNativos,
+        ubicacion: Option<Ubicacion>,
+    ) -> Option<Result<Valor, Fallo>> {
+        let salida = match funcion.ejecutar(argumentos.como_slice()) {
             Ok(salida) => salida,
             Err(_) => {
-                self.jit.registrar_fallback();
+                self.jit.registrar_guardia_fallida();
                 *codigo.jit.borrow_mut() = EstadoJit::NoElegible;
                 return None;
             }
         };
+        self.jit.registrar_ejecucion_nativa();
         let ubicacion = entorno
             .modulo
             .funciones
@@ -691,6 +749,7 @@ impl Vm {
             codigo,
             pc: 0,
             base,
+            base_limpieza: base,
             ranuras,
             entorno: Rc::clone(entorno),
             esto,
@@ -730,6 +789,7 @@ impl Vm {
             codigo,
             pc: 0,
             base: base as u32,
+            base_limpieza: (base - 1) as u32,
             ranuras,
             entorno: Rc::clone(entorno),
             esto,
@@ -784,18 +844,26 @@ impl Vm {
             _ => return Ok(None),
         };
         #[cfg(feature = "jit")]
-        if self.jit_habilitado && esto.is_none() && cantidad == funcion.parametros.len() {
-            let argumentos = self.pila.split_off(indice + 1);
-            match self.intentar_jit(&codigo, &entorno, &argumentos, Some(ubicacion)) {
-                Some(Ok(valor)) => {
-                    self.pila.truncate(indice);
-                    return Ok(Some(DestinoLlamada::Valor(valor)));
+        if self.jit_habilitado
+            && esto.is_none()
+            && cantidad == funcion.parametros.len()
+            && let Some(funcion_nativa) = self.preparar_jit(&codigo, &entorno)
+        {
+            let enteros = ArgumentosNativos::nuevo(&self.pila[indice + 1..]);
+            if let Some(enteros) = enteros {
+                match self.ejecutar_jit(&codigo, &entorno, funcion_nativa, enteros, Some(ubicacion))
+                {
+                    Some(Ok(valor)) => {
+                        self.pila.truncate(indice);
+                        return Ok(Some(DestinoLlamada::Valor(valor)));
+                    }
+                    Some(Err(fallo)) => return Err(fallo),
+                    None => {}
                 }
-                Some(Err(fallo)) => return Err(fallo),
-                None => drop(self.pila.splice(indice + 1.., argumentos)),
+            } else {
+                self.jit.registrar_guardia_fallida();
             }
         }
-        self.pila.remove(indice);
         self.preparar_marco_en_pila(&funcion, &entorno, codigo, cantidad, esto, Some(ubicacion))
             .map(|marco| Some(DestinoLlamada::Marco(marco)))
     }
@@ -835,6 +903,7 @@ impl Vm {
             codigo,
             pc: 0,
             base: base_pila,
+            base_limpieza: base_pila,
             ranuras,
             entorno,
             esto,
@@ -865,6 +934,7 @@ impl Vm {
             codigo,
             pc: 0,
             base: base_pila,
+            base_limpieza: base_pila,
             ranuras,
             entorno,
             esto,
@@ -909,6 +979,14 @@ impl Vm {
     }
 
     fn correr_hasta(&mut self, base: usize) -> Result<Valor, Fallo> {
+        if self.despacho_rapido {
+            self.correr_hasta_modo::<true>(base)
+        } else {
+            self.correr_hasta_modo::<false>(base)
+        }
+    }
+
+    fn correr_hasta_modo<const RAPIDO: bool>(&mut self, base: usize) -> Result<Valor, Fallo> {
         loop {
             if self.marcos.len() <= base {
                 return Ok(self.pila.pop().unwrap_or(Valor::Nulo));
@@ -924,7 +1002,139 @@ impl Vm {
             }
 
             let instruccion = self.marcos[top].codigo.instruccion(pc, self.optimizar);
-            let resultado = self.ejecutar_instruccion(instruccion, top);
+            let resultado = if RAPIDO {
+                macro_rules! intentar {
+                    ($etiqueta:lifetime, $expresion:expr) => {
+                        match $expresion {
+                            Ok(valor) => valor,
+                            Err(fallo) => break $etiqueta Err(fallo),
+                        }
+                    };
+                }
+                'resultado: {
+                    match instruccion.op {
+                        CodigoOp::CargarConstante => {
+                            let constante = self.marcos[top].entorno.constantes
+                                [instruccion.indice_u32() as usize]
+                                .clone();
+                            self.pila.push(constante);
+                            Ok(Flujo::Continuar)
+                        }
+                        CodigoOp::CargarEntero => {
+                            self.pila
+                                .push(Valor::Entero(instruccion.entero_inmediato() as i64));
+                            Ok(Flujo::Continuar)
+                        }
+                        CodigoOp::CargarLocal => {
+                            let valor =
+                                intentar!('resultado, self.local(top, instruccion.ranura()));
+                            self.pila.push(valor);
+                            Ok(Flujo::Continuar)
+                        }
+                        CodigoOp::GuardarLocal => {
+                            let valor = intentar!('resultado, self.sacar());
+                            intentar!('resultado, self.set_local(top, instruccion.ranura(), valor));
+                            Ok(Flujo::Continuar)
+                        }
+                        CodigoOp::AjustarLocal => {
+                            let ranura = instruccion.ranura();
+                            let delta = instruccion.delta_ajuste() as i64;
+                            let valor = intentar!('resultado, self.local_mut(top, ranura));
+                            let Valor::Entero(actual) = valor else {
+                                let copia = valor.clone();
+                                break 'resultado Err(
+                                    self.error_se_esperaba_entero(&copia, self.ubi(top))
+                                );
+                            };
+                            let Some(nuevo) = actual.checked_add(delta) else {
+                                let actual = *actual;
+                                break 'resultado Err(self.excepcion(
+                                    "E0402",
+                                    format!(
+                                        "desbordamiento de entero al ajustar {actual} en {delta}"
+                                    ),
+                                    Some(self.ubi(top)),
+                                ));
+                            };
+                            *actual = nuevo;
+                            Ok(Flujo::Continuar)
+                        }
+                        CodigoOp::AjustarLocalConLocal => {
+                            let ranura = instruccion.ranura();
+                            let a = intentar!('resultado, self.local_entero(top, ranura));
+                            let b = intentar!('resultado, self.local_entero(top, instruccion.ranura_derecha()));
+                            let Some(nuevo) = a.checked_add(b) else {
+                                break 'resultado Err(self.excepcion(
+                                    "E0402",
+                                    format!("desbordamiento de entero al sumar {a} y {b}"),
+                                    Some(self.ubi(top)),
+                                ));
+                            };
+                            intentar!('resultado, self.set_local(top, ranura, Valor::Entero(nuevo)));
+                            Ok(Flujo::Continuar)
+                        }
+                        CodigoOp::CargarLocalLocalSumarEntero => {
+                            let a =
+                                intentar!('resultado, self.local_entero(top, instruccion.ranura()));
+                            let b = intentar!('resultado, self.local_entero(top, instruccion.ranura_derecha()));
+                            let valor = intentar!('resultado, self.entero_checked(
+                                a.checked_add(b),
+                                a,
+                                b,
+                                "sumar",
+                                self.ubi(top),
+                            ));
+                            self.pila.push(valor);
+                            Ok(Flujo::Continuar)
+                        }
+                        CodigoOp::MenorEnteroSaltarSiFalso => {
+                            let derecha = intentar!('resultado, self.sacar());
+                            let izquierda = intentar!('resultado, self.sacar());
+                            let Valor::Entero(a) = izquierda else {
+                                break 'resultado Err(
+                                    self.error_se_esperaba_entero(&izquierda, self.ubi(top))
+                                );
+                            };
+                            let Valor::Entero(b) = derecha else {
+                                break 'resultado Err(
+                                    self.error_se_esperaba_entero(&derecha, self.ubi(top))
+                                );
+                            };
+                            if a < b {
+                                Ok(Flujo::Continuar)
+                            } else {
+                                self.marcos[top].pc = instruccion.destino();
+                                Ok(Flujo::SinAvanzar)
+                            }
+                        }
+                        CodigoOp::Saltar => {
+                            #[cfg(feature = "jit")]
+                            if instruccion.destino() < self.marcos[top].pc {
+                                self.marcos[top].codigo.registrar_retroceso();
+                            }
+                            self.marcos[top].pc = instruccion.destino();
+                            Ok(Flujo::SinAvanzar)
+                        }
+                        CodigoOp::SaltarSiFalso => {
+                            let valor = intentar!('resultado, self.sacar());
+                            if !intentar!('resultado, self.como_logico(&valor, self.ubi(top))) {
+                                self.marcos[top].pc = instruccion.destino();
+                                Ok(Flujo::SinAvanzar)
+                            } else {
+                                Ok(Flujo::Continuar)
+                            }
+                        }
+                        CodigoOp::RetornarLocal => {
+                            let valor =
+                                intentar!('resultado, self.local(top, instruccion.ranura()));
+                            Ok(Flujo::Retornar(valor))
+                        }
+                        _ => self.ejecutar_instruccion(instruccion, top),
+                    }
+                }
+            } else {
+                self.ejecutar_instruccion(instruccion, top)
+            };
             match resultado {
                 Ok(Flujo::Continuar) => {
                     self.marcos[top].pc += 1;
@@ -973,7 +1183,7 @@ impl Vm {
             instancia.borrow_mut().inicializando = false;
         }
         let valor = marco.valor_al_volver.unwrap_or(valor);
-        self.pila.truncate(marco.base as usize);
+        self.pila.truncate(marco.base_limpieza as usize);
         if self.marcos.len() == base {
             Some(valor)
         } else {
@@ -1011,7 +1221,7 @@ impl Vm {
                 return Ok(());
             }
             let marco = self.marcos.pop().unwrap();
-            self.pila.truncate(marco.base as usize);
+            self.pila.truncate(marco.base_limpieza as usize);
             if self.marcos.len() == base {
                 return Err(Fallo::Excepcion(datos));
             }
@@ -1021,7 +1231,7 @@ impl Vm {
     fn descartar_hasta(&mut self, base: usize) {
         while self.marcos.len() > base {
             if let Some(marco) = self.marcos.pop() {
-                self.pila.truncate(marco.base as usize);
+                self.pila.truncate(marco.base_limpieza as usize);
             }
         }
     }
@@ -1105,15 +1315,15 @@ impl Vm {
                 self.guardar_global(top, instruccion.indice_u16(), valor)?;
             }
             CodigoOp::CargarExterno => {
-                let nombre =
-                    Rc::clone(&self.marcos[top].entorno.nombres[instruccion.indice_u32() as usize]);
-                let valor = self.buscar_externo(top, &nombre).ok_or_else(|| {
-                    self.excepcion(
-                        "E0201",
-                        format!("'{nombre}' no está definido"),
-                        Some(self.ubi(top)),
-                    )
-                })?;
+                let pc = self.marcos[top].pc as usize;
+                let cache = self.marcos[top].codigo.caches[pc].get();
+                let valor = if self.optimizar
+                    && let CacheSitio::Externa { id } = cache
+                {
+                    Valor::Nativa(id)
+                } else {
+                    self.cargar_externo(top, instruccion)?
+                };
                 self.pila.push(valor);
             }
             CodigoOp::GuardarExterno => {
@@ -1143,14 +1353,27 @@ impl Vm {
                         && matches!(self.pila[self.pila.len() - 2], Valor::Entero(_))
                         && matches!(self.pila[self.pila.len() - 1], Valor::Entero(_));
                     if !operandos_enteros {
+                        self.marcos[top].codigo.caches[pc].set(CacheSitio::Generica {
+                            clase: 0,
+                            repeticiones: 0,
+                        });
                         self.marcos[top].codigo.desespecializar(pc);
-                        self.marcos[top].codigo.caches[pc].set(CacheSitio::Polimorfica);
                         return self.ejecutar_instruccion(original, top);
                     }
                 }
                 let derecha = self.sacar()?;
                 let izquierda = self.sacar()?;
                 self.pila.push(self.operacion_entera(
+                    instruccion,
+                    izquierda,
+                    derecha,
+                    self.ubi(top),
+                )?);
+            }
+            _ if instruccion.es_binaria_numero() => {
+                let derecha = self.sacar()?;
+                let izquierda = self.sacar()?;
+                self.pila.push(self.operacion_numero(
                     instruccion,
                     izquierda,
                     derecha,
@@ -1303,8 +1526,11 @@ impl Vm {
                         _ => false,
                     };
                     if !guarda {
+                        self.marcos[top].codigo.caches[pc].set(CacheSitio::Generica {
+                            clase: 0,
+                            repeticiones: 0,
+                        });
                         self.marcos[top].codigo.desespecializar(pc);
-                        self.marcos[top].codigo.caches[pc].set(CacheSitio::Polimorfica);
                         return self.ejecutar_instruccion(original, top);
                     }
                 }
@@ -1346,50 +1572,60 @@ impl Vm {
             CodigoOp::CargarAtributo => {
                 let pc = self.marcos[top].pc as usize;
                 let original = self.marcos[top].codigo.instrucciones[pc];
+                let mut slot = instruccion.slot();
                 if original.op == CodigoOp::CargarMiembro {
                     let clase_actual = match self.tope()? {
                         Valor::Instancia(instancia) => Some(instancia.borrow().clase.id),
                         _ => None,
                     };
-                    let guarda = match self.marcos[top].codigo.caches[pc].get() {
-                        CacheSitio::Atributo { clase, slot } => {
-                            slot == instruccion.slot() && Some(clase) == clase_actual
+                    let slot_valido = match self.marcos[top].codigo.caches[pc].get() {
+                        CacheSitio::Atributo { clase, slot }
+                            if slot == instruccion.slot() && Some(clase) == clase_actual =>
+                        {
+                            Some(slot)
                         }
-                        _ => false,
+                        CacheSitio::AtributosPolimorficos { .. } => {
+                            return self.cargar_atributo_polimorfico(instruccion, top);
+                        }
+                        _ => None,
                     };
-                    if !guarda {
-                        self.marcos[top].codigo.desespecializar(pc);
-                        self.marcos[top].codigo.caches[pc].set(CacheSitio::Polimorfica);
+                    let Some(slot_encontrado) = slot_valido else {
                         return self.ejecutar_instruccion(original, top);
-                    }
+                    };
+                    slot = slot_encontrado;
                 }
                 let objeto = self.sacar()?;
-                let atributo = self.cargar_atributo(objeto, instruccion.slot(), self.ubi(top))?;
+                let atributo = self.cargar_atributo(objeto, slot, self.ubi(top))?;
                 self.pila.push(atributo);
             }
             CodigoOp::CargarLocalAtributo => {
                 let pc = self.marcos[top].pc as usize;
                 let original = self.marcos[top].codigo.instrucciones[pc];
                 let objeto = self.local(top, instruccion.ranura())?;
+                let mut slot = instruccion.slot_atributo();
                 if original.op == CodigoOp::CargarLocalMiembro {
                     let clase_actual = match &objeto {
                         Valor::Instancia(instancia) => Some(instancia.borrow().clase.id),
                         _ => None,
                     };
-                    let guarda = match self.marcos[top].codigo.caches[pc].get() {
-                        CacheSitio::Atributo { clase, slot } => {
-                            slot == instruccion.slot_atributo() && Some(clase) == clase_actual
+                    let slot_valido = match self.marcos[top].codigo.caches[pc].get() {
+                        CacheSitio::Atributo { clase, slot }
+                            if slot == instruccion.slot_atributo()
+                                && Some(clase) == clase_actual =>
+                        {
+                            Some(slot)
                         }
-                        _ => false,
+                        CacheSitio::AtributosPolimorficos { .. } => {
+                            return self.cargar_atributo_polimorfico(instruccion, top);
+                        }
+                        _ => None,
                     };
-                    if !guarda {
-                        self.marcos[top].codigo.desespecializar(pc);
-                        self.marcos[top].codigo.caches[pc].set(CacheSitio::Polimorfica);
+                    let Some(slot_encontrado) = slot_valido else {
                         return self.ejecutar_instruccion(original, top);
-                    }
+                    };
+                    slot = slot_encontrado;
                 }
-                let atributo =
-                    self.cargar_atributo(objeto, instruccion.slot_atributo(), self.ubi(top))?;
+                let atributo = self.cargar_atributo(objeto, slot, self.ubi(top))?;
                 self.pila.push(atributo);
             }
             CodigoOp::GuardarAtributo => {
@@ -1559,6 +1795,52 @@ impl Vm {
         Ok(Flujo::Continuar)
     }
 
+    #[inline(never)]
+    fn cargar_atributo_polimorfico(
+        &mut self,
+        instruccion: Instruccion,
+        top: usize,
+    ) -> Result<Flujo, Fallo> {
+        let pc = self.marcos[top].pc as usize;
+        let original = self.marcos[top].codigo.instrucciones[pc];
+        let objeto_local = match instruccion.op {
+            CodigoOp::CargarAtributo => None,
+            CodigoOp::CargarLocalAtributo => Some(self.local(top, instruccion.ranura())?),
+            _ => {
+                return Err(Fallo::Error(Box::new(ErrorQuetzal::interno(
+                    "instrucción polimórfica de atributo inesperada",
+                ))));
+            }
+        };
+        let clase_actual = match &objeto_local {
+            Some(Valor::Instancia(instancia)) => Some(instancia.borrow().clase.id),
+            Some(_) => None,
+            None => match self.tope()? {
+                Valor::Instancia(instancia) => Some(instancia.borrow().clase.id),
+                _ => None,
+            },
+        };
+        let CacheSitio::AtributosPolimorficos { clases, slots } =
+            self.marcos[top].codigo.caches[pc].get()
+        else {
+            return self.ejecutar_instruccion(original, top);
+        };
+        let slot = if Some(clases[0]) == clase_actual {
+            slots[0]
+        } else if Some(clases[1]) == clase_actual {
+            slots[1]
+        } else {
+            return self.ejecutar_instruccion(original, top);
+        };
+        let objeto = match objeto_local {
+            Some(objeto) => objeto,
+            None => self.sacar()?,
+        };
+        let atributo = self.cargar_atributo(objeto, slot, self.ubi(top))?;
+        self.pila.push(atributo);
+        Ok(Flujo::Continuar)
+    }
+
     fn local(&self, top: usize, ranura: u16) -> Result<Valor, Fallo> {
         let indice = self.marcos[top].base as usize + ranura as usize;
         self.pila.get(indice).cloned().ok_or_else(|| {
@@ -1566,6 +1848,17 @@ impl Vm {
                 "ranura local fuera de rango (bytecode inválido)",
             )))
         })
+    }
+
+    fn local_entero(&self, top: usize, ranura: u16) -> Result<i64, Fallo> {
+        let indice = self.marcos[top].base as usize + ranura as usize;
+        match self.pila.get(indice) {
+            Some(Valor::Entero(valor)) => Ok(*valor),
+            Some(otro) => Err(self.error_se_esperaba_entero(otro, self.ubi(top))),
+            None => Err(Fallo::Error(Box::new(ErrorQuetzal::interno(
+                "ranura local fuera de rango (bytecode inválido)",
+            )))),
+        }
     }
 
     fn set_local(&mut self, top: usize, ranura: u16, valor: Valor) -> Result<(), Fallo> {
@@ -1627,7 +1920,7 @@ impl Vm {
         let pc = self.marcos[top].pc as usize;
         if matches!(
             self.marcos[top].codigo.caches[pc].get(),
-            CacheSitio::Polimorfica
+            CacheSitio::Generica { .. }
         ) {
             return;
         }
@@ -1666,7 +1959,7 @@ impl Vm {
         let pc = self.marcos[top].pc as usize;
         if matches!(
             self.marcos[top].codigo.caches[pc].get(),
-            CacheSitio::Polimorfica
+            CacheSitio::Generica { .. }
         ) {
             return;
         }
@@ -1691,7 +1984,6 @@ impl Vm {
                 tipo: tipo_cache(objeto.nombre_tipo()),
                 id,
             });
-            let _ = original;
             return;
         }
         let Valor::Instancia(instancia) = objeto else {
@@ -1699,29 +1991,78 @@ impl Vm {
         };
         let clase = Rc::clone(&instancia.borrow().clase);
         let clave = clave_clase(&clase);
+        let slot = clase.slots.borrow().get(nombre).copied();
         let cache = self.marcos[top].codigo.caches[pc].get();
         match cache {
             CacheSitio::Vacia => {
-                if let Some(&slot) = clase.slots.borrow().get(nombre) {
+                if let Some(slot) = slot {
                     self.marcos[top].codigo.caches[pc]
                         .set(CacheSitio::Atributo { clase: clave, slot });
-                    let especializada = match original.op {
-                        CodigoOp::CargarMiembro => Instruccion::CargarAtributo(slot),
-                        CodigoOp::CargarLocalMiembro => {
-                            Instruccion::CargarLocalAtributo(original.ranura(), slot)
-                        }
-                        _ => return,
-                    };
-                    self.marcos[top].codigo.especializar(pc, especializada);
+                    self.especializar_acceso_atributo(top, original, slot);
                 }
             }
-            CacheSitio::Atributo { clase: previa, .. } if previa != clave => {
-                self.marcos[top].codigo.caches[pc].set(CacheSitio::Polimorfica);
+            CacheSitio::Atributo {
+                clase: previa,
+                slot: anterior,
+            } if previa != clave => {
+                if let Some(slot) = slot {
+                    self.marcos[top].codigo.caches[pc].set(CacheSitio::AtributosPolimorficos {
+                        clases: [previa, clave],
+                        slots: [anterior, slot],
+                    });
+                } else {
+                    self.marcos[top].codigo.caches[pc].set(CacheSitio::Generica {
+                        clase: clave,
+                        repeticiones: 0,
+                    });
+                    self.marcos[top].codigo.desespecializar(pc);
+                }
+            }
+            CacheSitio::AtributosPolimorficos { clases, .. }
+                if clases[0] != clave && clases[1] != clave =>
+            {
+                self.marcos[top].codigo.caches[pc].set(CacheSitio::Generica {
+                    clase: clave,
+                    repeticiones: 0,
+                });
                 self.marcos[top].codigo.desespecializar(pc);
-                let _ = original;
+            }
+            CacheSitio::Generica {
+                clase: previa,
+                repeticiones,
+            } => {
+                let Some(slot) = slot else {
+                    return;
+                };
+                let repeticiones = if previa == clave {
+                    repeticiones.saturating_add(1)
+                } else {
+                    1
+                };
+                if repeticiones < UMBRAL_REESPECIALIZACION {
+                    self.marcos[top].codigo.caches[pc].set(CacheSitio::Generica {
+                        clase: clave,
+                        repeticiones,
+                    });
+                    return;
+                }
+                self.marcos[top].codigo.caches[pc].set(CacheSitio::Atributo { clase: clave, slot });
+                self.especializar_acceso_atributo(top, original, slot);
             }
             _ => {}
         }
+    }
+
+    fn especializar_acceso_atributo(&self, top: usize, original: Instruccion, slot: u16) {
+        let pc = self.marcos[top].pc as usize;
+        let especializada = match original.op {
+            CodigoOp::CargarMiembro => Instruccion::CargarAtributo(slot),
+            CodigoOp::CargarLocalMiembro => {
+                Instruccion::CargarLocalAtributo(original.ranura(), slot)
+            }
+            _ => return,
+        };
+        self.marcos[top].codigo.especializar(pc, especializada);
     }
 
     fn cargar_global(&self, top: usize, indice: u16) -> Result<Valor, Fallo> {
@@ -1774,6 +2115,26 @@ impl Vm {
         }
         variable.valor = valor;
         Ok(())
+    }
+
+    #[inline(never)]
+    fn cargar_externo(&self, top: usize, instruccion: Instruccion) -> Result<Valor, Fallo> {
+        let nombre =
+            Rc::clone(&self.marcos[top].entorno.nombres[instruccion.indice_u32() as usize]);
+        let valor = self.buscar_externo(top, &nombre).ok_or_else(|| {
+            self.excepcion(
+                "E0201",
+                format!("'{nombre}' no está definido"),
+                Some(self.ubi(top)),
+            )
+        })?;
+        if self.optimizar
+            && let Valor::Nativa(id) = &valor
+        {
+            let pc = self.marcos[top].pc as usize;
+            self.marcos[top].codigo.caches[pc].set(CacheSitio::Externa { id: *id });
+        }
+        Ok(valor)
     }
 
     fn buscar_externo(&self, top: usize, nombre: &str) -> Option<Valor> {
@@ -1866,6 +2227,68 @@ impl Vm {
             }
             _ => unreachable!("instrucción binaria inesperada"),
         }
+    }
+
+    fn operacion_numero(
+        &self,
+        instruccion: Instruccion,
+        izquierda: Valor,
+        derecha: Valor,
+        ubicacion: Ubicacion,
+    ) -> Result<Valor, Fallo> {
+        let operacion = match instruccion.op {
+            CodigoOp::SumarNumero => "sumar",
+            CodigoOp::RestarNumero => "restar",
+            CodigoOp::MultiplicarNumero => "multiplicar",
+            CodigoOp::DividirNumero => "dividir",
+            CodigoOp::ModuloNumero => "modulo",
+            _ => unreachable!("instrucción numérica inesperada"),
+        };
+        if !matches!((&izquierda, &derecha), (Valor::Numero(_), Valor::Numero(_))) {
+            return if instruccion.op == CodigoOp::SumarNumero {
+                self.sumar(izquierda, derecha, ubicacion)
+            } else {
+                self.aritmetica(izquierda, derecha, ubicacion, operacion)
+            };
+        }
+        let (Valor::Numero(a), Valor::Numero(b)) = (&izquierda, &derecha) else {
+            unreachable!("las guardas numéricas ya comprobaron los operandos")
+        };
+        let a = **a;
+        let b = **b;
+        let resultado = match instruccion.op {
+            CodigoOp::SumarNumero => a.checked_add(b),
+            CodigoOp::RestarNumero => a.checked_sub(b),
+            CodigoOp::MultiplicarNumero => a.checked_mul(b),
+            CodigoOp::DividirNumero => {
+                if b.is_zero() {
+                    return Err(self.excepcion(
+                        "E0401",
+                        "división por cero".to_string(),
+                        Some(ubicacion),
+                    ));
+                }
+                a.checked_div(b)
+            }
+            CodigoOp::ModuloNumero => {
+                if b.is_zero() {
+                    return Err(self.excepcion(
+                        "E0401",
+                        "módulo por cero".to_string(),
+                        Some(ubicacion),
+                    ));
+                }
+                a.checked_rem(b)
+            }
+            _ => unreachable!("instrucción numérica inesperada"),
+        };
+        resultado.map(Valor::numero).ok_or_else(|| {
+            self.excepcion(
+                "E0402",
+                format!("desbordamiento numérico al {operacion}"),
+                Some(ubicacion),
+            )
+        })
     }
 
     fn operacion_entera(

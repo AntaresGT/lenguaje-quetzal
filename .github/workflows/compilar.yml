@@ -27,6 +27,7 @@ jobs:
           - sistema: windows
             corredor: windows-latest
             binario: quetzal.exe
+            binario_lsp: quetzal-lsp.exe
             artefacto: quetzal-windows
             empaquetado: windows
             objetivo: ""
@@ -35,6 +36,7 @@ jobs:
           - sistema: ubuntu
             corredor: ubuntu-latest
             binario: quetzal
+            binario_lsp: quetzal-lsp
             artefacto: quetzal-ubuntu
             empaquetado: bundle
             objetivo: ""
@@ -42,6 +44,7 @@ jobs:
           - sistema: linux
             corredor: ubuntu-latest
             binario: quetzal
+            binario_lsp: quetzal-lsp
             artefacto: quetzal-linux
             empaquetado: estatico
             objetivo: x86_64-unknown-linux-musl
@@ -50,9 +53,9 @@ jobs:
             rustflags: "-C target-feature=+crt-static"
 
     steps:
-      - name: Instalar musl
+      - name: Instalar musl y ZIP
         if: matrix.empaquetado == 'estatico'
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools zip
 
       - name: Obtener código
         uses: actions/checkout@v7
@@ -67,17 +70,17 @@ jobs:
         with:
           shared-key: lnc-${{ matrix.sistema }}
 
-      - name: Compilar quetzal (release)
+      - name: Compilar ejecutables (release)
         if: matrix.objetivo == ''
         env:
           RUSTFLAGS: ${{ matrix.rustflags }}
-        run: cargo build -p lnc --release
+        run: cargo build -p lnc -p lsp --release
 
-      - name: Compilar quetzal estático (musl)
+      - name: Compilar ejecutables estáticos (musl)
         if: matrix.objetivo != ''
         env:
           RUSTFLAGS: ${{ matrix.rustflags }}
-        run: cargo build -p lnc --release --target ${{ matrix.objetivo }}
+        run: cargo build -p lnc -p lsp --release --target ${{ matrix.objetivo }}
 
       - name: Instalar WiX
         if: matrix.empaquetado == 'windows'
@@ -89,35 +92,48 @@ jobs:
         run: |
           mkdir -p dist
           cp "target/release/${{ matrix.binario }}" "dist/${{ matrix.binario }}"
+          cp "target/release/${{ matrix.binario_lsp }}" "dist/${{ matrix.binario_lsp }}"
           bash .github/scripts/empaquetar-msi.sh "dist/${{ matrix.binario }}" dist
 
-      - name: Instalar dpkg-dev
+      - name: Crear ZIP de Windows
+        if: matrix.empaquetado == 'windows'
+        shell: pwsh
+        run: Compress-Archive -Path "dist/${{ matrix.binario }}", "dist/${{ matrix.binario_lsp }}" -DestinationPath "dist/${{ matrix.artefacto }}.zip" -Force
+
+      - name: Instalar dpkg-dev y ZIP
         if: matrix.empaquetado == 'bundle'
-        run: sudo apt-get update && sudo apt-get install -y dpkg-dev
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev zip
 
       - name: Empaquetar Ubuntu con librerías
         if: matrix.empaquetado == 'bundle'
         shell: bash
-        run: bash .github/scripts/empaquetar-linux.sh "target/release/${{ matrix.binario }}" dist
+        run: |
+          bash .github/scripts/empaquetar-linux.sh "target/release/${{ matrix.binario }}" dist
+          cp "target/release/${{ matrix.binario_lsp }}" "dist/${{ matrix.binario_lsp }}"
+          zip -j "dist/${{ matrix.artefacto }}.zip" "target/release/${{ matrix.binario }}" "target/release/${{ matrix.binario_lsp }}"
 
       - name: Empaquetar .deb
         if: matrix.empaquetado == 'bundle'
         shell: bash
         run: bash .github/scripts/empaquetar-deb.sh "target/release/${{ matrix.binario }}" dist
 
-      - name: Empaquetar binario estático
+      - name: Empaquetar binarios estáticos
         if: matrix.empaquetado == 'estatico'
         shell: bash
         run: |
           set -euo pipefail
-          bin="target/${{ matrix.objetivo }}/release/${{ matrix.binario }}"
-          if readelf -d "$bin" 2>/dev/null | grep -q '(NEEDED)'; then
-            echo "el binario musl sigue enlazado a librerías dinámicas" >&2
-            readelf -d "$bin" || true
-            exit 1
-          fi
+          for nombre in "${{ matrix.binario }}" "${{ matrix.binario_lsp }}"; do
+            bin="target/${{ matrix.objetivo }}/release/$nombre"
+            if readelf -d "$bin" 2>/dev/null | grep -q '(NEEDED)'; then
+              echo "el binario musl $nombre sigue enlazado a librerías dinámicas" >&2
+              readelf -d "$bin" || true
+              exit 1
+            fi
+          done
           mkdir -p dist
-          cp "$bin" "dist/${{ matrix.binario }}"
+          cp "target/${{ matrix.objetivo }}/release/${{ matrix.binario }}" "dist/${{ matrix.binario }}"
+          cp "target/${{ matrix.objetivo }}/release/${{ matrix.binario_lsp }}" "dist/${{ matrix.binario_lsp }}"
+          zip -j "dist/${{ matrix.artefacto }}.zip" "dist/${{ matrix.binario }}" "dist/${{ matrix.binario_lsp }}"
 
       - name: Empaquetar AppImage
         if: matrix.empaquetado == 'estatico'
@@ -146,14 +162,14 @@ jobs:
             imagen: fedora:latest
             artefacto: quetzal-fedora
             empaquetado: rpm
-            paquetes: dnf install -y gcc git curl ca-certificates binutils findutils rpm-build
+            paquetes: dnf install -y gcc git curl ca-certificates binutils findutils rpm-build zip
           - sistema: arch
             imagen: archlinux:latest
             artefacto: quetzal-arch
             empaquetado: bundle
             paquetes: |
               pacman -Sy --noconfirm archlinux-keyring
-              pacman -S --noconfirm --needed base-devel git curl ca-certificates binutils findutils
+              pacman -S --noconfirm --needed base-devel git curl ca-certificates binutils findutils zip
 
     steps:
       # git tiene que existir antes de checkout: si no, Actions baja un
@@ -172,12 +188,15 @@ jobs:
         with:
           shared-key: lnc-${{ matrix.sistema }}
 
-      - name: Compilar quetzal (release)
-        run: cargo build -p lnc --release
+      - name: Compilar ejecutables (release)
+        run: cargo build -p lnc -p lsp --release
 
-      - name: Empaquetar con librerías
+      - name: Empaquetar con librerías y crear ZIP
         shell: bash
-        run: bash .github/scripts/empaquetar-linux.sh target/release/quetzal dist
+        run: |
+          bash .github/scripts/empaquetar-linux.sh target/release/quetzal dist
+          cp target/release/quetzal-lsp dist/quetzal-lsp
+          zip -j "dist/${{ matrix.artefacto }}.zip" target/release/quetzal target/release/quetzal-lsp
 
       - name: Empaquetar RPM
         if: matrix.empaquetado == 'rpm'
@@ -210,7 +229,7 @@ jobs:
       - name: Prohibir unsafe_code
         env:
           RUSTFLAGS: "-Dunsafe_code"
-        run: cargo check --workspace --tests --locked
+        run: cargo check -p ast -p nucleo -p diagnosticos -p lexico -p sintaxis -p semantica -p bytecode -p maquina_virtual -p runtime -p modulos_nativos -p paquetes -p pruebas_bytecode -p pruebas_runtime -p pruebas_paquetes --tests --locked
 
       - name: Suite de pruebas
         run: cargo test --workspace --locked

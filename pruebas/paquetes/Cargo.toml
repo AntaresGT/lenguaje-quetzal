@@ -12,5 +12,8 @@ paquetes = { workspace = true }
 bytecode = { workspace = true }
 sintaxis = { workspace = true }
 
+[dev-dependencies]
+postcard = { workspace = true }
+
 [lib]
 path = "lib.rs"

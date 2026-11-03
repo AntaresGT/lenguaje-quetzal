@@ -8,6 +8,7 @@ use crate::tipos::TipoSemantico;
 /// Un símbolo declarado: variable, función, objeto o import.
 #[derive(Debug, Clone)]
 pub struct Simbolo {
+    pub id: Option<u32>,
     pub nombre: String,
     pub tipo: TipoSemantico,
     pub mutable: bool,

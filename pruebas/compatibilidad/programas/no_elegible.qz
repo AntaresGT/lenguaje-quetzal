@@ -1,0 +1,6 @@
+entero fib(entero n) {
+    si (n < 2) { retornar n }
+    retornar fib(n - 1) + fib(n - 2)
+}
+entero resultado = fib(22)
+consola.mostrar(resultado)

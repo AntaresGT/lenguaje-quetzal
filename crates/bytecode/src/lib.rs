@@ -10,7 +10,7 @@ pub mod optimizar;
 pub mod verificador;
 
 pub use constantes::Constante;
-pub use generador::generar_modulo;
+pub use generador::{generar_modulo, generar_modulo_sin_procesar};
 pub use instruccion::{CodigoOp, Instruccion, Trozo};
 pub use modulo::{
     AtributoCompilado, FuncionCompilada, ImportacionCompilada, MetodoCompilado, ModuloCompilado,

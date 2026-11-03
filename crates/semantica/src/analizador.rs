@@ -9,24 +9,37 @@ use ast::{
 use indexmap::IndexMap;
 use nucleo::{CategoriaError, ErrorQuetzal, Ubicacion};
 
+use crate::indice::{
+    AmbitoAnalizado, ClaseAmbito, ClaseSimbolo, ExportacionAnalizada, FirmaAnalizada,
+    ImportacionAnalizada, ObjetoAnalizado, ParametroAnalizado, ReferenciaAnalizada,
+    ResultadoAnalisis, SimboloAnalizado,
+};
 use crate::resolucion_imports::clasificar_origen;
 use crate::tabla_simbolos::{Simbolo, TablaSimbolos};
 use crate::tipos::TipoSemantico;
 
 /// Analiza un módulo completo. Devuelve todos los errores encontrados.
 pub fn analizar_modulo(modulo: &Modulo) -> Result<(), Vec<ErrorQuetzal>> {
-    let mut analizador = Analizador::nuevo(&modulo.nombre);
-    analizador.analizar(modulo);
-    if analizador.errores.is_empty() {
+    let resultado = analizar_modulo_para_herramientas(modulo);
+    if resultado.diagnosticos.is_empty() {
         Ok(())
     } else {
-        Err(analizador.errores)
+        Err(resultado.diagnosticos)
     }
+}
+
+/// Analiza y conserva declaraciones, referencias y ámbitos para herramientas.
+pub fn analizar_modulo_para_herramientas(modulo: &Modulo) -> ResultadoAnalisis {
+    let mut analizador = Analizador::nuevo(&modulo.nombre);
+    analizador.analizar(modulo);
+    analizador.indice.diagnosticos = analizador.errores;
+    analizador.indice
 }
 
 /// Información registrada de un atributo de objeto.
 #[derive(Debug, Clone)]
 struct InfoAtributo {
+    id: u32,
     tipo: TipoSemantico,
     mutable: bool,
     publico: bool,
@@ -35,6 +48,7 @@ struct InfoAtributo {
 /// Información registrada de un método de objeto.
 #[derive(Debug, Clone)]
 struct InfoMetodo {
+    id: u32,
     parametros: Vec<TipoSemantico>,
     retorno: TipoSemantico,
     publico: bool,
@@ -65,6 +79,9 @@ struct Analizador {
     tabla: TablaSimbolos,
     objetos: IndexMap<String, InfoObjeto>,
     prototipos: IndexMap<String, InfoPrototipo>,
+    indice: ResultadoAnalisis,
+    pila_ambitos: Vec<u32>,
+    ambitos_objetos: IndexMap<String, u32>,
     /// Tipo de retorno de la función que se analiza (pila por anidamiento).
     pila_retorno: Vec<TipoSemantico>,
     /// Si la función que se analiza es `asincrono` (pila por anidamiento;
@@ -80,29 +97,40 @@ struct Analizador {
 
 impl Analizador {
     fn nuevo(archivo: &str) -> Self {
-        let mut tabla = TablaSimbolos::nueva();
-        // Globales del lenguaje: la consola no necesita importarse y `rango`
-        // crea listas de números consecutivos.
-        for global in ["consola", "rango"] {
-            tabla.declarar(Simbolo {
-                nombre: global.to_string(),
-                tipo: TipoSemantico::Desconocido,
-                mutable: false,
-                ubicacion: Ubicacion::default(),
-            });
-        }
-        Self {
+        let mut analizador = Self {
             archivo: archivo.to_string(),
             errores: Vec::new(),
-            tabla,
+            tabla: TablaSimbolos::nueva(),
             objetos: IndexMap::new(),
             prototipos: IndexMap::new(),
+            indice: ResultadoAnalisis {
+                ambitos: vec![AmbitoAnalizado {
+                    id: 0,
+                    padre: None,
+                    clase: ClaseAmbito::Global,
+                }],
+                ..ResultadoAnalisis::default()
+            },
+            pila_ambitos: vec![0],
+            ambitos_objetos: IndexMap::new(),
             pila_retorno: Vec::new(),
             pila_asincrona: Vec::new(),
             objeto_actual: None,
             en_constructor: false,
             profundidad_bucle: 0,
+        };
+        // Globales del lenguaje: la consola no necesita importarse y `rango`
+        // crea listas de números consecutivos.
+        for global in ["consola", "rango"] {
+            analizador.declarar_simbolo(
+                global,
+                TipoSemantico::Desconocido,
+                false,
+                Ubicacion::default(),
+                ClaseSimbolo::Nativo,
+            );
         }
+        analizador
     }
 
     fn error(&mut self, error: ErrorQuetzal) {
@@ -154,8 +182,14 @@ impl Analizador {
         // Las exportaciones se validan al final: pueden listar símbolos
         // declarados en cualquier punto del módulo.
         for (simbolos, ubicacion) in exportaciones {
+            let mut exportados = Vec::new();
             for simbolo in simbolos {
-                if !self.tabla.existe(&simbolo) {
+                if let Some(id) = self
+                    .buscar_simbolo(&simbolo, ubicacion)
+                    .and_then(|simbolo| simbolo.id)
+                {
+                    exportados.push(id);
+                } else {
                     self.error(
                         ErrorQuetzal::nuevo(
                             "E0302",
@@ -168,6 +202,10 @@ impl Analizador {
                     );
                 }
             }
+            self.indice.exportaciones.push(ExportacionAnalizada {
+                simbolos: exportados,
+                ubicacion,
+            });
         }
     }
 
@@ -179,8 +217,20 @@ impl Analizador {
         tipo: TipoSemantico,
         mutable: bool,
         ubicacion: Ubicacion,
-    ) {
+        clase: ClaseSimbolo,
+    ) -> u32 {
+        let id = self.declarar_indice(
+            nombre,
+            tipo.clone(),
+            mutable,
+            ubicacion,
+            clase,
+            None,
+            false,
+            None,
+        );
         let previo = self.tabla.declarar(Simbolo {
+            id: Some(id),
             nombre: nombre.to_string(),
             tipo,
             mutable,
@@ -198,16 +248,75 @@ impl Analizador {
                 .con_ayuda("usa un nombre distinto o elimina la declaración repetida"),
             );
         }
+        id
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "describe todos los metadatos de una declaración"
+    )]
+    fn declarar_indice(
+        &mut self,
+        nombre: &str,
+        tipo: TipoSemantico,
+        mutable: bool,
+        ubicacion: Ubicacion,
+        clase: ClaseSimbolo,
+        visibilidad: Option<Visibilidad>,
+        libre: bool,
+        firma: Option<FirmaAnalizada>,
+    ) -> u32 {
+        let id = self.indice.simbolos.len() as u32;
+        let ambito = self.pila_ambitos.last().copied().unwrap_or(0);
+        self.indice.simbolos.push(SimboloAnalizado {
+            id,
+            nombre: nombre.to_string(),
+            tipo,
+            ubicacion,
+            mutable,
+            ambito,
+            clase,
+            visibilidad,
+            libre,
+            firma,
+        });
+        id
+    }
+
+    fn abrir_ambito(&mut self, clase: ClaseAmbito) {
+        self.tabla.abrir_ambito();
+        let padre = self.pila_ambitos.last().copied();
+        let id = self.indice.ambitos.len() as u32;
+        self.indice
+            .ambitos
+            .push(AmbitoAnalizado { id, padre, clase });
+        self.pila_ambitos.push(id);
+    }
+
+    fn cerrar_ambito(&mut self) {
+        self.tabla.cerrar_ambito();
+        self.pila_ambitos.pop();
+    }
+
+    fn buscar_simbolo(&mut self, nombre: &str, ubicacion: Ubicacion) -> Option<Simbolo> {
+        let simbolo = self.tabla.buscar(nombre).cloned();
+        if let Some(id) = simbolo.as_ref().and_then(|simbolo| simbolo.id) {
+            self.indice.referencias.push(ReferenciaAnalizada {
+                simbolo: id,
+                ubicacion,
+            });
+        }
+        simbolo
     }
 
     fn registrar_funcion(&mut self, funcion: &Funcion) {
-        let parametros = funcion
+        let parametros: Vec<TipoSemantico> = funcion
             .parametros
             .iter()
             .map(|parametro| TipoSemantico::desde_ast(&parametro.tipo))
             .collect();
         let retorno = TipoSemantico::desde_ast(&funcion.tipo_retorno);
-        self.declarar_simbolo(
+        let id = self.declarar_simbolo(
             &funcion.nombre,
             TipoSemantico::Funcion {
                 parametros,
@@ -215,63 +324,149 @@ impl Analizador {
             },
             false,
             funcion.ubicacion,
+            ClaseSimbolo::Funcion,
         );
+        self.indice.simbolos[id as usize].firma = Some(Self::firma(funcion));
+    }
+
+    fn firma(funcion: &Funcion) -> FirmaAnalizada {
+        FirmaAnalizada {
+            parametros: funcion
+                .parametros
+                .iter()
+                .map(|parametro| ParametroAnalizado {
+                    nombre: parametro.nombre.clone(),
+                    tipo: TipoSemantico::desde_ast(&parametro.tipo),
+                    mutable: parametro.mutable,
+                })
+                .collect(),
+            retorno: TipoSemantico::desde_ast(&funcion.tipo_retorno),
+            asincrona: funcion.asincrona,
+        }
     }
 
     fn registrar_objeto(&mut self, objeto: &DefinicionObjeto) {
+        let simbolo_objeto = self.declarar_simbolo(
+            &objeto.nombre,
+            TipoSemantico::Desconocido,
+            false,
+            objeto.ubicacion,
+            ClaseSimbolo::Objeto,
+        );
+        let ambito_objeto = self.indice.ambitos.len() as u32;
+        self.indice.ambitos.push(AmbitoAnalizado {
+            id: ambito_objeto,
+            padre: self.pila_ambitos.last().copied(),
+            clase: ClaseAmbito::Objeto,
+        });
+        self.ambitos_objetos
+            .insert(objeto.nombre.clone(), ambito_objeto);
+        self.pila_ambitos.push(ambito_objeto);
+
         let mut info = InfoObjeto {
             padres: objeto.padres.clone(),
             extiende_como: objeto.extiende_como.clone(),
             ..Default::default()
         };
+        let mut miembros = Vec::new();
 
         for miembro in &objeto.miembros {
             let publico = miembro.visibilidad == Visibilidad::Publico;
-            match &miembro.clase {
+            let id = match &miembro.clase {
                 ClaseMiembro::Atributo {
                     tipo,
                     mutable,
                     nombre,
+                    ubicacion,
                     ..
                 } => {
+                    let tipo = TipoSemantico::desde_ast(tipo);
+                    let id = self.declarar_indice(
+                        nombre,
+                        tipo.clone(),
+                        *mutable,
+                        *ubicacion,
+                        ClaseSimbolo::Atributo,
+                        Some(miembro.visibilidad),
+                        miembro.libre,
+                        None,
+                    );
                     info.atributos.insert(
                         nombre.clone(),
                         InfoAtributo {
-                            tipo: TipoSemantico::desde_ast(tipo),
+                            id,
+                            tipo,
                             mutable: *mutable,
                             publico,
                         },
                     );
+                    id
                 }
                 ClaseMiembro::Constructor(funcion) => {
                     info.constructores.push(funcion.parametros.len());
-                }
-                ClaseMiembro::Metodo(funcion) => {
-                    info.metodos.insert(
-                        funcion.nombre.clone(),
-                        InfoMetodo {
+                    self.declarar_indice(
+                        &funcion.nombre,
+                        TipoSemantico::Funcion {
                             parametros: funcion
                                 .parametros
                                 .iter()
                                 .map(|parametro| TipoSemantico::desde_ast(&parametro.tipo))
                                 .collect(),
-                            retorno: TipoSemantico::desde_ast(&funcion.tipo_retorno),
+                            retorno: Box::new(TipoSemantico::desde_ast(&funcion.tipo_retorno)),
+                        },
+                        false,
+                        funcion.ubicacion,
+                        ClaseSimbolo::Constructor,
+                        Some(miembro.visibilidad),
+                        miembro.libre,
+                        Some(Self::firma(funcion)),
+                    )
+                }
+                ClaseMiembro::Metodo(funcion) => {
+                    let parametros: Vec<TipoSemantico> = funcion
+                        .parametros
+                        .iter()
+                        .map(|parametro| TipoSemantico::desde_ast(&parametro.tipo))
+                        .collect();
+                    let retorno = TipoSemantico::desde_ast(&funcion.tipo_retorno);
+                    let id = self.declarar_indice(
+                        &funcion.nombre,
+                        TipoSemantico::Funcion {
+                            parametros: parametros.clone(),
+                            retorno: Box::new(retorno.clone()),
+                        },
+                        false,
+                        funcion.ubicacion,
+                        ClaseSimbolo::Metodo,
+                        Some(miembro.visibilidad),
+                        miembro.libre,
+                        Some(Self::firma(funcion)),
+                    );
+                    info.metodos.insert(
+                        funcion.nombre.clone(),
+                        InfoMetodo {
+                            id,
+                            parametros,
+                            retorno,
                             publico,
                         },
                     );
+                    id
                 }
-            }
+            };
+            miembros.push(id);
         }
+        self.pila_ambitos.pop();
 
         self.objetos.insert(objeto.nombre.clone(), info);
-        // El nombre del objeto también es un símbolo (miembros libres:
-        // `MatematicaUtil.absoluto(-10)`).
-        self.declarar_simbolo(
-            &objeto.nombre,
-            TipoSemantico::Desconocido,
-            false,
-            objeto.ubicacion,
-        );
+        self.indice.objetos.push(ObjetoAnalizado {
+            simbolo: simbolo_objeto,
+            nombre: objeto.nombre.clone(),
+            padres: objeto.padres.clone(),
+            extiende_como: objeto.extiende_como.clone(),
+            prototipos: objeto.prototipos.clone(),
+            miembros,
+        });
     }
 
     fn registrar_prototipo(&mut self, prototipo: &DefinicionPrototipo) {
@@ -289,6 +484,7 @@ impl Analizador {
             TipoSemantico::Desconocido,
             false,
             prototipo.ubicacion,
+            ClaseSimbolo::Prototipo,
         );
     }
 
@@ -310,14 +506,21 @@ impl Analizador {
         // Los símbolos importados se consideran de tipo desconocido; la
         // verificación contra el módulo real la hace el motor al cargar el
         // grafo de imports.
+        let mut simbolos = Vec::new();
         for simbolo in &importacion.simbolos {
-            self.declarar_simbolo(
+            simbolos.push(self.declarar_simbolo(
                 simbolo.nombre_local(),
                 TipoSemantico::Desconocido,
                 false,
                 importacion.ubicacion,
-            );
+                ClaseSimbolo::Importacion,
+            ));
         }
+        self.indice.importaciones.push(ImportacionAnalizada {
+            origen: importacion.origen.clone(),
+            ubicacion: importacion.ubicacion,
+            simbolos,
+        });
     }
 
     fn verificar_padres(&mut self, objeto: &DefinicionObjeto) {
@@ -426,13 +629,19 @@ impl Analizador {
     // ----- Análisis de cuerpos -----
 
     fn analizar_funcion(&mut self, funcion: &Funcion) {
-        self.tabla.abrir_ambito();
+        let clase = if self.objeto_actual.is_some() {
+            ClaseAmbito::Metodo
+        } else {
+            ClaseAmbito::Funcion
+        };
+        self.abrir_ambito(clase);
         for parametro in &funcion.parametros {
             self.declarar_simbolo(
                 &parametro.nombre,
                 TipoSemantico::desde_ast(&parametro.tipo),
                 parametro.mutable,
                 parametro.ubicacion,
+                ClaseSimbolo::Parametro,
             );
         }
         self.pila_retorno
@@ -441,7 +650,7 @@ impl Analizador {
         self.analizar_bloque_sin_ambito(&funcion.cuerpo);
         self.pila_asincrona.pop();
         self.pila_retorno.pop();
-        self.tabla.cerrar_ambito();
+        self.cerrar_ambito();
     }
 
     /// `true` si `esperar` es válido en este punto: a nivel de scope global
@@ -452,6 +661,10 @@ impl Analizador {
 
     fn analizar_objeto(&mut self, objeto: &DefinicionObjeto) {
         let objeto_anterior = self.objeto_actual.replace(objeto.nombre.clone());
+        let ambito = self.ambitos_objetos.get(&objeto.nombre).copied();
+        if let Some(ambito) = ambito {
+            self.pila_ambitos.push(ambito);
+        }
 
         for miembro in &objeto.miembros {
             match &miembro.clase {
@@ -469,13 +682,16 @@ impl Analizador {
             }
         }
 
+        if ambito.is_some() {
+            self.pila_ambitos.pop();
+        }
         self.objeto_actual = objeto_anterior;
     }
 
     fn analizar_bloque(&mut self, bloque: &Bloque) {
-        self.tabla.abrir_ambito();
+        self.abrir_ambito(ClaseAmbito::Bloque);
         self.analizar_bloque_sin_ambito(bloque);
-        self.tabla.cerrar_ambito();
+        self.cerrar_ambito();
     }
 
     fn analizar_bloque_sin_ambito(&mut self, bloque: &Bloque) {
@@ -528,14 +744,14 @@ impl Analizador {
                 paso,
                 cuerpo,
             } => {
-                self.tabla.abrir_ambito();
+                self.abrir_ambito(ClaseAmbito::Bucle);
                 self.analizar_sentencia(inicializacion);
                 self.exigir_condicion_logica(condicion);
                 self.profundidad_bucle += 1;
                 self.analizar_bloque_sin_ambito(cuerpo);
                 self.analizar_sentencia(paso);
                 self.profundidad_bucle -= 1;
-                self.tabla.cerrar_ambito();
+                self.cerrar_ambito();
             }
             NodoSentencia::ParaEn {
                 tipo_elemento,
@@ -562,17 +778,18 @@ impl Analizador {
                         .con_etiqueta("se esperaba una lista"),
                     );
                 }
-                self.tabla.abrir_ambito();
+                self.abrir_ambito(ClaseAmbito::Bucle);
                 self.declarar_simbolo(
                     nombre,
                     TipoSemantico::desde_ast(tipo_elemento),
                     *mutable,
                     sentencia.ubicacion,
+                    ClaseSimbolo::Variable,
                 );
                 self.profundidad_bucle += 1;
                 self.analizar_bloque_sin_ambito(cuerpo);
                 self.profundidad_bucle -= 1;
-                self.tabla.cerrar_ambito();
+                self.cerrar_ambito();
             }
             NodoSentencia::Romper | NodoSentencia::Continuar => {
                 if self.profundidad_bucle == 0 {
@@ -600,15 +817,16 @@ impl Analizador {
             } => {
                 self.analizar_bloque(bloque);
                 if let Some(captura) = captura {
-                    self.tabla.abrir_ambito();
+                    self.abrir_ambito(ClaseAmbito::Captura);
                     self.declarar_simbolo(
                         &captura.nombre,
                         TipoSemantico::Desconocido,
                         false,
                         sentencia.ubicacion,
+                        ClaseSimbolo::Variable,
                     );
                     self.analizar_bloque_sin_ambito(&captura.bloque);
-                    self.tabla.cerrar_ambito();
+                    self.cerrar_ambito();
                 }
                 if let Some(bloque) = finalmente {
                     self.analizar_bloque(bloque);
@@ -622,7 +840,9 @@ impl Analizador {
 
     fn analizar_bloque_de_bucle(&mut self, cuerpo: &Bloque) {
         self.profundidad_bucle += 1;
-        self.analizar_bloque(cuerpo);
+        self.abrir_ambito(ClaseAmbito::Bucle);
+        self.analizar_bloque_sin_ambito(cuerpo);
+        self.cerrar_ambito();
         self.profundidad_bucle -= 1;
     }
 
@@ -688,7 +908,13 @@ impl Analizador {
             }
         }
 
-        self.declarar_simbolo(nombre, tipo_declarado, mutable, ubicacion);
+        self.declarar_simbolo(
+            nombre,
+            tipo_declarado,
+            mutable,
+            ubicacion,
+            ClaseSimbolo::Variable,
+        );
     }
 
     fn analizar_asignacion(
@@ -701,7 +927,7 @@ impl Analizador {
 
         match &objetivo.nodo {
             NodoExpresion::Identificador(nombre) => {
-                let Some(simbolo) = self.tabla.buscar(nombre).cloned() else {
+                let Some(simbolo) = self.buscar_simbolo(nombre, objetivo.ubicacion) else {
                     self.error_variable_no_definida(nombre, objetivo.ubicacion);
                     return;
                 };
@@ -732,6 +958,10 @@ impl Analizador {
                 match tipo_objeto {
                     TipoSemantico::Objeto(nombre_objeto) => {
                         if let Some(atributo) = self.buscar_atributo(&nombre_objeto, miembro) {
+                            self.indice.referencias.push(ReferenciaAnalizada {
+                                simbolo: atributo.id,
+                                ubicacion: objetivo.ubicacion,
+                            });
                             // Los constructores pueden inicializar atributos constantes.
                             let inicializando =
                                 self.en_constructor && matches!(objeto.nodo, NodoExpresion::Esto);
@@ -787,7 +1017,7 @@ impl Analizador {
                 NodoExpresion::AccesoMiembro { objeto, .. } => actual = objeto,
                 NodoExpresion::Indexacion { objeto, .. } => actual = objeto,
                 NodoExpresion::Identificador(nombre) => {
-                    if let Some(simbolo) = self.tabla.buscar(nombre).cloned()
+                    if let Some(simbolo) = self.buscar_simbolo(nombre, actual.ubicacion)
                         && !simbolo.mutable
                         && matches!(simbolo.tipo, TipoSemantico::Jsn | TipoSemantico::Lista(_))
                     {
@@ -802,7 +1032,7 @@ impl Analizador {
 
     fn analizar_incremento(&mut self, objetivo: &Expresion) {
         if let NodoExpresion::Identificador(nombre) = &objetivo.nodo {
-            let Some(simbolo) = self.tabla.buscar(nombre).cloned() else {
+            let Some(simbolo) = self.buscar_simbolo(nombre, objetivo.ubicacion) else {
                 self.error_variable_no_definida(nombre, objetivo.ubicacion);
                 return;
             };
@@ -948,13 +1178,15 @@ impl Analizador {
                 }
                 TipoSemantico::Jsn
             }
-            NodoExpresion::Identificador(nombre) => match self.tabla.buscar(nombre) {
-                Some(simbolo) => simbolo.tipo.clone(),
-                None => {
-                    self.error_variable_no_definida(nombre, expresion.ubicacion);
-                    TipoSemantico::Desconocido
+            NodoExpresion::Identificador(nombre) => {
+                match self.buscar_simbolo(nombre, expresion.ubicacion) {
+                    Some(simbolo) => simbolo.tipo.clone(),
+                    None => {
+                        self.error_variable_no_definida(nombre, expresion.ubicacion);
+                        TipoSemantico::Desconocido
+                    }
                 }
-            },
+            }
             NodoExpresion::Esto => match &self.objeto_actual {
                 Some(nombre) => TipoSemantico::Objeto(nombre.clone()),
                 None => {
@@ -1288,12 +1520,20 @@ impl Analizador {
         match tipo_objeto {
             TipoSemantico::Objeto(nombre_objeto) => {
                 if let Some(atributo) = self.buscar_atributo(&nombre_objeto, miembro) {
+                    self.indice.referencias.push(ReferenciaAnalizada {
+                        simbolo: atributo.id,
+                        ubicacion,
+                    });
                     if !atributo.publico && !self.dentro_del_objeto(&nombre_objeto) {
                         self.error_miembro_privado(miembro, ubicacion);
                     }
                     return atributo.tipo;
                 }
                 if let Some(metodo) = self.buscar_metodo(&nombre_objeto, miembro) {
+                    self.indice.referencias.push(ReferenciaAnalizada {
+                        simbolo: metodo.id,
+                        ubicacion,
+                    });
                     if !metodo.publico && !self.dentro_del_objeto(&nombre_objeto) {
                         self.error_miembro_privado(miembro, ubicacion);
                     }

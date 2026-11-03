@@ -5,7 +5,18 @@ version.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Servidor de lenguaje (LSP) del Lenguaje Quetzal. Esqueleto para fases futuras."
+description = "Servidor de lenguaje (LSP) oficial del Lenguaje Quetzal."
+
+[[bin]]
+name = "quetzal-lsp"
+path = "src/principal.rs"
 
 [dependencies]
+ast = { workspace = true }
 nucleo = { workspace = true }
+sintaxis = { workspace = true }
+semantica = { workspace = true }
+lsp-server = "0.10.0"
+lsp-types = "0.97.0"
+serde_json = { workspace = true }
+thiserror = { workspace = true }

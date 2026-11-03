@@ -1,0 +1,7 @@
+entero identidad(entero n) { retornar n }
+entero a = identidad(1)
+entero b = identidad(2)
+entero c = identidad(3)
+entero d = identidad(4)
+entero resultado = identidad(5)
+consola.mostrar(resultado)

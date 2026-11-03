@@ -14,6 +14,8 @@ pub struct Parser<'a> {
     pub(crate) fuente: &'a Fuente,
     pub(crate) tokens: Vec<Token>,
     pub(crate) posicion: usize,
+    pub(crate) modo_editor: bool,
+    pub(crate) errores: Vec<ErrorQuetzal>,
 }
 
 impl<'a> Parser<'a> {
@@ -24,6 +26,8 @@ impl<'a> Parser<'a> {
             fuente,
             tokens,
             posicion: 0,
+            modo_editor: false,
+            errores: Vec::new(),
         })
     }
 
@@ -40,7 +44,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Parsea un elemento de primer nivel del módulo.
-    fn parsear_elemento(&mut self) -> Result<Elemento, ErrorQuetzal> {
+    pub(crate) fn parsear_elemento(&mut self) -> Result<Elemento, ErrorQuetzal> {
         match self.tipo_actual() {
             TipoToken::Importar => Ok(Elemento::Importacion(self.parsear_importacion()?)),
             TipoToken::Exportar => self.parsear_exportacion(),

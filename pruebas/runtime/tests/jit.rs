@@ -256,13 +256,21 @@ entero llamar_repetido(entero limite) {
     }
     retornar suma
 }
+entero a = llamar_repetido(1)
+entero b = llamar_repetido(2)
+entero c = llamar_repetido(3)
+entero d = llamar_repetido(4)
 entero resultado = llamar_repetido(10000)
 "#;
     let mut vm = Vm::nueva(Rc::new(modulos_nativos::crear_registro())).con_jit(true);
     let (entorno, _) = vm
         .cargar_modulo(Rc::new(compilar(codigo)), IndexMap::new())
         .expect("llamadas directas");
-    assert!(global(&entorno, "resultado").es_igual(&Valor::Entero(10_000)));
+    let resultado = global(&entorno, "resultado");
+    assert!(
+        resultado.es_igual(&Valor::Entero(10_000)),
+        "resultado incorrecto en llamadas directas JIT: {resultado:?}"
+    );
     assert_eq!(vm.estadisticas_jit().funciones_compiladas, 2);
 }
 

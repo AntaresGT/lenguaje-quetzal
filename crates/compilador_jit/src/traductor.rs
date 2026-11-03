@@ -21,8 +21,19 @@ pub(crate) fn compilar(
     funcion: &FuncionCompilada,
     compilados: &HashMap<ClaveFuncion, Rc<FuncionNativa>>,
     id_modulo: usize,
-) -> Result<(FuncionNativa, usize), ErrorJit> {
+    medir: bool,
+) -> Result<
+    (
+        FuncionNativa,
+        usize,
+        Option<std::time::Duration>,
+        Option<std::time::Duration>,
+    ),
+    ErrorJit,
+> {
+    let inicio_analisis = medir.then(std::time::Instant::now);
     let analisis = analizar(modulo, funcion)?;
+    let tiempo_analisis = inicio_analisis.map(|inicio| inicio.elapsed());
     let constructor = JITBuilder::new(default_libcall_names())
         .map_err(|error| ErrorJit::Compilacion(error.to_string()))?;
     let mut modulo_jit = JITModule::new(constructor);
@@ -64,9 +75,11 @@ pub(crate) fn compilar(
     if std::env::var_os("QUETZAL_JIT_IR").is_some() {
         eprintln!("{}", contexto.func.display());
     }
+    let inicio_define = medir.then(std::time::Instant::now);
     modulo_jit
         .define_function(id, &mut contexto)
         .map_err(|error| ErrorJit::Compilacion(error.to_string()))?;
+    let tiempo_define = inicio_define.map(|inicio| inicio.elapsed());
     let bytes = contexto
         .compiled_code()
         .map(|codigo| codigo.code_buffer().len())
@@ -90,6 +103,8 @@ pub(crate) fn compilar(
             firma: FirmaNativa::Entera,
         },
         bytes,
+        tiempo_analisis,
+        tiempo_define,
     ))
 }
 
@@ -296,15 +311,22 @@ fn traducir_funcion(
                 pila_guardar(generador, &variables, &mut profundidad, valor);
             }
             CodigoOp::Llamar => {
-                llamar_directa(
-                    generador,
-                    &variables,
-                    &mut profundidad,
-                    instruccion.cantidad() as usize,
-                    direccion_salida,
-                    puntero_tipo,
-                    CallConv::SystemV,
-                );
+                if es_retorno_de_parametro_directo(modulo, funcion, pc) {
+                    let valor = pila_sacar(generador, &variables, &mut profundidad);
+                    pila_sacar(generador, &variables, &mut profundidad);
+                    pila_guardar(generador, &variables, &mut profundidad, valor);
+                } else {
+                    let convencion = generador.func.signature.call_conv;
+                    llamar_directa(
+                        generador,
+                        &variables,
+                        &mut profundidad,
+                        instruccion.cantidad() as usize,
+                        direccion_salida,
+                        puntero_tipo,
+                        convencion,
+                    );
+                }
             }
             CodigoOp::Saltar => {
                 generador.ins().jump(
@@ -456,6 +478,39 @@ fn pila_guardar(
 ) {
     generador.def_var(variables.pila[*profundidad], valor);
     *profundidad += 1;
+}
+
+fn es_retorno_de_parametro_directo(
+    modulo: &ModuloCompilado,
+    llamante: &FuncionCompilada,
+    pc: usize,
+) -> bool {
+    let Some(destino) = pc.checked_sub(2) else {
+        return false;
+    };
+    let carga = llamante.trozo.instrucciones[destino];
+    if carga.op != CodigoOp::CargarGlobal {
+        return false;
+    }
+    let Some(nombre) = modulo.nombres_globales.get(carga.indice_u16() as usize) else {
+        return false;
+    };
+    modulo
+        .funciones
+        .iter()
+        .find(|funcion| funcion.nombre == *nombre)
+        .is_some_and(|funcion| {
+            funcion.parametros.len() == 1
+                && match funcion.trozo.instrucciones.as_slice() {
+                    [unica] => unica.op == CodigoOp::RetornarLocal && unica.ranura() == 0,
+                    [carga, retorno] => {
+                        carga.op == CodigoOp::CargarLocal
+                            && carga.ranura() == 0
+                            && retorno.op == CodigoOp::Retornar
+                    }
+                    _ => false,
+                }
+        })
 }
 
 /// Emite una llamada a una función compilada por este mismo contexto. La

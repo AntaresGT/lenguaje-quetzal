@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "referencia": "pruebas/resultados/linea-base/referencia",
+  "referencia": "pruebas/compatibilidad/referencia",
   "casos": [
     { "nombre": "textos", "entrada": "ejemplos/textos.qz", "argumentos": [], "stdin": "", "salida": 0, "stdout": "textos.qz.stdout", "stderr": "textos.qz.stderr", "permisos": "del_proyecto", "recursos": [], "timeout_ms": 10000 },
     { "nombre": "tipos", "entrada": "ejemplos/tipos.qz", "argumentos": [], "stdin": "", "salida": 0, "stdout": "tipos.qz.stdout", "stderr": "tipos.qz.stderr", "permisos": "del_proyecto", "recursos": [], "timeout_ms": 10000 },

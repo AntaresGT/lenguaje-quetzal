@@ -113,7 +113,7 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "ast"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "nucleo",
 ]
@@ -244,7 +244,7 @@ dependencies = [
 
 [[package]]
 name = "bytecode"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "ast",
  "nucleo",
@@ -403,7 +403,7 @@ checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 
 [[package]]
 name = "compilador_jit"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "bytecode",
  "cranelift-codegen",
@@ -727,7 +727,7 @@ checksum = "a4ae5f15dda3c708c0ade84bfee31ccab44a3da4f88015ed22f63732abe300c8"
 
 [[package]]
 name = "diagnosticos"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "nucleo",
  "owo-colors",
@@ -1367,7 +1367,7 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "lexico"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "logos",
  "nucleo",
@@ -1405,7 +1405,7 @@ checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
 
 [[package]]
 name = "lnc"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "clap",
  "diagnosticos",
@@ -1475,7 +1475,7 @@ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
 name = "lsp"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "ast",
  "lsp-server",
@@ -1530,7 +1530,7 @@ checksum = "dae608c151f68243f2b000364e1f7b186d9c29845f7d2d85bd31b9ad77ad552b"
 
 [[package]]
 name = "maquina_virtual"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "bytecode",
  "compilador_jit",
@@ -1570,7 +1570,7 @@ dependencies = [
 
 [[package]]
 name = "modulos_nativos"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "base64",
  "chrono",
@@ -1595,7 +1595,7 @@ dependencies = [
 
 [[package]]
 name = "motor"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "ast",
  "bytecode",
@@ -1650,7 +1650,7 @@ dependencies = [
 
 [[package]]
 name = "nucleo"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "serde",
  "thiserror",
@@ -1691,7 +1691,7 @@ checksum = "d211803b9b6b570f68772237e415a029d5a50c65d382910b879fb19d3271f94d"
 
 [[package]]
 name = "paquetes"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "bytecode",
  "hex",
@@ -1836,7 +1836,7 @@ dependencies = [
 
 [[package]]
 name = "pruebas_bytecode"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "bytecode",
  "indexmap",
@@ -1849,7 +1849,7 @@ dependencies = [
 
 [[package]]
 name = "pruebas_lexico"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "lexico",
  "nucleo",
@@ -1857,7 +1857,7 @@ dependencies = [
 
 [[package]]
 name = "pruebas_paquetes"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "bytecode",
  "nucleo",
@@ -1868,7 +1868,7 @@ dependencies = [
 
 [[package]]
 name = "pruebas_runtime"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "bytecode",
  "compilador_jit",
@@ -1891,7 +1891,7 @@ dependencies = [
 
 [[package]]
 name = "pruebas_semantica"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "ast",
  "nucleo",
@@ -1901,7 +1901,7 @@ dependencies = [
 
 [[package]]
 name = "pruebas_sintaxis"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "ast",
  "nucleo",
@@ -2178,7 +2178,7 @@ dependencies = [
 
 [[package]]
 name = "repl"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "diagnosticos",
  "motor",
@@ -2292,7 +2292,7 @@ dependencies = [
 
 [[package]]
 name = "runtime"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "nucleo",
  "owo-colors",
@@ -2430,7 +2430,7 @@ checksum = "1c107b6f4780854c8b126e228ea8869f4d7b71260f962fefb57b996b8959ba6b"
 
 [[package]]
 name = "semantica"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "ast",
  "indexmap",
@@ -2591,7 +2591,7 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
 name = "sintaxis"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "ast",
  "lexico",

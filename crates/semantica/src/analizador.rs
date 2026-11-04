@@ -499,7 +499,7 @@ impl Analizador {
                 .con_ubicacion(importacion.ubicacion)
                 .con_etiqueta("módulo no encontrado")
                 .con_ayuda(
-                    "los módulos nativos disponibles son: quetzal/matematica, quetzal/texto, quetzal/listas, quetzal/jsn, quetzal/tiempo, quetzal/red y quetzal/sistema_archivos",
+                    "los módulos nativos disponibles son: quetzal/matematica, quetzal/texto, quetzal/listas, quetzal/jsn, quetzal/tiempo, quetzal/red, quetzal/sistema_archivos y quetzal/entorno",
                 ),
             );
         }

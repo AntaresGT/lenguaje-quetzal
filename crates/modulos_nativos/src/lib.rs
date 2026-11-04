@@ -11,6 +11,7 @@ pub mod archivo;
 pub mod bits;
 pub mod consola;
 pub mod conversiones;
+pub mod entorno;
 pub mod flujo;
 pub mod jsn;
 pub mod listas;
@@ -43,6 +44,7 @@ pub fn crear_registro_con_permisos(guardian: &Rc<GuardianPermisos>) -> RegistroN
     listas::registrar(&mut registro);
     jsn::registrar(&mut registro);
     conversiones::registrar(&mut registro);
+    entorno::registrar(&mut registro);
     tiempo::registrar(&mut registro);
     bits::registrar(&mut registro);
     motor::registrar(&mut registro);

@@ -30,6 +30,7 @@ pub const MODULOS_NATIVOS: &[&str] = &[
     "sistema_archivos",
     "bits",
     "motor",
+    "entorno",
 ];
 
 /// Clasifica el texto de un `desde "..."`.

@@ -12,3 +12,9 @@ quetzal ejecutar principal.qz
 El archivo `.env` real puede contener secretos y debe estar incluido en
 `.gitignore`. Publica únicamente `.env.example` con nombres y valores de
 ejemplo.
+
+El módulo requiere el permiso `entorno` en `quetzal.json` (ya declarado en
+este ejemplo):
+```json
+"permisos": [{ "tipo": "entorno", "habilitado": true }]
+```

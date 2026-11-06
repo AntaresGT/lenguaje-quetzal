@@ -1,0 +1,10 @@
+{
+  "versión": "1.0.0",
+  "aplicación": "configuracion_entorno",
+  "entrada": "principal.qz",
+  "tipo": "aplicación",
+  "quetzal": "0.0.3",
+  "permisos": [
+    { "tipo": "entorno", "habilitado": true }
+  ]
+}

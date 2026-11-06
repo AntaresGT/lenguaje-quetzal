@@ -10,6 +10,15 @@ Permite consultar variables del sistema y cargar un archivo `.env` situado en
 el directorio actual. Los valores cargados permanecen dentro del runtime de
 Quetzal y no modifican el entorno global del proceso.
 
+Requiere el permiso `entorno` en `quetzal.json`; sin él, toda llamada lanza
+una excepción capturable con `intentar`:
+
+```json
+"permisos": [
+  { "tipo": "entorno", "habilitado": true }
+]
+```
+
 ```quetzal
 importar { entorno } desde "quetzal/entorno"
 

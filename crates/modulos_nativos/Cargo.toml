@@ -11,6 +11,7 @@ description = "Módulos nativos del Lenguaje Quetzal: consola, matematica, texto
 nucleo = { workspace = true }
 maquina_virtual = { workspace = true }
 runtime = { workspace = true }
+paquetes = { workspace = true }
 
 # Precisión decimal para operaciones del módulo matematica.
 rust_decimal = { workspace = true }

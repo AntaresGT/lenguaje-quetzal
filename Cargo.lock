@@ -1614,6 +1614,7 @@ dependencies = [
  "maquina_virtual",
  "notify",
  "nucleo",
+ "paquetes",
  "percent-encoding",
  "rand 0.9.4",
  "regex",

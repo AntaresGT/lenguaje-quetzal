@@ -12,8 +12,18 @@ use crate::manifiesto::normalizar_clave;
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct Permisos {
     pub red: PermisoRed,
+    pub entorno: PermisoEntorno,
     pub sistema_archivos: PermisoSistemaArchivos,
     pub ejecucion: PermisoEjecucion,
+}
+
+/// Acceso a variables de entorno y al archivo `.env`.
+///
+/// `{"habilitado": true}` autoriza consultar variables del sistema y leer
+/// el `.env` del proyecto (donde suelen guardarse secretos).
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct PermisoEntorno {
+    pub habilitado: bool,
 }
 
 /// Acceso a la red: un único interruptor.
@@ -92,6 +102,9 @@ impl Permisos {
             "red" => {
                 self.red.habilitado = habilitado;
             }
+            "entorno" => {
+                self.entorno.habilitado = habilitado;
+            }
             "sistema_archivos" => {
                 self.sistema_archivos.habilitado = habilitado;
                 if let Some(serde_json::Value::Array(directorios)) = valor.get("directorios") {
@@ -135,7 +148,7 @@ impl Permisos {
             }
             otro => {
                 return Err(error_permisos(format!(
-                    "permiso desconocido: '{otro}' (usa red, sistema_archivos o ejecucion)"
+                    "permiso desconocido: '{otro}' (usa red, entorno, sistema_archivos o ejecucion)"
                 )));
             }
         }

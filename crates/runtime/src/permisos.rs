@@ -86,6 +86,20 @@ impl GuardianPermisos {
         ))
     }
 
+    /// Verifica que el programa tenga el permiso `entorno` declarado.
+    ///
+    /// Cubre leer variables del sistema y cargar el archivo `.env`:
+    /// ambos suelen contener secretos.
+    pub fn verificar_entorno(&self, operacion: &str) -> Result<(), String> {
+        if self.estado.borrow().permisos.entorno.habilitado {
+            return Ok(());
+        }
+        Err(format!(
+            "el programa no tiene permiso de entorno para {operacion}; habilítalo en quetzal.json: \
+             \"permisos\": [{{\"tipo\": \"entorno\", \"habilitado\": true}}]"
+        ))
+    }
+
     /// Verifica que un ejecutable esté en la lista blanca de `ejecucion`.
     pub fn verificar_ejecucion(&self, programa: &str) -> Result<(), String> {
         let estado = self.estado.borrow();

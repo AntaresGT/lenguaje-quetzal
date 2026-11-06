@@ -44,7 +44,7 @@ pub fn crear_registro_con_permisos(guardian: &Rc<GuardianPermisos>) -> RegistroN
     listas::registrar(&mut registro);
     jsn::registrar(&mut registro);
     conversiones::registrar(&mut registro);
-    entorno::registrar(&mut registro);
+    entorno::registrar(&mut registro, guardian);
     tiempo::registrar(&mut registro);
     bits::registrar(&mut registro);
     motor::registrar(&mut registro);

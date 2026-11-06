@@ -22,7 +22,7 @@ Describir el proyecto Quetzal y declarar capacidades sensibles (red, FS, ejecuci
 - Requeridos: `versión`, `aplicación`, `entrada`, `tipo`, `quetzal`
 - Opcionales: autor, email, deps, permisos, …
 - `tipo`: `aplicación` | `biblioteca`
-- Permisos: `red` | `sistema-archivos` | `ejecución`
+- Permisos: `red` | `entorno` | `sistema-archivos` | `ejecución`
 - Fuente de verdad: [`esquema_quetzal.json`](./esquema_quetzal.json) (Draft-07)
 
 ### Funciones de la API

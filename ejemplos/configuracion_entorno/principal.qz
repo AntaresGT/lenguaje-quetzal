@@ -1,0 +1,10 @@
+// Ejemplo de configuración externa para una aplicación Quetzal.
+importar { entorno } desde "quetzal/entorno"
+
+entorno.cargar()
+
+texto modo = entorno.obtener_o("MODO", "desarrollo")
+texto puerto = entorno.obtener_o("PUERTO", "3000")
+
+consola.mostrar("Modo: " + modo)
+consola.mostrar("Puerto: " + puerto)

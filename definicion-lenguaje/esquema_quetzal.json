@@ -162,6 +162,7 @@
             "description": "Tipo de permiso",
             "enum": [
               "red",
+              "entorno",
               "sistema-archivos",
               "ejecución"
             ]

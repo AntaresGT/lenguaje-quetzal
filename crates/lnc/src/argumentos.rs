@@ -44,6 +44,8 @@ pub enum Comando {
     Nuevo { nombre: String },
     /// Instala dependencias del proyecto.
     Instalar { paquete: Option<String> },
+    /// Muestra o verifica el entorno del proyecto.
+    Entorno { accion: Option<String> },
     /// Administra la cache de bytecode y análisis.
     Cache { accion: Option<String> },
     /// Muestra la versión.

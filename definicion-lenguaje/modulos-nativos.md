@@ -4,6 +4,41 @@
 > Cada módulo: **Objetivo** · **Funciones** · **Funciones de la API**.
 > Catálogo: [`catalogo.json`](./catalogo.json). Permisos: [`manifiesto.md`](./manifiesto.md).
 
+## `quetzal/entorno`
+
+Permite consultar variables del sistema y cargar un archivo `.env` situado en
+el directorio actual. Los valores cargados permanecen dentro del runtime de
+Quetzal y no modifican el entorno global del proceso.
+
+Requiere el permiso `entorno` en `quetzal.json`; sin él, toda llamada lanza
+una excepción capturable con `intentar`:
+
+```json
+"permisos": [
+  { "tipo": "entorno", "habilitado": true }
+]
+```
+
+```quetzal
+importar { entorno } desde "quetzal/entorno"
+
+entorno.cargar()
+texto modo = entorno.obtener_o("MODO", "desarrollo")
+texto puerto = entorno.obtener_o("PUERTO", "3000")
+```
+
+Funciones disponibles:
+
+| Función | Descripción |
+|---|---|
+| `cargar()` | Lee `.env` desde el directorio actual. Devuelve la cantidad de variables cargadas. |
+| `obtener(nombre)` | Devuelve el texto de una variable o `nulo` si no existe. |
+| `obtener_o(nombre, defecto)` | Devuelve la variable o el valor predeterminado. |
+| `contiene(nombre)` | Indica si la variable existe. |
+
+No se muestran secretos automáticamente. Se recomienda mantener `.env` fuera
+del control de versiones y publicar un `.env.example` sin credenciales.
+
 ```yaml
 doc: modulos-nativos
 módulos:

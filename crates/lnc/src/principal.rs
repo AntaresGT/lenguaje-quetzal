@@ -54,6 +54,7 @@ fn main() {
         Some(Comando::Revisar { archivo }) => comandos::revisar::revisar(archivo.as_deref()),
         Some(Comando::Nuevo { nombre }) => comandos::nuevo::nuevo(&nombre),
         Some(Comando::Instalar { paquete }) => comandos::instalar::instalar(paquete.as_deref()),
+        Some(Comando::Entorno { accion }) => comandos::entorno::ejecutar(accion.as_deref()),
         Some(Comando::Cache { accion }) => comandos::cache::cache(accion.as_deref()),
         Some(Comando::Version) => comandos::version::version(),
         Some(Comando::Ayuda) => comandos::ayuda(),

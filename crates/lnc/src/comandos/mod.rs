@@ -3,6 +3,7 @@
 pub mod cache;
 pub mod compilar;
 pub mod ejecutar;
+pub mod entorno;
 pub mod instalar;
 pub mod nuevo;
 pub mod repl;
@@ -21,6 +22,7 @@ Comandos:
   compilar ENTRADA [-o APP]  Genera un ejecutable único con bytecode embebido
   nuevo NOMBRE            Crea un nuevo proyecto
   instalar [PAQUETE]      Instala dependencias
+  entorno [mostrar|verificar]  Revisa la versión de Quetzal del proyecto
   version                 Muestra la versión
   ayuda                   Muestra esta ayuda
 

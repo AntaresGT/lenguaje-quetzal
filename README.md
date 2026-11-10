@@ -29,6 +29,8 @@
 
 Especificación del lenguaje: `[definicion-lenguaje/](./definicion-lenguaje/README.md)`.
 
+Guía completa de sintaxis: `[definicion-lenguaje/guia-sintaxis.md](./definicion-lenguaje/guia-sintaxis.md)`.
+
 ### Estado del proyecto
 
 - **Versión**: 0.0.2

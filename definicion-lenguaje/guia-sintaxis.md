@@ -636,4 +636,4 @@ Valor total: Q277.5
   `.env`, protegida por el nuevo permiso `entorno` en `quetzal.json`.
 
 Todos los ejemplos de esta guía se ejecutaron contra el intérprete oficial de
-Quetzal (rama `main`, v0.0.5, octubre de 2026).
+Quetzal (rama `main`, sincronizada con la versión v0.0.5, en noviembre de 2026).

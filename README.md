@@ -25,7 +25,7 @@
 
 > **Motivación**: La programación no tiene fronteras, pero sí puede tener raíces. Quetzal busca ofrecer a la comunidad hispanohablante un lenguaje moderno, seguro, eficiente y totalmente en español, permitiendo crear aplicaciones de manera más intuitiva y natural. Además de facilitar la enseñanza de conceptos de programación a quienes tienen el español como lengua materna.
 
-> **Nota**: No veas Quetzal como un lenguaje solo para principiantes, sino como una herramienta para desarrolladores experimentados. En su versión **0.0.2**, Quetzal ya cuenta con intérprete funcional, módulos, excepciones, POO, stdlib (consola, matemática, tiempo, regex, FS, red), REPL y extensión para Visual Studio Code.
+> **Nota**: No veas Quetzal como un lenguaje solo para principiantes, sino como una herramienta para desarrolladores experimentados. En su versión **0.0.5**, Quetzal ya cuenta con intérprete funcional, módulos, excepciones, POO, stdlib (consola, matemática, tiempo, regex, FS, red, entorno), REPL y extensión para Visual Studio Code.
 
 Especificación del lenguaje: `[definicion-lenguaje/](./definicion-lenguaje/README.md)`.
 
@@ -33,7 +33,7 @@ Guía completa de sintaxis: `[definicion-lenguaje/guia-sintaxis.md](./definicion
 
 ### Estado del proyecto
 
-- **Versión**: 0.0.2
+- **Versión**: 0.0.5
 - **Implementación**: workspace Rust (~20 000 líneas)
 - **Ejemplos**: suites en `ejemplos/` (tipos, módulos, FS, red, POO, async, …)
 - **Extensión VS Code**: soporte de desarrollo para archivos `.qz`
@@ -50,7 +50,7 @@ Guía completa de sintaxis: `[definicion-lenguaje/guia-sintaxis.md](./definicion
 - **Módulos**: `importar` / `exportar`
 - **Excepciones**: `intentar` / `capturar` / `finalmente` / `lanzar`
 - **Async**: `asincrono` / `esperar`
-- **Stdlib**: consola, Matemática, Tiempo, ExpresiónRegular, sistema de archivos, red
+- **Stdlib**: consola, Matemática, Tiempo, ExpresiónRegular, sistema de archivos, red, entorno
 - **Seguridad**: permisos declarativos en `quetzal.json`
 - **REPL interactivo**
 
@@ -369,7 +369,7 @@ cargo run -p lnc -- ejemplos/red_servidor_rest/principal.qz
 
 
 
-### v0.0.2 (actual)
+### v0.0.2
 
 - [x] Sistema de módulos (`importar` / `exportar`)
 - [x] Manejo de excepciones (`intentar` / `capturar` / `finalmente`)
@@ -379,6 +379,22 @@ cargo run -p lnc -- ejemplos/red_servidor_rest/principal.qz
 - [x] Stdlib: consola, matemática, tiempo, regex, FS, red
 - [x] Manifiesto `quetzal.json` y permisos
 - [x] Operadores avanzados
+
+### v0.0.3
+
+- [x] Optimizaciones del intérprete y de la máquina virtual
+- [x] Compilación JIT selectiva experimental
+- [x] Interrupción de sentencia `mientras` con Ctrl+C (CLI y REPL)
+- [x] Servidor de lenguaje oficial (LSP)
+
+### v0.0.4
+
+- [x] Nuevo módulo nativo `quetzal/entorno` (variables de sistema y archivos `.env`)
+- [x] Nuevo permiso `entorno` en `quetzal.json` (seguro por defecto)
+
+### v0.0.5 (actual)
+
+- [x] Actualización de dependencias internas (rustls, quinn-proto)
 
 
 
@@ -446,7 +462,7 @@ Al estar implementado en Rust (lexer, parser, semántica, bytecode y VM), ofrece
 
 ### ¿Hay librerías / módulos?
 
-Sí. En 0.0.2 existen módulos de usuario (`importar` / `exportar`) y módulos nativos (`quetzal/matemática`, `quetzal/tiempo`, `quetzal/motor`, `quetzal/sistema_archivos`, `quetzal/red`). El ecosistema de paquetes externos sigue madurando hacia 0.1.0.
+Sí. En 0.0.5 existen módulos de usuario (`importar` / `exportar`) y módulos nativos (`quetzal/matematica`, `quetzal/texto`, `quetzal/listas`, `quetzal/jsn`, `quetzal/tiempo`, `quetzal/red`, `quetzal/sistema_archivos`, `quetzal/bits`, `quetzal/motor` y `quetzal/entorno`). El ecosistema de paquetes externos sigue madurando hacia 0.1.0.
 
 ---
 
